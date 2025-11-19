@@ -63,14 +63,15 @@ export default function DocumentUpload({
       const USE_BLOB = process.env.NEXT_PUBLIC_USE_BLOB === 'true' || selectedFile.size > 4 * 1024 * 1024
 
       if (USE_BLOB) {
-        // Upload large files directly to Blob from client
+        // Upload large files using Vercel Blob client upload
         console.log('Using Blob upload for large file:', selectedFile.size)
 
-        // Step 1: Upload directly to Blob (client-side)
-        const { put } = await import('@vercel/blob')
-        const blob = await put(selectedFile.name, selectedFile, {
+        // Step 1: Upload to Blob using client upload
+        const { upload } = await import('@vercel/blob/client')
+
+        const blob = await upload(selectedFile.name, selectedFile, {
           access: 'public',
-          addRandomSuffix: true,
+          handleUploadUrl: '/api/documents/upload-url',
         })
 
         console.log('Uploaded to Blob:', blob.url)
