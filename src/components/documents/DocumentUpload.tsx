@@ -59,46 +59,82 @@ export default function DocumentUpload({
 
     setUploading(true)
     try {
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-      formData.append('projectId', projectId)
-      formData.append('category', category)
-
-      // Use Vercel Blob for large files (> 4MB) or if enabled
-      // Note: Direct upload has 4MB limit due to Vercel constraints
+      // Check if file is large and needs Blob
       const USE_BLOB = process.env.NEXT_PUBLIC_USE_BLOB === 'true' || selectedFile.size > 4 * 1024 * 1024
-      const endpoint = USE_BLOB ? '/api/documents/upload-blob' : '/api/documents/upload'
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        body: formData,
-      })
+      if (USE_BLOB) {
+        // Upload large files directly to Blob from client
+        console.log('Using Blob upload for large file:', selectedFile.size)
 
-      if (!response.ok) {
-        let errorData
-        try {
-          errorData = await response.json()
-        } catch (e) {
-          // If response is not JSON (e.g., 413 Request Entity Too Large)
-          throw new Error(`Upload failed: ${response.status} ${response.statusText}. File may be too large.`)
+        // Step 1: Upload directly to Blob (client-side)
+        const { put } = await import('@vercel/blob')
+        const blob = await put(selectedFile.name, selectedFile, {
+          access: 'public',
+          addRandomSuffix: true,
+        })
+
+        console.log('Uploaded to Blob:', blob.url)
+
+        // Step 2: Tell backend to process the blob
+        const response = await fetch('/api/documents/process-blob', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blobUrl: blob.url,
+            filename: selectedFile.name,
+            projectId: projectId,
+            category: category,
+            fileSize: selectedFile.size,
+            mimeType: selectedFile.type,
+          }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to process blob')
         }
 
-        // Show detailed error message
-        let errorMsg = errorData.error || 'Upload failed'
-        if (errorData.hint) {
-          errorMsg += `\n\n${errorData.hint}`
+        const result = await response.json()
+        console.log('Processing successful:', result)
+
+        alert(`✅ Documento "${selectedFile.name}" subido exitosamente (via Blob)`)
+      } else {
+        // Upload small files normally
+        console.log('Using direct upload for small file:', selectedFile.size)
+
+        const formData = new FormData()
+        formData.append('file', selectedFile)
+        formData.append('projectId', projectId)
+        formData.append('category', category)
+
+        const response = await fetch('/api/documents/upload', {
+          method: 'POST',
+          body: formData,
+        })
+
+        if (!response.ok) {
+          let errorData
+          try {
+            errorData = await response.json()
+          } catch (e) {
+            throw new Error(`Upload failed: ${response.status} ${response.statusText}`)
+          }
+
+          let errorMsg = errorData.error || 'Upload failed'
+          if (errorData.hint) {
+            errorMsg += `\n\n${errorData.hint}`
+          }
+          throw new Error(errorMsg)
         }
-        if (errorData.fileSizeMB) {
-          errorMsg += `\n\nFile size: ${errorData.fileSizeMB}MB`
-        }
-        throw new Error(errorMsg)
+
+        const result = await response.json()
+        console.log('Upload successful:', result)
+
+        alert(`✅ Documento "${selectedFile.name}" subido exitosamente`)
       }
 
-      const result = await response.json()
-      console.log('Upload successful:', result)
-
-      const method = USE_BLOB ? '(via Blob)' : ''
-      alert(`✅ Documento "${selectedFile.name}" subido exitosamente ${method}`)
       setIsOpen(false)
       setSelectedFile(null)
       setExtractionResult(null)
