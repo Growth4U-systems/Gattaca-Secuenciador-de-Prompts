@@ -64,7 +64,11 @@ export default function DocumentUpload({
       formData.append('projectId', projectId)
       formData.append('category', category)
 
-      const response = await fetch('/api/documents/upload', {
+      // Use Vercel Blob for large files (> 5MB) or if enabled
+      const USE_BLOB = process.env.NEXT_PUBLIC_USE_BLOB === 'true' || selectedFile.size > 5 * 1024 * 1024
+      const endpoint = USE_BLOB ? '/api/documents/upload-blob' : '/api/documents/upload'
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         body: formData,
       })
@@ -77,7 +81,8 @@ export default function DocumentUpload({
       const result = await response.json()
       console.log('Upload successful:', result)
 
-      alert(`✅ Documento "${selectedFile.name}" subido exitosamente`)
+      const method = USE_BLOB ? '(via Blob)' : ''
+      alert(`✅ Documento "${selectedFile.name}" subido exitosamente ${method}`)
       setIsOpen(false)
       setSelectedFile(null)
       setExtractionResult(null)
@@ -153,7 +158,7 @@ export default function DocumentUpload({
                     Click para seleccionar archivo
                   </p>
                   <p className="text-sm text-gray-500 mt-1">
-                    PDF, DOCX o TXT (max 50MB)
+                    PDF, DOCX o TXT (archivos grandes usan Blob Storage)
                   </p>
                 </>
               ) : (
