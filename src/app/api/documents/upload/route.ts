@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
 async function extractPDF(buffer: ArrayBuffer): Promise<string> {
   try {
     // Dynamically import pdf-parse (Node.js module)
+    // @ts-expect-error - pdf-parse doesn't have TypeScript types
     const pdfParse = (await import('pdf-parse')).default
     const data = await pdfParse(Buffer.from(buffer))
     return data.text
@@ -130,6 +131,7 @@ async function extractPDF(buffer: ArrayBuffer): Promise<string> {
 async function extractDOCX(buffer: ArrayBuffer): Promise<string> {
   try {
     // Dynamically import mammoth (Node.js module)
+    // @ts-expect-error - mammoth types may not be available
     const mammoth = await import('mammoth')
     const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) })
     return result.value
