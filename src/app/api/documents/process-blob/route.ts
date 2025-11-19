@@ -77,9 +77,23 @@ export async function POST(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
+    console.log('Environment check:', {
+      hasUrl: !!supabaseUrl,
+      hasKey: !!supabaseKey,
+      urlValue: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'undefined'
+    })
+
     if (!supabaseUrl || !supabaseKey) {
       return NextResponse.json(
-        { error: 'Server configuration error' },
+        {
+          error: 'Server configuration error',
+          details: 'Missing Supabase environment variables',
+          missing: {
+            NEXT_PUBLIC_SUPABASE_URL: !supabaseUrl,
+            SUPABASE_SERVICE_ROLE_KEY: !supabaseKey
+          },
+          hint: 'Configure these variables in Vercel Dashboard → Settings → Environment Variables'
+        },
         { status: 500 }
       )
     }
