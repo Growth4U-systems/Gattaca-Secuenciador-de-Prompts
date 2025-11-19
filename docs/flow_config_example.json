@@ -2,6 +2,7 @@
   "flow_name": "Standard ECP Analysis Process",
   "description": "Proceso estándar de análisis ECP en 5 pasos",
   "version": "1.0",
+  "_comment": "Las categorías son SOLO para organización visual. El usuario selecciona MANUALMENTE qué documentos específicos usar en cada step.",
   "steps": [
     {
       "id": "550e8400-e29b-41d4-a716-446655440001",
@@ -9,11 +10,11 @@
       "description": "Investigación profunda del mercado y problema",
       "order": 1,
       "prompt": "ACT AS: Senior Market Researcher\n\nCONTEXT PROVIDED:\n- Market research documents\n- Competitor analysis\n\nTASK:\nConduct a thorough analysis of the unmet financial need for ECP: '{{ecp_name}}' with Pain: '{{problem_core}}' in {{country}} {{industry}} market.\n\nYour analysis should cover:\n1. Market size and trends\n2. Current solutions and their gaps\n3. Target audience pain points\n4. Opportunity areas\n\nBe specific and data-driven. If information is not in the documents, state it clearly.",
-      "selected_doc_categories": [
-        "research",
-        "competitor"
+      "selected_doc_ids": [
+        "doc-uuid-market-report-2024",
+        "doc-uuid-industry-trends",
+        "doc-uuid-competitor-analysis"
       ],
-      "selected_doc_ids": [],
       "depends_on": [],
       "output_field": "deep_research",
       "model": "gemini-2.0-flash-exp",
@@ -26,11 +27,11 @@
       "description": "Identificar dónde encaja la solución en el mercado",
       "order": 2,
       "prompt": "ACT AS: Strategic Positioning Consultant\n\nPREVIOUS RESEARCH:\n{{step:Deep Research}}\n\nCONTEXT PROVIDED:\n- Market research\n- Competitor analysis\n\nTASK:\nBased on the research above, identify the Value Criteria that matter most to the target audience in {{country}} for {{industry}}.\n\nDefine:\n1. Top 3-5 value criteria customers care about\n2. How competitors perform on each criteria\n3. Gaps and opportunities\n4. Where our solution should position itself\n\nRESTRICTION: Do NOT mention our product yet. Focus only on market landscape.",
-      "selected_doc_categories": [
-        "research",
-        "competitor"
+      "selected_doc_ids": [
+        "doc-uuid-market-report-2024",
+        "doc-uuid-competitor-analysis",
+        "doc-uuid-customer-survey"
       ],
-      "selected_doc_ids": [],
       "depends_on": [
         "550e8400-e29b-41d4-a716-446655440001"
       ],
@@ -45,10 +46,11 @@
       "description": "Mapear assets del producto a oportunidades de mercado",
       "order": 3,
       "prompt": "ACT AS: Product Marketing Manager\n\nMARKET OPPORTUNITIES IDENTIFIED:\n{{step:Find Market Place}}\n\nPRODUCT INFORMATION PROVIDED:\n- Product features and benefits\n- Technical specifications\n- Differentiators\n\nTASK:\nMap our product assets to the market opportunities identified above.\n\nFor each Value Criteria identified:\n1. List relevant product features/benefits\n2. Explain how they address the criteria\n3. Rate strength: Strong / Medium / Weak\n4. Identify gaps (if any)\n\nFocus on factual product capabilities from the documents.",
-      "selected_doc_categories": [
-        "product"
+      "selected_doc_ids": [
+        "doc-uuid-product-specs",
+        "doc-uuid-feature-list",
+        "doc-uuid-technical-capabilities"
       ],
-      "selected_doc_ids": [],
       "depends_on": [
         "550e8400-e29b-41d4-a716-446655440002"
       ],
@@ -63,11 +65,12 @@
       "description": "Definir pruebas de legitimidad para cada asset",
       "order": 4,
       "prompt": "ACT AS: Brand Credibility Strategist\n\nASSETS SELECTED:\n{{step:Select Assets}}\n\nPRODUCT INFORMATION PROVIDED:\n- Case studies\n- Testimonials\n- Certifications\n- Data/metrics\n\nTASK:\nFor each asset/claim from the previous step, define Proof Points that validate the claim.\n\nFor each asset:\n1. Type of proof: Data / Testimonial / Case Study / Certification / Award\n2. Specific proof statement\n3. Source (from documents)\n4. Credibility level: High / Medium / Low\n\nOnly use proof that exists in the provided documents.",
-      "selected_doc_categories": [
-        "product",
-        "output"
+      "selected_doc_ids": [
+        "doc-uuid-case-studies",
+        "doc-uuid-customer-testimonials",
+        "doc-uuid-certifications",
+        "doc-uuid-roi-metrics"
       ],
-      "selected_doc_ids": [],
       "depends_on": [
         "550e8400-e29b-41d4-a716-446655440003"
       ],
@@ -82,11 +85,10 @@
       "description": "Generar VP y USPs finales en inglés y español",
       "order": 5,
       "prompt": "ACT AS: Senior Copywriter\n\nALL PREVIOUS ANALYSIS:\n- Market Research: {{step:Deep Research:summary}}\n- Market Position: {{step:Find Market Place:summary}}\n- Product Assets: {{step:Select Assets}}\n- Proof Points: {{step:Proof Points}}\n\nTASK:\nGenerate final Value Proposition and USPs for {{country}} market.\n\nDELIVERABLES:\n\n1. VALUE PROPOSITION (English):\n   - One sentence (max 20 words)\n   - Clear, compelling, differentiated\n\n2. VALUE PROPOSITION (Spanish):\n   - Translation adapted for {{country}}\n\n3. TOP 3 USPs (English):\n   - Benefit-focused\n   - Each with proof point\n   - Max 15 words each\n\n4. TOP 3 USPs (Spanish):\n   - Culturally adapted for {{country}}\n\nSTYLE: Professional, confident, customer-focused.\nTONE: {{country}} market appropriate.",
-      "selected_doc_categories": [
-        "product",
-        "output"
+      "selected_doc_ids": [
+        "doc-uuid-brand-voice-guide",
+        "doc-uuid-messaging-framework"
       ],
-      "selected_doc_ids": [],
       "depends_on": [
         "550e8400-e29b-41d4-a716-446655440001",
         "550e8400-e29b-41d4-a716-446655440002",
@@ -129,6 +131,7 @@
       "icon": "📝"
     }
   ],
+  "_categories_note": "Las categorías son SOLO para organización visual en la UI. NO se usan en la lógica de ejecución. El usuario selecciona documentos individuales por ID en cada step.",
   "execution_settings": {
     "auto_execute": false,
     "pause_on_error": true,

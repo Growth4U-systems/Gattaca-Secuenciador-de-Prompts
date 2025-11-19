@@ -47,8 +47,7 @@ projects:
         "name": "Deep Research",
         "order": 1,
         "prompt": "Conduct research on {{ecp_name}}...",
-        "selected_doc_categories": ["research", "competitor"],
-        "selected_doc_ids": [],  -- opcional: docs específicos
+        "selected_doc_ids": ["doc-uuid-1", "doc-uuid-2", "doc-uuid-5"],  -- SELECCIÓN MANUAL
         "depends_on": [],  -- IDs de steps previos necesarios
         "output_field": "deep_research_output"
       },
@@ -57,16 +56,20 @@ projects:
         "name": "Find Market Place",
         "order": 2,
         "prompt": "Using the research from previous step...",
-        "selected_doc_categories": ["market_analysis"],
+        "selected_doc_ids": ["doc-uuid-1", "doc-uuid-3", "doc-uuid-7"],  -- SELECCIÓN MANUAL
         "depends_on": ["step_uuid_1"],
         "output_field": "market_place_output"
       }
     ]
 
-  -- Document categories configuration (array)
+  -- Document categories configuration (solo para organización visual)
   - doc_categories JSONB DEFAULT '["product","competitor","research","output"]'::jsonb
     Ejemplo personalizado:
     ["product_specs", "customer_feedback", "market_analysis", "brand_voice", "outputs"]
+
+    ⚠️ IMPORTANTE: Las categorías son SOLO etiquetas visuales para organizar documentos.
+    NO se usan en la lógica de ejecución. El usuario selecciona INDIVIDUALMENTE
+    qué documentos usar en cada step.
 
 ecp_campaigns:
   -- Step outputs dinámicos (en lugar de output_1, output_2...)
@@ -141,11 +144,16 @@ knowledge_base_docs:
 **Ubicación:** `/src/components/flow/StepEditor.tsx`
 
 **Campos:**
-- Step Name
-- Prompt (textarea con variables disponibles)
-- Document Categories (multiselect)
-- Depends On (select de steps previos)
-- Order (number)
+- **Step Name**: Input de texto
+- **Order**: Number (posición en el flow)
+- **Prompt**: Textarea con variables disponibles ({{ecp_name}}, {{step:nombre}}, etc.)
+- **Depends On**: Multiselect de steps previos (para incluir sus outputs)
+- **Documents**: Lista de TODOS los documentos del proyecto con checkboxes
+  - ☑ doc1.pdf (📦 product) - 2.5K tokens
+  - ☐ doc2.docx (🎯 competitor) - 1.2K tokens
+  - ☑ doc3.txt (🔬 research) - 500 tokens
+  - [Filtrar por categoría: Todas ▼] (solo para facilitar búsqueda visual)
+  - Total seleccionado: 3 docs, 4.2K tokens
 
 ### 3. **Category Manager**
 
@@ -229,8 +237,7 @@ interface StepConfig {
   id: string
   name: string
   prompt: string
-  selected_doc_categories: string[]
-  selected_doc_ids?: string[]
+  selected_doc_ids: string[]  // SELECCIÓN MANUAL de documentos
   depends_on: string[]
 }
 
@@ -238,10 +245,8 @@ async function executeStep(
   campaignId: string,
   stepConfig: StepConfig
 ) {
-  // 1. Cargar documentos por categorías
-  const docs = await loadDocuments(
-    campaignId,
-    stepConfig.selected_doc_categories,
+  // 1. Cargar documentos específicos por IDs (selección manual del usuario)
+  const docs = await loadDocumentsByIds(
     stepConfig.selected_doc_ids
   )
 
@@ -252,16 +257,35 @@ async function executeStep(
   )
 
   // 3. Construir contexto
-  const context = buildContext(docs, previousOutputs)
+  let contextString = ''
+
+  // Agregar documentos seleccionados
+  for (const doc of docs) {
+    contextString += `\n--- START DOCUMENT: ${doc.filename} (${doc.category}) ---\n`
+    contextString += doc.extracted_content
+    contextString += `\n--- END DOCUMENT ---\n`
+  }
+
+  // Agregar outputs de steps previos (si depends_on tiene valores)
+  for (const [stepId, output] of Object.entries(previousOutputs)) {
+    contextString += `\n--- START PREVIOUS STEP OUTPUT: ${output.step_name} ---\n`
+    contextString += output.text
+    contextString += `\n--- END PREVIOUS STEP OUTPUT ---\n`
+  }
 
   // 4. Reemplazar variables en el prompt
   const finalPrompt = replaceVariables(stepConfig.prompt, {
-    ...campaign,
+    ecp_name: campaign.ecp_name,
+    problem_core: campaign.problem_core,
+    country: campaign.country,
+    industry: campaign.industry,
+    client_name: project.name,
+    // Variables de steps previos
     previous_outputs: previousOutputs
   })
 
   // 5. Llamar a Gemini
-  const output = await callGemini(context, finalPrompt)
+  const output = await callGemini(contextString, finalPrompt)
 
   // 6. Guardar output
   await saveStepOutput(campaignId, stepConfig.id, output)
