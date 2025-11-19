@@ -6,6 +6,7 @@ import { ArrowLeft, FileText, Settings, Rocket, Database } from 'lucide-react'
 import { useProject } from '@/hooks/useProjects'
 import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
 import DocumentUpload from '@/components/documents/DocumentUpload'
+import DocumentBulkUpload from '@/components/documents/DocumentBulkUpload'
 import DocumentList from '@/components/documents/DocumentList'
 import TokenMonitor from '@/components/TokenMonitor'
 
@@ -158,7 +159,10 @@ function DocumentsTab({
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold">Base de Conocimiento</h2>
-        <DocumentUpload projectId={projectId} onUploadComplete={onReload} />
+        <div className="flex gap-3">
+          <DocumentUpload projectId={projectId} onUploadComplete={onReload} />
+          <DocumentBulkUpload projectId={projectId} onUploadComplete={onReload} />
+        </div>
       </div>
 
       {/* Token Monitor */}

@@ -5,6 +5,10 @@ import { createClient } from '@supabase/supabase-js'
 // Note: These need to be installed and may require additional config
 // npm install pdf-parse mammoth
 
+// Configure API route to accept large files (App Router)
+export const runtime = 'nodejs'
+export const maxDuration = 60 // 60 seconds timeout
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
