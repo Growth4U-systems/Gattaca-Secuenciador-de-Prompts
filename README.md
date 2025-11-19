@@ -40,13 +40,16 @@ Auditoría detallada de cada llamada a IA
 
 ## 🚀 Setup
 
+> ⚠️ **IMPORTANTE**: Las tablas de base de datos NO están creadas automáticamente.
+> Lee **SETUP_REQUIRED.md** para instrucciones detalladas sobre cómo aplicar las migraciones.
+
 ### 1. Instalar dependencias
 
 ```bash
 npm install
 ```
 
-### 2. Configurar Supabase Local
+### 2. Configurar Supabase Local (⚠️ REQUERIDO MANUALMENTE)
 
 ```bash
 # Instalar Supabase CLI
