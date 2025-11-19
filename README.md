@@ -1,6 +1,8 @@
 # ECP Generator - Sistema Automatizado de Marketing
 
-Sistema para generar estrategias de marketing ECP (Extended Customer Problem) usando IA con Gemini 2.0 Flash/Pro y arquitectura guiada.
+🌐 **Sistema 100% Cloud** para generar estrategias de marketing ECP (Extended Customer Problem) usando IA con Gemini 2.0 Flash/Pro y arquitectura guiada.
+
+✅ **Sin Docker | Sin Instalación Local | Deploy en Minutos**
 
 ## 🎯 Arquitectura
 
@@ -11,9 +13,10 @@ Sistema para generar estrategias de marketing ECP (Extended Customer Problem) us
 
 ### Stack Tecnológico
 - **Frontend**: Next.js 14 (App Router), React, TailwindCSS
-- **Backend**: Supabase (Postgres + Row Level Security)
+- **Backend**: Supabase Cloud (Postgres + Row Level Security)
 - **IA**: Gemini 2.0 Flash (análisis) y Pro (outputs finales)
-- **Edge Functions**: Deno runtime en Supabase
+- **Edge Functions**: Deno runtime en Supabase Cloud
+- **Deployment**: Vercel (frontend) + Supabase Cloud (backend)
 
 ## 🗄️ Estructura de Base de Datos
 
@@ -38,69 +41,45 @@ Sesiones de análisis por nicho
 ### `execution_logs`
 Auditoría detallada de cada llamada a IA
 
-## 🚀 Setup
+## 🚀 Quick Start - Deploy en 15 Minutos
 
-> ⚠️ **IMPORTANTE**: Las tablas de base de datos NO están creadas automáticamente.
-> Lee **SETUP_REQUIRED.md** para instrucciones detalladas sobre cómo aplicar las migraciones.
+> 📖 **Guía Completa de Deployment**: Lee **[DEPLOYMENT_CLOUD.md](./DEPLOYMENT_CLOUD.md)** para instrucciones paso a paso.
 
-### 1. Instalar dependencias
+### Resumen Rápido
 
-```bash
-npm install
-```
+1. **Crear proyecto en Supabase Cloud** (gratis)
+   - Ir a [app.supabase.com](https://app.supabase.com)
+   - Crear nuevo proyecto: `ecp-generator`
 
-### 2. Configurar Supabase Local (⚠️ REQUERIDO MANUALMENTE)
+2. **Aplicar migraciones** (crear tablas)
+   - Copiar SQL de `supabase/migrations/20250101000000_initial_schema.sql`
+   - Pegar en SQL Editor de Supabase → Run
 
-```bash
-# Instalar Supabase CLI
-npm install -g supabase
+3. **Obtener credenciales**
+   - Supabase: Settings → API (URL + anon key + service role key)
+   - Gemini: [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
 
-# Iniciar Supabase local
-supabase start
+4. **Configurar variables de entorno**
+   ```bash
+   cp .env.example .env.local
+   # Editar .env.local con tus credenciales
+   ```
 
-# Aplicar migraciones
-supabase db reset
-```
+5. **Deploy Edge Function**
+   ```bash
+   supabase login
+   supabase link --project-ref TU_PROJECT_REF
+   supabase functions deploy generate-ecp-step
+   supabase secrets set GEMINI_API_KEY=tu-api-key
+   ```
 
-### 3. Variables de entorno
+6. **Correr el proyecto**
+   ```bash
+   npm install
+   npm run dev
+   ```
 
-Copia `.env.example` a `.env.local`:
-
-```bash
-cp .env.example .env.local
-```
-
-Edita `.env.local` con tus valores:
-```env
-NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
-NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key-local
-SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key-local
-GEMINI_API_KEY=tu-api-key-de-gemini
-```
-
-**Obtener claves locales:**
-```bash
-supabase status
-```
-
-**Obtener Gemini API Key:**
-- Ve a https://aistudio.google.com/app/apikey
-- Crea una API key para Gemini 2.0 Flash
-
-### 4. Configurar Edge Function
-
-```bash
-# Deployar localmente
-supabase functions serve generate-ecp-step --env-file .env.local
-```
-
-### 5. Iniciar desarrollo
-
-```bash
-npm run dev
-```
-
-Abre http://localhost:3000
+🎉 Abre http://localhost:3000
 
 ## 📋 Flujo de Uso
 
@@ -244,7 +223,7 @@ curl -X POST http://localhost:54321/functions/v1/generate-ecp-step \
 2. **Agregar autenticación** (Supabase Auth UI)
 3. **Implementar función "Save as Document"**
 4. **Testing completo del flujo end-to-end**
-5. **Deploy a producción** (Vercel + Supabase Cloud)
+5. **Deploy a producción en Vercel** (conectado a Supabase Cloud)
 
 ## 📝 Notas
 
@@ -257,9 +236,9 @@ curl -X POST http://localhost:54321/functions/v1/generate-ecp-step \
 
 Este es un proyecto interno. Para cambios:
 1. Crea una branch
-2. Testea localmente con `supabase start`
-3. Ejecuta migraciones con `supabase db reset`
-4. Commit y push
+2. Testea contra tu proyecto de Supabase Cloud
+3. Commit y push
+4. Deploy con `npm run supabase:deploy`
 
 ---
 

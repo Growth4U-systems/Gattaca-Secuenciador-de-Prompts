@@ -7,9 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "supabase:start": "supabase start",
-    "supabase:stop": "supabase stop",
-    "supabase:reset": "supabase db reset"
+    "supabase:deploy": "supabase functions deploy generate-ecp-step",
+    "supabase:logs": "supabase functions logs generate-ecp-step"
   },
   "dependencies": {
     "next": "14.2.0",
