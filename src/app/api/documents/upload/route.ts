@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/types/database.types'
 
 // PDF and DOCX parsing libraries
 // Note: These need to be installed and may require additional config
@@ -67,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Supabase client with service role for server operations
-    const supabase = createClient<Database>(
+    const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
@@ -84,7 +83,7 @@ export async function POST(request: NextRequest) {
       .insert({
         project_id: projectId,
         filename: file.name,
-        category: category as any,
+        category: category,
         extracted_content: extractedContent,
         file_size_bytes: file.size,
         mime_type: file.type,

@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Database } from '@/types/database.types'
 
-type Project = Database['public']['Tables']['projects']['Row']
+type Project = any
 
 export function useProjects() {
   const [projects, setProjects] = useState<Project[]>([])
@@ -87,7 +86,7 @@ export async function createProject(data: {
 
 export async function updateProject(
   projectId: string,
-  updates: Partial<Database['public']['Tables']['projects']['Update']>
+  updates: Partial<any>
 ) {
   const { data, error } = await supabase
     .from('projects')

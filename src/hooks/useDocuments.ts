@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Database } from '@/types/database.types'
 
-type Document = Database['public']['Tables']['knowledge_base_docs']['Row']
+type Document = any
 
 export function useDocuments(projectId: string) {
   const [documents, setDocuments] = useState<Document[]>([])
@@ -49,7 +48,7 @@ export async function deleteDocument(docId: string) {
 export async function createDocumentFromText(data: {
   projectId: string
   filename: string
-  category: Database['public']['Enums']['doc_category']
+  category: string
   content: string
 }) {
   const { data: newDoc, error } = await supabase
