@@ -131,7 +131,6 @@ async function extractPDF(buffer: ArrayBuffer): Promise<string> {
 async function extractDOCX(buffer: ArrayBuffer): Promise<string> {
   try {
     // Dynamically import mammoth (Node.js module)
-    // @ts-expect-error - mammoth types may not be available
     const mammoth = await import('mammoth')
     const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) })
     return result.value
