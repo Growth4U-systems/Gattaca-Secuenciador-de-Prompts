@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Settings, Rocket, Database, Workflow } from 'lucide-react'
+import { ArrowLeft, FileText, Settings, Rocket, Database, Workflow, Sliders } from 'lucide-react'
 import { useProject } from '@/hooks/useProjects'
 import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
 import DocumentUpload from '@/components/documents/DocumentUpload'
@@ -11,8 +11,9 @@ import DocumentList from '@/components/documents/DocumentList'
 import TokenMonitor from '@/components/TokenMonitor'
 import FlowSetup from '@/components/flow/FlowSetup'
 import CampaignRunner from '@/components/campaign/CampaignRunner'
+import ProjectVariables from '@/components/project/ProjectVariables'
 
-type TabType = 'documents' | 'flow' | 'config' | 'campaigns' | 'context'
+type TabType = 'documents' | 'flow' | 'config' | 'campaigns' | 'context' | 'variables'
 
 export default function ProjectPage({
   params,
@@ -25,6 +26,7 @@ export default function ProjectPage({
 
   const tabs = [
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText },
+    { id: 'variables' as TabType, label: 'Variables', icon: Sliders },
     { id: 'flow' as TabType, label: 'Flow Setup', icon: Workflow },
     { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket },
   ]
@@ -108,6 +110,16 @@ export default function ProjectPage({
                 loading={docsLoading}
                 onReload={reloadDocs}
                 totalTokens={totalTokens}
+              />
+            )}
+            {activeTab === 'variables' && (
+              <ProjectVariables
+                projectId={params.projectId}
+                initialVariables={project.variable_definitions || []}
+                onUpdate={() => {
+                  // Reload project to get updated variables
+                  window.location.reload()
+                }}
               />
             )}
             {activeTab === 'flow' && (
