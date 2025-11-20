@@ -19,6 +19,7 @@ interface Campaign {
   started_at: string | null
   completed_at: string | null
   created_at: string
+  custom_variables?: Record<string, string> | any
 }
 
 interface Project {
