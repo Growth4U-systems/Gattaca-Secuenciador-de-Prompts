@@ -42,6 +42,8 @@ export interface Database {
           step_2_guidance: string | null
           step_3_guidance: string | null
           step_4_guidance: string | null
+          flow_config: Json | null
+          variable_definitions: Json
         }
         Insert: {
           id?: string
@@ -60,6 +62,8 @@ export interface Database {
           step_2_guidance?: string | null
           step_3_guidance?: string | null
           step_4_guidance?: string | null
+          flow_config?: Json | null
+          variable_definitions?: Json
         }
         Update: {
           id?: string
@@ -78,6 +82,8 @@ export interface Database {
           step_2_guidance?: string | null
           step_3_guidance?: string | null
           step_4_guidance?: string | null
+          flow_config?: Json | null
+          variable_definitions?: Json
         }
       }
       knowledge_base_docs: {

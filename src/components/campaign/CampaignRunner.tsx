@@ -21,8 +21,20 @@ interface Campaign {
   created_at: string
 }
 
+interface Project {
+  id: string
+  name: string
+  variable_definitions: Array<{
+    name: string
+    default_value: string
+    required: boolean
+    description?: string
+  }>
+}
+
 export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
   const [showNewForm, setShowNewForm] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -50,8 +62,22 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
   }
 
   useEffect(() => {
+    loadProject()
     loadCampaigns()
   }, [projectId])
+
+  const loadProject = async () => {
+    try {
+      const response = await fetch(`/api/projects/${projectId}`)
+      const data = await response.json()
+
+      if (data.success && data.project) {
+        setProject(data.project)
+      }
+    } catch (error) {
+      console.error('Error loading project:', error)
+    }
+  }
 
   const loadCampaigns = async () => {
     try {
@@ -66,6 +92,18 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const openNewCampaignForm = () => {
+    // Auto-fill custom variables with project definitions
+    if (project?.variable_definitions) {
+      const varsFromProject = project.variable_definitions.map((varDef) => ({
+        key: varDef.name,
+        value: varDef.default_value || '',
+      }))
+      setCustomVariables(varsFromProject)
+    }
+    setShowNewForm(true)
   }
 
   const handleCreateCampaign = async () => {
@@ -212,7 +250,13 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold">Campañas</h2>
         <button
-          onClick={() => setShowNewForm(!showNewForm)}
+          onClick={() => {
+            if (showNewForm) {
+              setShowNewForm(false)
+            } else {
+              openNewCampaignForm()
+            }
+          }}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           {showNewForm ? 'Cancelar' : '+ Nueva Campaña'}
@@ -301,31 +345,63 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
 
               {customVariables.length > 0 && (
                 <div className="space-y-2">
-                  {customVariables.map((variable, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={variable.key}
-                        onChange={(e) => updateCustomVariable(index, 'key', e.target.value)}
-                        placeholder="nombre_variable"
-                        className="w-1/3 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                      />
-                      <span className="text-gray-400">=</span>
-                      <input
-                        type="text"
-                        value={variable.value}
-                        onChange={(e) => updateCustomVariable(index, 'value', e.target.value)}
-                        placeholder="Valor de la variable"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                      />
-                      <button
-                        onClick={() => removeCustomVariable(index)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                      >
-                        <X size={18} />
-                      </button>
-                    </div>
-                  ))}
+                  {customVariables.map((variable, index) => {
+                    const isProjectVariable = project?.variable_definitions?.some(
+                      (v) => v.name === variable.key
+                    )
+                    const varDef = project?.variable_definitions?.find(
+                      (v) => v.name === variable.key
+                    )
+
+                    return (
+                      <div key={index} className="flex items-center gap-2">
+                        {isProjectVariable ? (
+                          <>
+                            <div className="w-1/3 px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm font-mono text-gray-700 flex items-center gap-2">
+                              {'{{'}{variable.key}{'}}'}
+                              {varDef?.required && (
+                                <span className="text-red-500 text-xs">*</span>
+                              )}
+                            </div>
+                            <span className="text-gray-400">=</span>
+                            <input
+                              type="text"
+                              value={variable.value}
+                              onChange={(e) => updateCustomVariable(index, 'value', e.target.value)}
+                              placeholder={varDef?.description || 'Valor de la variable'}
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                              required={varDef?.required}
+                            />
+                            <div className="w-10"></div> {/* Spacing for alignment */}
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              value={variable.key}
+                              onChange={(e) => updateCustomVariable(index, 'key', e.target.value)}
+                              placeholder="nombre_variable"
+                              className="w-1/3 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                            />
+                            <span className="text-gray-400">=</span>
+                            <input
+                              type="text"
+                              value={variable.value}
+                              onChange={(e) => updateCustomVariable(index, 'value', e.target.value)}
+                              placeholder="Valor de la variable"
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                            />
+                            <button
+                              onClick={() => removeCustomVariable(index)}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                            >
+                              <X size={18} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
 
