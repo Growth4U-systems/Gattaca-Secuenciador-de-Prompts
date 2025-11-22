@@ -101,7 +101,7 @@ export default function ProjectVariables({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Settings size={20} className="text-gray-600" />
-            <h3 className="text-lg font-semibold">Variables del Proyecto</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Variables del Proyecto</h3>
           </div>
         </div>
 
@@ -132,7 +132,7 @@ export default function ProjectVariables({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Settings size={20} className="text-gray-600" />
-            <h3 className="text-lg font-semibold">Variables del Proyecto</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Variables del Proyecto</h3>
           </div>
           <button
             onClick={() => setIsEditing(true)}
@@ -150,7 +150,7 @@ export default function ProjectVariables({
             >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <code className="text-sm font-mono bg-white px-2 py-1 rounded border border-gray-300">
+                  <code className="text-sm font-mono text-gray-900 bg-white px-2 py-1 rounded border border-gray-300">
                     {'{{'}{variable.name}{'}}'}
                   </code>
                   {variable.required && (
@@ -181,7 +181,7 @@ export default function ProjectVariables({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Settings size={20} className="text-gray-600" />
-          <h3 className="text-lg font-semibold">Variables del Proyecto</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Variables del Proyecto</h3>
         </div>
         <button
           onClick={addVariable}
@@ -222,7 +222,7 @@ export default function ProjectVariables({
                     value={variable.name}
                     onChange={(e) => updateVariable(index, 'name', e.target.value)}
                     placeholder="ej: target_audience"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm font-mono text-gray-900 placeholder:text-gray-400"
                   />
                 </div>
 
@@ -237,7 +237,7 @@ export default function ProjectVariables({
                       updateVariable(index, 'default_value', e.target.value)
                     }
                     placeholder="ej: CTOs"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 placeholder:text-gray-400"
                   />
                 </div>
               </div>
@@ -253,7 +253,7 @@ export default function ProjectVariables({
                     updateVariable(index, 'description', e.target.value)
                   }
                   placeholder="ej: Segmento de audiencia objetivo"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 placeholder:text-gray-400"
                 />
               </div>
 
