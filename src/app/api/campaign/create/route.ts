@@ -30,8 +30,21 @@ export async function POST(request: NextRequest) {
       }
     )
 
-    // Create campaign
-    // Try with new columns first, fallback to basic columns if they don't exist
+    // Load project to copy flow_config
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .select('flow_config')
+      .eq('id', projectId)
+      .single()
+
+    if (projectError) {
+      return NextResponse.json(
+        { error: 'Failed to load project', details: projectError.message },
+        { status: 500 }
+      )
+    }
+
+    // Create campaign with copied flow_config
     let insertData: any = {
       project_id: projectId,
       ecp_name,
@@ -40,13 +53,8 @@ export async function POST(request: NextRequest) {
       industry,
       status: 'draft',
       custom_variables: custom_variables || {},
-    }
-
-    // Try to add new columns (will be ignored if they don't exist)
-    try {
-      insertData.step_outputs = {}
-    } catch (e) {
-      // Column doesn't exist, skip it
+      step_outputs: {},
+      flow_config: project.flow_config || null, // Copy project's flow_config
     }
 
     const { data, error } = await supabase

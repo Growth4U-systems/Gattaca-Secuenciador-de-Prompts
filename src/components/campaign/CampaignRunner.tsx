@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings } from 'lucide-react'
+import CampaignFlowEditor from './CampaignFlowEditor'
+import { FlowConfig } from '@/types/flow.types'
 
 interface CampaignRunnerProps {
   projectId: string
@@ -20,6 +22,7 @@ interface Campaign {
   completed_at: string | null
   created_at: string
   custom_variables?: Record<string, string> | any
+  flow_config?: FlowConfig | null
 }
 
 interface FlowStep {
@@ -61,6 +64,8 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null)
   const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set())
   const [runningStep, setRunningStep] = useState<{ campaignId: string; stepId: string } | null>(null)
+  const [editingFlowCampaignId, setEditingFlowCampaignId] = useState<string | null>(null)
+  const [documents, setDocuments] = useState<any[]>([])
 
   // Form state
   const [ecpName, setEcpName] = useState('')
@@ -86,6 +91,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
   useEffect(() => {
     loadProject()
     loadCampaigns()
+    loadDocuments()
   }, [projectId])
 
   const loadProject = async () => {
@@ -98,6 +104,19 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
       }
     } catch (error) {
       console.error('Error loading project:', error)
+    }
+  }
+
+  const loadDocuments = async () => {
+    try {
+      const response = await fetch(`/api/documents?projectId=${projectId}`)
+      const data = await response.json()
+
+      if (data.success) {
+        setDocuments(data.documents || [])
+      }
+    } catch (error) {
+      console.error('Error loading documents:', error)
     }
   }
 
@@ -387,7 +406,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                 value={ecpName}
                 onChange={(e) => setEcpName(e.target.value)}
                 placeholder="e.g., Fintech for SMEs"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
               />
             </div>
 
@@ -403,7 +422,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                 value={problemCore}
                 onChange={(e) => setProblemCore(e.target.value)}
                 placeholder="e.g., Access to credit"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
               />
             </div>
 
@@ -420,7 +439,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
                   placeholder="e.g., Mexico"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
                 />
               </div>
 
@@ -436,7 +455,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                   value={industry}
                   onChange={(e) => setIndustry(e.target.value)}
                   placeholder="e.g., Financial Services"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
                 />
               </div>
             </div>
@@ -487,7 +506,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                               value={variable.value}
                               onChange={(e) => updateCustomVariable(index, 'value', e.target.value)}
                               placeholder={varDef?.description || 'Valor de la variable'}
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 placeholder:text-gray-400"
                               required={varDef?.required}
                             />
                             <div className="w-10"></div> {/* Spacing for alignment */}
@@ -499,7 +518,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                               value={variable.key}
                               onChange={(e) => updateCustomVariable(index, 'key', e.target.value)}
                               placeholder="nombre_variable"
-                              className="w-1/3 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                              className="w-1/3 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 placeholder:text-gray-400"
                             />
                             <span className="text-gray-400">=</span>
                             <input
@@ -507,7 +526,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                               value={variable.value}
                               onChange={(e) => updateCustomVariable(index, 'value', e.target.value)}
                               placeholder="Valor de la variable"
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 placeholder:text-gray-400"
                             />
                             <button
                               onClick={() => removeCustomVariable(index)}
@@ -592,23 +611,34 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
               )}
 
               {/* Individual Steps Section */}
-              {project?.flow_config?.steps && (
+              {(campaign.flow_config?.steps || project?.flow_config?.steps) && (
                 <div className="mb-4">
-                  <button
-                    onClick={() => toggleCampaignExpanded(campaign.id)}
-                    className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900 mb-2"
-                  >
-                    {expandedCampaigns.has(campaign.id) ? (
-                      <ChevronDown size={16} />
-                    ) : (
-                      <ChevronRight size={16} />
+                  <div className="flex items-center justify-between mb-2">
+                    <button
+                      onClick={() => toggleCampaignExpanded(campaign.id)}
+                      className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+                    >
+                      {expandedCampaigns.has(campaign.id) ? (
+                        <ChevronDown size={16} />
+                      ) : (
+                        <ChevronRight size={16} />
+                      )}
+                      Individual Steps ({(campaign.flow_config?.steps || project?.flow_config?.steps)?.length})
+                    </button>
+                    {campaign.status === 'draft' && (
+                      <button
+                        onClick={() => setEditingFlowCampaignId(campaign.id)}
+                        className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 inline-flex items-center gap-1"
+                      >
+                        <Settings size={12} />
+                        Edit Flow
+                      </button>
                     )}
-                    Individual Steps ({project.flow_config.steps.length})
-                  </button>
+                  </div>
 
                   {expandedCampaigns.has(campaign.id) && (
                     <div className="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
-                      {project.flow_config.steps
+                      {(campaign.flow_config?.steps || project.flow_config.steps)
                         .sort((a, b) => a.order - b.order)
                         .map((step) => {
                           const stepStatus = getStepStatus(campaign, step.id)
@@ -650,14 +680,33 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                                   </div>
                                 )}
                               </div>
-                              <button
-                                onClick={() => handleRunStep(campaign.id, step.id, step.name)}
-                                disabled={stepRunning || running === campaign.id}
-                                className="ml-4 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-1"
-                              >
-                                <Play size={14} />
-                                {stepRunning ? 'Running...' : 'Run'}
-                              </button>
+                              <div className="ml-4 flex gap-2">
+                                <button
+                                  onClick={() => handleRunStep(campaign.id, step.id, step.name)}
+                                  disabled={stepRunning || running === campaign.id}
+                                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-1"
+                                >
+                                  <Play size={14} />
+                                  {stepRunning ? 'Running...' : 'Run'}
+                                </button>
+                                {stepOutput && stepOutput.output && (
+                                  <button
+                                    onClick={() => {
+                                      const text = `=== ${step.name} ===\n\n${stepOutput.output}\n\nTokens: ${stepOutput.tokens || 'N/A'}\nCompleted: ${stepOutput.completed_at || 'N/A'}`
+                                      const blob = new Blob([text], { type: 'text/plain' })
+                                      const url = URL.createObjectURL(blob)
+                                      const a = document.createElement('a')
+                                      a.href = url
+                                      a.download = `${campaign.ecp_name.replace(/\s+/g, '_')}_${step.name.replace(/\s+/g, '_')}.txt`
+                                      a.click()
+                                    }}
+                                    className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 inline-flex items-center gap-1"
+                                  >
+                                    <Download size={14} />
+                                    Download
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           )
                         })}
@@ -736,6 +785,24 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Campaign Flow Editor */}
+      {editingFlowCampaignId && (
+        <CampaignFlowEditor
+          campaignId={editingFlowCampaignId}
+          initialFlowConfig={campaigns.find(c => c.id === editingFlowCampaignId)?.flow_config || project?.flow_config || null}
+          documents={documents}
+          projectVariables={project?.variable_definitions || []}
+          onClose={() => setEditingFlowCampaignId(null)}
+          onSave={(flowConfig) => {
+            // Update local campaign state
+            setCampaigns(prev => prev.map(c =>
+              c.id === editingFlowCampaignId ? { ...c, flow_config: flowConfig } : c
+            ))
+            setEditingFlowCampaignId(null)
+          }}
+        />
       )}
     </div>
   )

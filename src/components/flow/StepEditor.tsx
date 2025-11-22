@@ -88,7 +88,7 @@ export default function StepEditor({
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="text-sm px-3 py-1 border border-gray-300 rounded"
+                className="text-sm px-3 py-1 border border-gray-300 rounded text-gray-900"
               >
                 <option value="all">All categories</option>
                 {categories.map((cat) => (
@@ -185,7 +185,7 @@ export default function StepEditor({
                 setEditedStep((prev) => ({ ...prev, prompt: e.target.value }))
               }
               rows={12}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 text-gray-900"
             />
             <p className="text-xs text-gray-500 mt-2">
               <span className="font-medium">Available variables:</span>{' '}

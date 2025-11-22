@@ -58,15 +58,17 @@ export async function POST(request: NextRequest) {
 
     const project = campaign.projects
 
+    // Use campaign's flow_config if available, otherwise fall back to project's flow_config
+    const flowConfig = campaign.flow_config || project.flow_config
+
     // Check if flow_config exists
-    if (!project.flow_config || !project.flow_config.steps) {
+    if (!flowConfig || !flowConfig.steps) {
       return NextResponse.json(
-        { error: 'Project does not have flow configuration' },
+        { error: 'Campaign does not have flow configuration' },
         { status: 400 }
       )
     }
 
-    const flowConfig = project.flow_config
     const steps = flowConfig.steps.sort((a: FlowStep, b: FlowStep) => a.order - b.order)
 
     // Mark campaign as running
