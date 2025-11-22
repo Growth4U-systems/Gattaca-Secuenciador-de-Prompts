@@ -108,7 +108,7 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-2">Flow Configuration</h2>
+        <h2 className="text-xl font-semibold mb-2 text-gray-900">Flow Configuration</h2>
         <p className="text-sm text-gray-600">
           Configure documents and prompts for each step. This configuration will be used for all campaigns.
         </p>
@@ -123,7 +123,7 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
             <div key={step.id} className="bg-white border border-gray-200 rounded-lg p-4">
               <div className="flex items-start justify-between mb-2">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <h3 className="font-semibold text-lg flex items-center gap-2 text-gray-900">
                     <span className="text-blue-600">{step.order}.</span>
                     {step.name}
                   </h3>

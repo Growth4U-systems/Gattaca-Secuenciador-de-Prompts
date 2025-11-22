@@ -372,7 +372,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold">Campañas</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Campañas</h2>
         <button
           onClick={() => {
             if (showNewForm) {
@@ -390,7 +390,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
       {/* New Campaign Form */}
       {showNewForm && (
         <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-          <h3 className="font-semibold mb-4">
+          <h3 className="font-semibold mb-4 text-gray-900">
             {editingCampaignId ? 'Edit Campaign' : 'Create New Campaign'}
           </h3>
 
@@ -589,14 +589,14 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-lg">{campaign.ecp_name}</h3>
+                  <h3 className="font-semibold text-lg text-gray-900">{campaign.ecp_name}</h3>
                   <p className="text-sm text-gray-600 mt-1">
                     {campaign.problem_core} • {campaign.country} • {campaign.industry}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   {getStatusIcon(campaign.status)}
-                  <span className="text-sm font-medium">
+                  <span className="text-sm font-medium text-gray-900">
                     {getStatusLabel(campaign.status)}
                   </span>
                 </div>
@@ -656,7 +656,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                                   <span className="text-xs font-medium text-gray-500">
                                     Step {step.order}
                                   </span>
-                                  <h4 className="font-medium text-sm">{step.name}</h4>
+                                  <h4 className="font-medium text-sm text-gray-900">{step.name}</h4>
                                   {stepStatus === 'completed' && (
                                     <CheckCircle size={16} className="text-green-600" />
                                   )}
