@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2 } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
 import { FlowConfig, FlowStep } from '@/types/flow.types'
 
@@ -49,6 +49,8 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
   const [runningStep, setRunningStep] = useState<{ campaignId: string; stepId: string } | null>(null)
   const [editingFlowCampaignId, setEditingFlowCampaignId] = useState<string | null>(null)
   const [documents, setDocuments] = useState<any[]>([])
+  const [editingCampaignName, setEditingCampaignName] = useState<string | null>(null)
+  const [editingNameValue, setEditingNameValue] = useState('')
 
   // Form state
   const [ecpName, setEcpName] = useState('')
@@ -216,6 +218,47 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
     } finally {
       setCreating(false)
     }
+  }
+
+  const handleEditCampaignName = (campaignId: string, currentName: string) => {
+    setEditingCampaignName(campaignId)
+    setEditingNameValue(currentName)
+  }
+
+  const handleSaveCampaignName = async (campaignId: string) => {
+    if (!editingNameValue.trim()) {
+      alert('Campaign name cannot be empty')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/campaign/${campaignId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ecp_name: editingNameValue }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('✅ Campaign name updated successfully')
+        setEditingCampaignName(null)
+        setEditingNameValue('')
+        loadCampaigns()
+      } else {
+        throw new Error(data.error || 'Failed to update')
+      }
+    } catch (error) {
+      console.error('Error updating campaign name:', error)
+      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  const handleCancelEditCampaignName = () => {
+    setEditingCampaignName(null)
+    setEditingNameValue('')
   }
 
   const handleDeleteCampaign = async (campaignId: string, campaignName: string) => {
@@ -613,7 +656,45 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-lg text-gray-900">{campaign.ecp_name}</h3>
+                  {editingCampaignName === campaign.id ? (
+                    <div className="flex items-center gap-2 mb-1">
+                      <input
+                        type="text"
+                        value={editingNameValue}
+                        onChange={(e) => setEditingNameValue(e.target.value)}
+                        className="flex-1 text-lg font-semibold text-gray-900 border-2 border-blue-500 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveCampaignName(campaign.id)
+                          if (e.key === 'Escape') handleCancelEditCampaignName()
+                        }}
+                      />
+                      <button
+                        onClick={() => handleSaveCampaignName(campaign.id)}
+                        className="p-1.5 bg-green-600 text-white rounded hover:bg-green-700"
+                      >
+                        <Check size={16} />
+                      </button>
+                      <button
+                        onClick={handleCancelEditCampaignName}
+                        className="p-1.5 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-lg text-gray-900">{campaign.ecp_name}</h3>
+                      {campaign.status === 'draft' && (
+                        <button
+                          onClick={() => handleEditCampaignName(campaign.id, campaign.ecp_name)}
+                          className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <p className="text-sm text-gray-600 mt-1">
                     {campaign.problem_core} • {campaign.country} • {campaign.industry}
                   </p>

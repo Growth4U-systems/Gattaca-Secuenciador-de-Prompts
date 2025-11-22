@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Save, Edit, FileText, ArrowRight, X } from 'lucide-react'
+import { Save, Edit, FileText, ArrowRight, X, Trash2, Plus } from 'lucide-react'
 import { FlowStep, FlowConfig } from '@/types/flow.types'
 import { DEFAULT_FLOW_CONFIG } from '@/lib/defaultFlowConfig'
 import StepEditor from '../flow/StepEditor'
@@ -68,6 +68,40 @@ export default function CampaignFlowEditor({
     setEditingStep(null)
   }
 
+  const handleDeleteStep = (stepId: string, stepName: string) => {
+    if (!confirm(`¿Estás seguro de que quieres eliminar el paso "${stepName}"? Esta acción no se puede deshacer.`)) {
+      return
+    }
+
+    setFlowConfig((prev) => ({
+      ...prev,
+      steps: prev.steps.filter((step) => step.id !== stepId),
+    }))
+  }
+
+  const handleAddStep = () => {
+    const newOrder = flowConfig.steps.length > 0
+      ? Math.max(...flowConfig.steps.map(s => s.order)) + 1
+      : 1
+
+    const newStep: FlowStep = {
+      id: `step_${Date.now()}`,
+      name: `New Step ${newOrder}`,
+      description: '',
+      order: newOrder,
+      prompt: '',
+      base_doc_ids: [],
+      auto_receive_from: [],
+      output_format: 'text',
+    }
+
+    setFlowConfig((prev) => ({
+      ...prev,
+      steps: [...prev.steps, newStep],
+    }))
+    setEditingStep(newStep)
+  }
+
   const sortedSteps = [...flowConfig.steps].sort((a, b) => a.order - b.order)
 
   return (
@@ -75,18 +109,27 @@ export default function CampaignFlowEditor({
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
           {/* Header */}
-          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">Edit Campaign Flow</h2>
-              <p className="text-sm text-gray-600 mt-1">
-                Customize documents and prompts for this specific campaign
-              </p>
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Edit Campaign Flow</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Customize documents and prompts for this specific campaign
+                </p>
+              </div>
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
             </div>
             <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
+              onClick={handleAddStep}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center gap-2 text-sm"
             >
-              <X size={24} />
+              <Plus size={16} />
+              Add Step
             </button>
           </div>
 
@@ -104,13 +147,22 @@ export default function CampaignFlowEditor({
                       <p className="text-sm text-gray-600 mt-1">{step.description}</p>
                     )}
                   </div>
-                  <button
-                    onClick={() => setEditingStep(step)}
-                    className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 inline-flex items-center gap-1"
-                  >
-                    <Edit size={14} />
-                    Edit
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setEditingStep(step)}
+                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 inline-flex items-center gap-1"
+                    >
+                      <Edit size={14} />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteStep(step.id, step.name)}
+                      className="px-3 py-1 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100 inline-flex items-center gap-1"
+                    >
+                      <Trash2 size={14} />
+                      Delete
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-3 space-y-2 text-sm">

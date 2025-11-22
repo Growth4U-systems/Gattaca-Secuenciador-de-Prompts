@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Save, Edit, FileText, ArrowRight } from 'lucide-react'
+import { Save, Edit, FileText, ArrowRight, Trash2, Plus } from 'lucide-react'
 import { FlowStep, FlowConfig } from '@/types/flow.types'
 import { DEFAULT_FLOW_CONFIG } from '@/lib/defaultFlowConfig'
 import StepEditor from './StepEditor'
@@ -95,6 +95,40 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
     setEditingStep(null)
   }
 
+  const handleDeleteStep = (stepId: string, stepName: string) => {
+    if (!confirm(`¿Estás seguro de que quieres eliminar el paso "${stepName}"? Esta acción no se puede deshacer.`)) {
+      return
+    }
+
+    setFlowConfig((prev) => ({
+      ...prev,
+      steps: prev.steps.filter((step) => step.id !== stepId),
+    }))
+  }
+
+  const handleAddStep = () => {
+    const newOrder = flowConfig.steps.length > 0
+      ? Math.max(...flowConfig.steps.map(s => s.order)) + 1
+      : 1
+
+    const newStep: FlowStep = {
+      id: `step_${Date.now()}`,
+      name: `New Step ${newOrder}`,
+      description: '',
+      order: newOrder,
+      prompt: '',
+      base_doc_ids: [],
+      auto_receive_from: [],
+      output_format: 'text',
+    }
+
+    setFlowConfig((prev) => ({
+      ...prev,
+      steps: [...prev.steps, newStep],
+    }))
+    setEditingStep(newStep)
+  }
+
   if (loading) {
     return (
       <div className="text-center py-12">
@@ -107,11 +141,20 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-2 text-gray-900">Flow Configuration</h2>
-        <p className="text-sm text-gray-600">
-          Configure documents and prompts for each step. This configuration will be used for all campaigns.
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h2 className="text-xl font-semibold mb-2 text-gray-900">Flow Configuration</h2>
+          <p className="text-sm text-gray-600">
+            Configure documents and prompts for each step. This configuration will be used for all campaigns.
+          </p>
+        </div>
+        <button
+          onClick={handleAddStep}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center gap-2"
+        >
+          <Plus size={18} />
+          Add Step
+        </button>
       </div>
 
       {/* Steps list */}
@@ -131,13 +174,22 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
                     <p className="text-sm text-gray-600 mt-1">{step.description}</p>
                   )}
                 </div>
-                <button
-                  onClick={() => setEditingStep(step)}
-                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 inline-flex items-center gap-1"
-                >
-                  <Edit size={14} />
-                  Edit
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditingStep(step)}
+                    className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 inline-flex items-center gap-1"
+                  >
+                    <Edit size={14} />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteStep(step.id, step.name)}
+                    className="px-3 py-1 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100 inline-flex items-center gap-1"
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </button>
+                </div>
               </div>
 
               <div className="mt-3 space-y-2 text-sm">

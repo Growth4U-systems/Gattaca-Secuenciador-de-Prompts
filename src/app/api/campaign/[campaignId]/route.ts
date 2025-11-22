@@ -9,10 +9,10 @@ export const maxDuration = 30
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { campaignId: string } }
+  { params }: { params: Promise<{ campaignId: string }> }
 ) {
   try {
-    const { campaignId } = params
+    const { campaignId } = await params
     const body = await request.json()
     const { ecp_name, problem_core, country, industry, custom_variables } = body
 
@@ -90,10 +90,10 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { campaignId: string } }
+  { params }: { params: Promise<{ campaignId: string }> }
 ) {
   try {
-    const { campaignId } = params
+    const { campaignId } = await params
 
     if (!campaignId) {
       return NextResponse.json(

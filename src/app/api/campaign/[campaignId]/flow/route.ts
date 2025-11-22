@@ -9,10 +9,10 @@ export const maxDuration = 30
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { campaignId: string } }
+  { params }: { params: Promise<{ campaignId: string }> }
 ) {
   try {
-    const { campaignId } = params
+    const { campaignId } = await params
     const body = await request.json()
     const { flowConfig } = body
 
@@ -67,10 +67,10 @@ export async function PATCH(
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { campaignId: string } }
+  { params }: { params: Promise<{ campaignId: string }> }
 ) {
   try {
-    const { campaignId } = params
+    const { campaignId } = await params
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
