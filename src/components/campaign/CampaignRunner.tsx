@@ -52,11 +52,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
   const [editingCampaignName, setEditingCampaignName] = useState<string | null>(null)
   const [editingNameValue, setEditingNameValue] = useState('')
 
-  // Form state
-  const [ecpName, setEcpName] = useState('')
-  const [problemCore, setProblemCore] = useState('')
-  const [country, setCountry] = useState('')
-  const [industry, setIndustry] = useState('')
+  // Form state - only custom variables
   const [customVariables, setCustomVariables] = useState<Array<{ key: string; value: string }>>([])
 
   const addCustomVariable = () => {
@@ -134,15 +130,22 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
   }
 
   const handleEditCampaign = (campaign: Campaign) => {
-    // Load campaign data into form
-    setEcpName(campaign.ecp_name)
-    setProblemCore(campaign.problem_core)
-    setCountry(campaign.country)
-    setIndustry(campaign.industry)
+    // Load all campaign variables (both custom and legacy fields)
+    const allVars: Record<string, string> = {}
 
-    // Load custom variables
+    // Include legacy fields as variables
+    if (campaign.ecp_name) allVars.ecp_name = campaign.ecp_name
+    if (campaign.problem_core) allVars.problem_core = campaign.problem_core
+    if (campaign.country) allVars.country = campaign.country
+    if (campaign.industry) allVars.industry = campaign.industry
+
+    // Include custom variables
     const customVars = campaign.custom_variables as Record<string, string> || {}
-    const varsArray = Object.entries(customVars).map(([key, value]) => ({ key, value }))
+    Object.entries(customVars).forEach(([key, value]) => {
+      allVars[key] = value
+    })
+
+    const varsArray = Object.entries(allVars).map(([key, value]) => ({ key, value }))
     setCustomVariables(varsArray)
 
     setEditingCampaignId(campaign.id)
@@ -150,11 +153,6 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
   }
 
   const handleCreateCampaign = async () => {
-    if (!ecpName || !problemCore || !country || !industry) {
-      alert('Por favor completa todos los campos')
-      return
-    }
-
     // Convert custom variables array to object
     const customVarsObject: Record<string, string> = {}
     customVariables.forEach((v) => {
@@ -162,6 +160,24 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
         customVarsObject[v.key.trim()] = v.value
       }
     })
+
+    // Extract legacy fields from variables for backwards compatibility with database
+    const ecpName = customVarsObject.ecp_name || 'Unnamed Campaign'
+    const problemCore = customVarsObject.problem_core || ''
+    const country = customVarsObject.country || ''
+    const industry = customVarsObject.industry || ''
+
+    // Validate required fields from project variable definitions
+    if (project?.variable_definitions) {
+      const missingRequired = project.variable_definitions
+        .filter(v => v.required && !customVarsObject[v.name])
+        .map(v => v.name)
+
+      if (missingRequired.length > 0) {
+        alert(`Por favor completa los campos requeridos: ${missingRequired.join(', ')}`)
+        return
+      }
+    }
 
     setCreating(true)
     try {
@@ -191,10 +207,6 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
       if (data.success) {
         alert(isEditing ? '✅ Campaign updated successfully' : '✅ Campaign created successfully')
         setShowNewForm(false)
-        setEcpName('')
-        setProblemCore('')
-        setCountry('')
-        setIndustry('')
         setCustomVariables([])
         setEditingCampaignId(null)
         loadCampaigns()
@@ -462,74 +474,8 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
           </h3>
 
           <div className="space-y-4">
+            {/* Variables Section */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
-                <span>ECP Name *</span>
-                <code className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                  {'{{'} ecp_name {'}}'}
-                </code>
-              </label>
-              <input
-                type="text"
-                value={ecpName}
-                onChange={(e) => setEcpName(e.target.value)}
-                placeholder="e.g., Fintech for SMEs"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
-                <span>Problem Core *</span>
-                <code className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                  {'{{'} problem_core {'}}'}
-                </code>
-              </label>
-              <input
-                type="text"
-                value={problemCore}
-                onChange={(e) => setProblemCore(e.target.value)}
-                placeholder="e.g., Access to credit"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
-                  <span>Country *</span>
-                  <code className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                    {'{{'} country {'}}'}
-                  </code>
-                </label>
-                <input
-                  type="text"
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  placeholder="e.g., Mexico"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
-                  <span>Industry *</span>
-                  <code className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                    {'{{'} industry {'}}'}
-                  </code>
-                </label>
-                <input
-                  type="text"
-                  value={industry}
-                  onChange={(e) => setIndustry(e.target.value)}
-                  placeholder="e.g., Financial Services"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-                />
-              </div>
-            </div>
-
-            {/* Custom Variables Section */}
-            <div className="border-t border-gray-200 pt-4">
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
