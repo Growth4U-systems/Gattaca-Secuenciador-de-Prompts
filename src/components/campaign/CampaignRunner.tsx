@@ -638,7 +638,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
 
                   {expandedCampaigns.has(campaign.id) && (
                     <div className="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
-                      {(campaign.flow_config?.steps || project.flow_config.steps)
+                      {(campaign.flow_config?.steps || project?.flow_config?.steps || [])
                         .sort((a, b) => a.order - b.order)
                         .map((step) => {
                           const stepStatus = getStepStatus(campaign, step.id)
