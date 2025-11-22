@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2 } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight } from 'lucide-react'
 
 interface CampaignRunnerProps {
   projectId: string
@@ -22,6 +22,19 @@ interface Campaign {
   custom_variables?: Record<string, string> | any
 }
 
+interface FlowStep {
+  id: string
+  name: string
+  description?: string
+  order: number
+  prompt: string
+  base_doc_ids: string[]
+  auto_receive_from: string[]
+  model?: string
+  temperature?: number
+  max_tokens?: number
+}
+
 interface Project {
   id: string
   name: string
@@ -31,6 +44,11 @@ interface Project {
     required: boolean
     description?: string
   }>
+  flow_config?: {
+    steps: FlowStep[]
+    version?: string
+    description?: string
+  }
 }
 
 export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
@@ -41,6 +59,8 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
   const [creating, setCreating] = useState(false)
   const [running, setRunning] = useState<string | null>(null)
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null)
+  const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set())
+  const [runningStep, setRunningStep] = useState<{ campaignId: string; stepId: string } | null>(null)
 
   // Form state
   const [ecpName, setEcpName] = useState('')
@@ -235,6 +255,52 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
     }
   }
 
+  const handleRunStep = async (campaignId: string, stepId: string, stepName: string) => {
+    if (!confirm(`¿Ejecutar paso "${stepName}"? Esto puede tomar algunos minutos.`)) {
+      return
+    }
+
+    setRunningStep({ campaignId, stepId })
+    try {
+      const response = await fetch('/api/campaign/run-step', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ campaignId, stepId }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert(`✅ Step "${stepName}" completed in ${(data.duration_ms / 1000).toFixed(1)}s`)
+        loadCampaigns()
+      } else {
+        // Show detailed error message
+        let errorMsg = data.error || 'Execution failed'
+        if (data.details) {
+          errorMsg += `\n\nDetalles: ${data.details}`
+        }
+        throw new Error(errorMsg)
+      }
+    } catch (error) {
+      console.error('Error running step:', error)
+      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setRunningStep(null)
+    }
+  }
+
+  const toggleCampaignExpanded = (campaignId: string) => {
+    const newExpanded = new Set(expandedCampaigns)
+    if (newExpanded.has(campaignId)) {
+      newExpanded.delete(campaignId)
+    } else {
+      newExpanded.add(campaignId)
+    }
+    setExpandedCampaigns(newExpanded)
+  }
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
@@ -261,6 +327,18 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
       default:
         return status
     }
+  }
+
+  const getStepStatus = (campaign: Campaign, stepId: string) => {
+    if (campaign.step_outputs && campaign.step_outputs[stepId]) {
+      const output = campaign.step_outputs[stepId]
+      return output.status || 'completed'
+    }
+    return 'pending'
+  }
+
+  const isStepRunning = (campaignId: string, stepId: string) => {
+    return runningStep?.campaignId === campaignId && runningStep?.stepId === stepId
   }
 
   if (loading) {
@@ -510,6 +588,81 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                   <p>
                     Steps completed: {Object.keys(campaign.step_outputs).length}
                   </p>
+                </div>
+              )}
+
+              {/* Individual Steps Section */}
+              {project?.flow_config?.steps && (
+                <div className="mb-4">
+                  <button
+                    onClick={() => toggleCampaignExpanded(campaign.id)}
+                    className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900 mb-2"
+                  >
+                    {expandedCampaigns.has(campaign.id) ? (
+                      <ChevronDown size={16} />
+                    ) : (
+                      <ChevronRight size={16} />
+                    )}
+                    Individual Steps ({project.flow_config.steps.length})
+                  </button>
+
+                  {expandedCampaigns.has(campaign.id) && (
+                    <div className="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
+                      {project.flow_config.steps
+                        .sort((a, b) => a.order - b.order)
+                        .map((step) => {
+                          const stepStatus = getStepStatus(campaign, step.id)
+                          const stepRunning = isStepRunning(campaign.id, step.id)
+                          const stepOutput = campaign.step_outputs?.[step.id]
+
+                          return (
+                            <div
+                              key={step.id}
+                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium text-gray-500">
+                                    Step {step.order}
+                                  </span>
+                                  <h4 className="font-medium text-sm">{step.name}</h4>
+                                  {stepStatus === 'completed' && (
+                                    <CheckCircle size={16} className="text-green-600" />
+                                  )}
+                                  {stepRunning && (
+                                    <Clock size={16} className="text-blue-600 animate-spin" />
+                                  )}
+                                </div>
+                                {step.description && (
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {step.description}
+                                  </p>
+                                )}
+                                {stepOutput && (
+                                  <div className="text-xs text-gray-600 mt-1">
+                                    <span className="font-medium">Tokens:</span> {stepOutput.tokens || 'N/A'}
+                                    {stepOutput.completed_at && (
+                                      <span className="ml-3">
+                                        <span className="font-medium">Completed:</span>{' '}
+                                        {new Date(stepOutput.completed_at).toLocaleTimeString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleRunStep(campaign.id, step.id, step.name)}
+                                disabled={stepRunning || running === campaign.id}
+                                className="ml-4 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-1"
+                              >
+                                <Play size={14} />
+                                {stepRunning ? 'Running...' : 'Run'}
+                              </button>
+                            </div>
+                          )
+                        })}
+                    </div>
+                  )}
                 </div>
               )}
 
