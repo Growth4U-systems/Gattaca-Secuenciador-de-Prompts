@@ -84,3 +84,57 @@ export async function PATCH(
     )
   }
 }
+
+/**
+ * Delete campaign
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { campaignId: string } }
+) {
+  try {
+    const { campaignId } = params
+
+    if (!campaignId) {
+      return NextResponse.json(
+        { error: 'Missing campaignId' },
+        { status: 400 }
+      )
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    )
+
+    const { error } = await supabase
+      .from('ecp_campaigns')
+      .delete()
+      .eq('id', campaignId)
+
+    if (error) {
+      console.error('Database error:', error)
+      return NextResponse.json(
+        { error: 'Failed to delete campaign', details: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Campaign deleted successfully',
+    })
+  } catch (error) {
+    console.error('Delete campaign error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Save, Edit, FileText, ArrowRight, X } from 'lucide-react'
 import { FlowStep, FlowConfig } from '@/types/flow.types'
+import { DEFAULT_FLOW_CONFIG } from '@/lib/defaultFlowConfig'
 import StepEditor from '../flow/StepEditor'
 
 interface CampaignFlowEditorProps {
@@ -22,25 +23,10 @@ export default function CampaignFlowEditor({
   onClose,
   onSave,
 }: CampaignFlowEditorProps) {
-  const [flowConfig, setFlowConfig] = useState<FlowConfig | null>(initialFlowConfig)
+  // If no flow config provided, use default
+  const [flowConfig, setFlowConfig] = useState<FlowConfig>(initialFlowConfig || DEFAULT_FLOW_CONFIG)
   const [saving, setSaving] = useState(false)
   const [editingStep, setEditingStep] = useState<FlowStep | null>(null)
-
-  if (!flowConfig) {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 max-w-md">
-          <p className="text-red-600">No flow configuration available for this campaign.</p>
-          <button
-            onClick={onClose}
-            className="mt-4 px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    )
-  }
 
   const handleSave = async () => {
     if (!flowConfig) return
@@ -73,15 +59,12 @@ export default function CampaignFlowEditor({
   }
 
   const handleStepUpdate = (updatedStep: FlowStep) => {
-    setFlowConfig((prev) => {
-      if (!prev) return prev
-      return {
-        ...prev,
-        steps: prev.steps.map((step) =>
-          step.id === updatedStep.id ? updatedStep : step
-        ),
-      }
-    })
+    setFlowConfig((prev) => ({
+      ...prev,
+      steps: prev.steps.map((step) =>
+        step.id === updatedStep.id ? updatedStep : step
+      ),
+    }))
     setEditingStep(null)
   }
 

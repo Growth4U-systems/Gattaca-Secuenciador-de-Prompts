@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Settings, Rocket, Database, Workflow, Sliders } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ArrowLeft, FileText, Settings, Rocket, Database, Workflow, Sliders, Edit2, Check, X, Trash2 } from 'lucide-react'
 import { useProject } from '@/hooks/useProjects'
 import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
 import DocumentUpload from '@/components/documents/DocumentUpload'
@@ -20,9 +21,13 @@ export default function ProjectPage({
 }: {
   params: { projectId: string }
 }) {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<TabType>('documents')
   const { project, loading: projectLoading, error: projectError } = useProject(params.projectId)
   const { documents, loading: docsLoading, reload: reloadDocs } = useDocuments(params.projectId)
+  const [editingProjectName, setEditingProjectName] = useState(false)
+  const [projectName, setProjectName] = useState('')
+  const [savingProjectName, setSavingProjectName] = useState(false)
 
   const tabs = [
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText },
@@ -55,6 +60,73 @@ export default function ProjectPage({
 
   const totalTokens = documents.reduce((sum, doc) => sum + (doc.token_count || 0), 0)
 
+  const handleEditProjectName = () => {
+    setProjectName(project?.name || '')
+    setEditingProjectName(true)
+  }
+
+  const handleSaveProjectName = async () => {
+    if (!projectName.trim()) {
+      alert('Project name cannot be empty')
+      return
+    }
+
+    setSavingProjectName(true)
+    try {
+      const response = await fetch(`/api/projects/${params.projectId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: projectName }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('✅ Project name updated successfully')
+        setEditingProjectName(false)
+        window.location.reload()
+      } else {
+        throw new Error(data.error || 'Failed to update')
+      }
+    } catch (error) {
+      console.error('Error updating project name:', error)
+      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setSavingProjectName(false)
+    }
+  }
+
+  const handleCancelEditProjectName = () => {
+    setEditingProjectName(false)
+    setProjectName('')
+  }
+
+  const handleDeleteProject = async () => {
+    if (!confirm(`¿Estás seguro de que quieres eliminar el proyecto "${project?.name}"? Esta acción eliminará todos los documentos, campañas y configuraciones. Esta acción no se puede deshacer.`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/projects/${params.projectId}`, {
+        method: 'DELETE',
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('✅ Project deleted successfully')
+        router.push('/')
+      } else {
+        throw new Error(data.error || 'Failed to delete')
+      }
+    } catch (error) {
+      console.error('Error deleting project:', error)
+      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -68,7 +140,53 @@ export default function ProjectPage({
 
         {/* Project Header */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+          {editingProjectName ? (
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                className="flex-1 text-2xl font-bold text-gray-900 border-2 border-blue-500 rounded px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveProjectName()
+                  if (e.key === 'Escape') handleCancelEditProjectName()
+                }}
+              />
+              <button
+                onClick={handleSaveProjectName}
+                disabled={savingProjectName}
+                className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300"
+              >
+                <Check size={20} />
+              </button>
+              <button
+                onClick={handleCancelEditProjectName}
+                disabled={savingProjectName}
+                className="p-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-gray-900 flex-1">{project.name}</h1>
+              <button
+                onClick={handleEditProjectName}
+                className="p-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 inline-flex items-center gap-2"
+              >
+                <Edit2 size={16} />
+                <span className="text-sm">Edit Name</span>
+              </button>
+              <button
+                onClick={handleDeleteProject}
+                className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 inline-flex items-center gap-2"
+              >
+                <Trash2 size={16} />
+                <span className="text-sm">Delete Project</span>
+              </button>
+            </div>
+          )}
           {project.description && (
             <p className="text-gray-600 mt-1">{project.description}</p>
           )}
