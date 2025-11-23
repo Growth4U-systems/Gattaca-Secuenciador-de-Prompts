@@ -1,8 +1,14 @@
 # Configuración de Modelos Gemini
 
-## Modelo Actual: Gemini 2.0 Flash
+## Modelo Actual: Gemini 1.5 Pro
 
-Este proyecto ahora usa **`gemini-2.0-flash-exp`** (Gemini 2.0 Flash), el modelo más reciente de Google con capacidades avanzadas.
+Este proyecto ahora usa **`gemini-1.5-pro-002`** (Gemini 1.5 Pro), el modelo de producción estable con límites de cuota más altos para API paga.
+
+**¿Por qué Gemini 1.5 Pro y no 2.0 Flash?**
+- ✅ Límites de cuota más altos con API paga (millones de tokens/minuto vs 250K)
+- ✅ Mejor para uso en producción con alto volumen
+- ✅ Modelo estable y probado
+- ✅ Excelente calidad para análisis estratégicos complejos
 
 ## Modelos Disponibles
 
