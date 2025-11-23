@@ -181,8 +181,8 @@ serve(async (req) => {
     const promptWithFormat = finalPrompt + '\n\n' + formatInstructions
 
     // Call Gemini
-    const geminiApiKey = Deno.env.get('GOOGLE_API_KEY')!
-    const modelName = step_config.model || 'gemini-2.0-flash-exp'
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY')!
+    const modelName = step_config.model || 'gemini-1.5-pro-002' // Gemini Pro model (latest stable)
 
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`,
