@@ -11,7 +11,7 @@ If the information is not in the provided documents, explicitly state: "Informat
 
 const TOKEN_LIMIT = 2_000_000
 
-type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml'
+type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml' | 'docx'
 
 interface FlowStep {
   id: string
@@ -42,6 +42,8 @@ function getFormatInstructions(format: OutputFormat): string {
       return 'OUTPUT FORMAT REQUIREMENT: Format your response as valid HTML. Use semantic tags like <h1>, <h2>, <p>, <ul>, <li>, <table>, <strong>, <em>, etc. Include proper structure.'
     case 'xml':
       return 'OUTPUT FORMAT REQUIREMENT: Format your response as valid XML. Use proper tag structure with opening and closing tags, attributes where appropriate, and proper nesting.'
+    case 'docx':
+      return 'OUTPUT FORMAT REQUIREMENT: Format your response as rich text suitable for a Microsoft Word document. Use clear hierarchical structure with headings, paragraphs, bullet points, numbered lists, and emphasis (bold/italic) where appropriate. Format it in a professional business document style.'
     case 'text':
     default:
       return 'OUTPUT FORMAT REQUIREMENT: Format your response as plain text. Use clear paragraphs, simple structure, and avoid special formatting characters.'

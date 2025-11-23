@@ -21,6 +21,7 @@ const OUTPUT_FORMATS: { value: OutputFormat; label: string; description: string 
   { value: 'csv', label: 'CSV', description: 'Comma-separated values for spreadsheets' },
   { value: 'html', label: 'HTML', description: 'HTML formatted output' },
   { value: 'xml', label: 'XML', description: 'XML structured data' },
+  { value: 'docx', label: 'Word Document', description: 'Microsoft Word .docx format' },
 ]
 
 export default function StepEditor({
