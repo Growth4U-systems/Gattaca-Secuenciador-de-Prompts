@@ -12,9 +12,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { projectId, ecp_name, problem_core, country, industry, custom_variables, flow_config } = body
 
-    if (!projectId || !ecp_name || !problem_core || !country || !industry) {
+    // Only require projectId and ecp_name
+    // Other fields are optional now (variables-only system)
+    if (!projectId || !ecp_name) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields: projectId and ecp_name are required' },
         { status: 400 }
       )
     }
@@ -49,9 +51,9 @@ export async function POST(request: NextRequest) {
     let insertData: any = {
       project_id: projectId,
       ecp_name,
-      problem_core,
-      country,
-      industry,
+      problem_core: problem_core || '',
+      country: country || '',
+      industry: industry || '',
       status: 'draft',
       custom_variables: custom_variables || {},
       step_outputs: {},
