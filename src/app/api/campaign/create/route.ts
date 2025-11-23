@@ -10,7 +10,7 @@ export const maxDuration = 30
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { projectId, ecp_name, problem_core, country, industry, custom_variables } = body
+    const { projectId, ecp_name, problem_core, country, industry, custom_variables, flow_config } = body
 
     if (!projectId || !ecp_name || !problem_core || !country || !industry) {
       return NextResponse.json(
@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create campaign with copied flow_config
+    // Use provided flow_config if present (for duplicates), otherwise use project's
     let insertData: any = {
       project_id: projectId,
       ecp_name,
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
       status: 'draft',
       custom_variables: custom_variables || {},
       step_outputs: {},
-      flow_config: project.flow_config || null, // Copy project's flow_config
+      flow_config: flow_config || project.flow_config || null, // Prioritize provided flow_config, then project's
     }
 
     const { data, error } = await supabase

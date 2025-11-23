@@ -297,6 +297,44 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
     }
   }
 
+  const handleDuplicateCampaign = async (campaign: Campaign) => {
+    try {
+      // Create a new campaign name with "(Copy)" suffix
+      const newName = `${campaign.ecp_name} (Copy)`
+
+      // Prepare the campaign data to duplicate
+      const duplicateData = {
+        projectId,
+        ecp_name: newName,
+        problem_core: campaign.problem_core,
+        country: campaign.country,
+        industry: campaign.industry,
+        custom_variables: campaign.custom_variables,
+        flow_config: campaign.flow_config, // Copy the flow configuration
+      }
+
+      const response = await fetch('/api/campaign/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(duplicateData),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert(`✅ Campaign duplicated successfully as "${newName}"`)
+        loadCampaigns()
+      } else {
+        throw new Error(data.error || 'Failed to duplicate campaign')
+      }
+    } catch (error) {
+      console.error('Error duplicating campaign:', error)
+      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
   const handleRunCampaign = async (campaignId: string) => {
     if (!confirm('¿Ejecutar esta campaña? Esto puede tomar varios minutos.')) {
       return
@@ -656,8 +694,16 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
               {/* Campaign Variables */}
               {campaign.custom_variables && Object.keys(campaign.custom_variables).length > 0 && (
                 <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-gray-700 uppercase">Variables</span>
+                    <button
+                      onClick={() => handleEditCampaign(campaign)}
+                      className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 inline-flex items-center gap-1"
+                      title="Edit campaign variables"
+                    >
+                      <Edit2 size={12} />
+                      Edit
+                    </button>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     {Object.entries(campaign.custom_variables as Record<string, string>).map(([key, value]) => (
@@ -850,6 +896,16 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                     View Summary
                   </button>
                 )}
+
+                {/* Duplicate button - available for all campaigns */}
+                <button
+                  onClick={() => handleDuplicateCampaign(campaign)}
+                  className="px-4 py-2 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 inline-flex items-center gap-2"
+                  title="Duplicate this campaign with same configuration and variables"
+                >
+                  <Plus size={16} />
+                  Duplicate
+                </button>
 
                 {/* Delete button - available for all campaigns */}
                 <button
