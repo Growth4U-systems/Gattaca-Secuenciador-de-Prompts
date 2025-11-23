@@ -7,8 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "supabase:deploy": "supabase functions deploy generate-ecp-step",
-    "supabase:logs": "supabase functions logs generate-ecp-step"
+    "supabase:deploy": "supabase functions deploy",
+    "supabase:deploy:execute": "supabase functions deploy execute-flow-step",
+    "supabase:deploy:generate": "supabase functions deploy generate-ecp-step",
+    "supabase:logs": "supabase functions logs generate-ecp-step",
+    "supabase:logs:execute": "supabase functions logs execute-flow-step"
   },
   "dependencies": {
     "next": "14.2.0",

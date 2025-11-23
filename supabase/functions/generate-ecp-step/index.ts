@@ -162,7 +162,7 @@ serve(async (req) => {
 
     // Call Gemini API
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY')!
-    const modelName = 'gemini-2.0-flash-exp' // Gemini 2.0 Flash (latest available model)
+    const modelName = 'gemini-2.5-pro-002' // Gemini 2.5 Pro - Maximum quality (2025)
 
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`,
