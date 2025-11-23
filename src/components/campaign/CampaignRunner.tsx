@@ -653,6 +653,27 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                 </div>
               </div>
 
+              {/* Campaign Variables */}
+              {campaign.custom_variables && Object.keys(campaign.custom_variables).length > 0 && (
+                <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-semibold text-gray-700 uppercase">Variables</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {Object.entries(campaign.custom_variables as Record<string, string>).map(([key, value]) => (
+                      <div key={key} className="flex items-start gap-2">
+                        <code className="text-xs font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded shrink-0">
+                          {'{{'}{key}{'}}'}
+                        </code>
+                        <span className="text-gray-700 truncate" title={value}>
+                          {value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Step outputs summary */}
               {campaign.step_outputs && Object.keys(campaign.step_outputs).length > 0 && (
                 <div className="mb-3 text-sm text-gray-600">
