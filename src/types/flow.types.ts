@@ -30,7 +30,7 @@ export interface FlowStep {
   output_format?: OutputFormat
 
   // Configuración opcional del modelo
-  model?: 'gemini-2.0-flash-exp' | 'gemini-2.0-pro-exp'
+  model?: 'gemini-2.0-flash-exp' | 'gemini-2.0-pro-exp' | 'gemini-2.5-flash-002' | 'gemini-2.5-pro-002'
   temperature?: number
   max_tokens?: number
 }
