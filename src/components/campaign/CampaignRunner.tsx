@@ -786,13 +786,6 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                       <Play size={16} />
                       {running === campaign.id ? 'Running...' : 'Run Campaign'}
                     </button>
-                    <button
-                      onClick={() => handleDeleteCampaign(campaign.id, campaign.ecp_name)}
-                      className="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 inline-flex items-center gap-2"
-                    >
-                      <Trash2 size={16} />
-                      Delete
-                    </button>
                   </>
                 )}
 
@@ -836,6 +829,16 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                     View Summary
                   </button>
                 )}
+
+                {/* Delete button - available for all campaigns */}
+                <button
+                  onClick={() => handleDeleteCampaign(campaign.id, campaign.ecp_name)}
+                  className="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 inline-flex items-center gap-2"
+                  title="Delete this campaign"
+                >
+                  <Trash2 size={16} />
+                  Delete
+                </button>
               </div>
 
               <p className="text-xs text-gray-500 mt-3">
