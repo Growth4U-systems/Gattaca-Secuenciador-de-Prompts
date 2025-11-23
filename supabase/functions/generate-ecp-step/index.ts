@@ -161,8 +161,8 @@ serve(async (req) => {
       .replace(/\{\{industry\}\}/g, campaign.industry)
 
     // Call Gemini API
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY')!
-    const modelName = stepName === 'step_4' ? 'gemini-2.0-flash-exp' : 'gemini-2.0-flash-exp'
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY')!
+    const modelName = 'gemini-2.0-flash-exp' // Gemini 2.0 Flash (latest available model)
 
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`,
