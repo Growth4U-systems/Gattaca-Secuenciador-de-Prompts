@@ -9,7 +9,7 @@
  * - Prompts editables con variables
  */
 
-export type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml' | 'docx'
+export type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml'
 
 export interface FlowStep {
   id: string

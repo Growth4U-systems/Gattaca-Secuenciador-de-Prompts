@@ -19,9 +19,8 @@ const OUTPUT_FORMATS: { value: OutputFormat; label: string; description: string 
   { value: 'markdown', label: 'Markdown', description: 'Formatted markdown with headings, lists, etc.' },
   { value: 'json', label: 'JSON', description: 'Structured data in JSON format' },
   { value: 'csv', label: 'CSV', description: 'Comma-separated values for spreadsheets' },
-  { value: 'html', label: 'HTML', description: 'HTML formatted output' },
+  { value: 'html', label: 'HTML (Google Docs)', description: 'HTML format - import to Google Docs via File > Open' },
   { value: 'xml', label: 'XML', description: 'XML structured data' },
-  { value: 'docx', label: 'Word Document', description: 'Microsoft Word .docx format' },
 ]
 
 export default function StepEditor({

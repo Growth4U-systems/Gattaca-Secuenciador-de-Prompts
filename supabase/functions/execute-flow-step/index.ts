@@ -11,7 +11,7 @@ If the information is not in the provided documents, explicitly state: "Informat
 
 const TOKEN_LIMIT = 2_000_000
 
-type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml' | 'docx'
+type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml'
 
 interface FlowStep {
   id: string
@@ -39,11 +39,18 @@ function getFormatInstructions(format: OutputFormat): string {
     case 'csv':
       return 'OUTPUT FORMAT REQUIREMENT: Format your response as CSV (Comma-Separated Values). Use the first row for headers, separate columns with commas, and wrap fields containing commas in double quotes.'
     case 'html':
-      return 'OUTPUT FORMAT REQUIREMENT: Format your response as valid HTML. Use semantic tags like <h1>, <h2>, <p>, <ul>, <li>, <table>, <strong>, <em>, etc. Include proper structure.'
+      return `OUTPUT FORMAT REQUIREMENT: Format your response as clean, well-structured HTML suitable for Google Docs import.
+Requirements:
+- Start with <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Document</title></head><body>
+- Use semantic tags: <h1>, <h2>, <h3> for headings
+- Use <p> for paragraphs, <ul>/<ol> and <li> for lists
+- Use <strong> for bold, <em> for italic
+- Use <table>, <thead>, <tbody>, <tr>, <th>, <td> for tables
+- Add proper spacing with <br> where needed
+- Close with </body></html>
+- Keep it clean and professional - Google Docs compatible`
     case 'xml':
       return 'OUTPUT FORMAT REQUIREMENT: Format your response as valid XML. Use proper tag structure with opening and closing tags, attributes where appropriate, and proper nesting.'
-    case 'docx':
-      return 'OUTPUT FORMAT REQUIREMENT: Format your response as rich text suitable for a Microsoft Word document. Use clear hierarchical structure with headings, paragraphs, bullet points, numbered lists, and emphasis (bold/italic) where appropriate. Format it in a professional business document style.'
     case 'text':
     default:
       return 'OUTPUT FORMAT REQUIREMENT: Format your response as plain text. Use clear paragraphs, simple structure, and avoid special formatting characters.'

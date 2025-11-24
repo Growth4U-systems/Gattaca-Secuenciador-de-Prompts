@@ -487,8 +487,6 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
         return { extension: 'html', mimeType: 'text/html' }
       case 'xml':
         return { extension: 'xml', mimeType: 'application/xml' }
-      case 'docx':
-        return { extension: 'docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
       case 'text':
       default:
         return { extension: 'txt', mimeType: 'text/plain' }
