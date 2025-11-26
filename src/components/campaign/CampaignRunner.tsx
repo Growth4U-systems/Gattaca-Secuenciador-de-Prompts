@@ -59,6 +59,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
     stepName: string
     stepOrder: number
   } | null>(null)
+  const [downloadFormatMenu, setDownloadFormatMenu] = useState<string | null>(null)
 
   // Form state - only custom variables
   const [customVariables, setCustomVariables] = useState<Array<{ key: string; value: string }>>([])
@@ -501,6 +502,101 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
     }
   }
 
+  const downloadAllOutputs = (campaign: Campaign, format: string) => {
+    const outputs = campaign.step_outputs
+    const steps = campaign.flow_config?.steps || project?.flow_config?.steps || []
+
+    // Sort outputs by step order
+    const sortedOutputs = steps
+      .sort((a, b) => a.order - b.order)
+      .map(step => ({
+        stepId: step.id,
+        stepName: step.name,
+        stepOrder: step.order,
+        data: outputs[step.id]
+      }))
+      .filter(item => item.data && item.data.output)
+
+    let content = ''
+    let extension = 'txt'
+    let mimeType = 'text/plain'
+
+    switch (format) {
+      case 'markdown':
+        content = sortedOutputs
+          .map(item => `# Step ${item.stepOrder}: ${item.stepName}\n\n${item.data.output}\n\n---\n`)
+          .join('\n')
+        extension = 'md'
+        mimeType = 'text/markdown'
+        break
+
+      case 'json':
+        const jsonData = sortedOutputs.map(item => ({
+          step_order: item.stepOrder,
+          step_name: item.stepName,
+          step_id: item.stepId,
+          output: item.data.output,
+          tokens: item.data.tokens,
+          completed_at: item.data.completed_at,
+          edited_at: item.data.edited_at || null
+        }))
+        content = JSON.stringify(jsonData, null, 2)
+        extension = 'json'
+        mimeType = 'application/json'
+        break
+
+      case 'html':
+        content = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${campaign.ecp_name} - Outputs</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; }
+    h1 { color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 0.5rem; }
+    h2 { color: #374151; margin-top: 2rem; }
+    .step { background: #f9fafb; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #e5e7eb; }
+    .step-header { color: #3b82f6; font-size: 0.875rem; margin-bottom: 0.5rem; }
+    .content { white-space: pre-wrap; line-height: 1.6; }
+    .meta { font-size: 0.75rem; color: #6b7280; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>${campaign.ecp_name}</h1>
+  ${sortedOutputs.map(item => `
+  <div class="step">
+    <div class="step-header">Step ${item.stepOrder}</div>
+    <h2>${item.stepName}</h2>
+    <div class="content">${item.data.output.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+    <div class="meta">Tokens: ${item.data.tokens || 'N/A'} | Generated: ${item.data.completed_at || 'N/A'}</div>
+  </div>`).join('\n')}
+</body>
+</html>`
+        extension = 'html'
+        mimeType = 'text/html'
+        break
+
+      case 'text':
+      default:
+        content = sortedOutputs
+          .map(item => `=== Step ${item.stepOrder}: ${item.stepName} ===\n\n${item.data.output}\n\n`)
+          .join('\n')
+        extension = 'txt'
+        mimeType = 'text/plain'
+        break
+    }
+
+    const blob = new Blob([content], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${campaign.ecp_name.replace(/\s+/g, '_')}_outputs.${extension}`
+    a.click()
+    URL.revokeObjectURL(url)
+    setDownloadFormatMenu(null)
+  }
+
   if (loading) {
     return (
       <div className="text-center py-12">
@@ -913,43 +1009,82 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                 )}
 
                 {campaign.status === 'completed' && (
-                  <button
-                    onClick={() => {
-                      const outputs = campaign.step_outputs
-                      const text = Object.entries(outputs)
-                        .map(([stepId, data]: [string, any]) => {
-                          return `=== ${data.step_name} ===\n\n${data.output}\n\n`
-                        })
-                        .join('\n')
-
-                      const blob = new Blob([text], { type: 'text/plain' })
-                      const url = URL.createObjectURL(blob)
-                      const a = document.createElement('a')
-                      a.href = url
-                      a.download = `${campaign.ecp_name.replace(/\s+/g, '_')}_outputs.txt`
-                      a.click()
-                    }}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 inline-flex items-center gap-2"
-                  >
-                    <Download size={16} />
-                    Download Outputs
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={() => setDownloadFormatMenu(downloadFormatMenu === campaign.id ? null : campaign.id)}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 inline-flex items-center gap-2"
+                    >
+                      <Download size={16} />
+                      Download Outputs
+                      <ChevronDown size={14} className={`transition-transform ${downloadFormatMenu === campaign.id ? 'rotate-180' : ''}`} />
+                    </button>
+                    {downloadFormatMenu === campaign.id && (
+                      <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[160px]">
+                        <button
+                          onClick={() => downloadAllOutputs(campaign, 'text')}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
+                        >
+                          Text (.txt)
+                        </button>
+                        <button
+                          onClick={() => downloadAllOutputs(campaign, 'markdown')}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          Markdown (.md)
+                        </button>
+                        <button
+                          onClick={() => downloadAllOutputs(campaign, 'html')}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          HTML (.html)
+                        </button>
+                        <button
+                          onClick={() => downloadAllOutputs(campaign, 'json')}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
+                        >
+                          JSON (.json)
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {campaign.status === 'completed' && (
                   <button
                     onClick={() => {
                       const outputs = campaign.step_outputs
-                      const message = Object.entries(outputs)
-                        .map(([stepId, data]: [string, any]) => {
-                          return `${data.step_name}:\n${data.output.substring(0, 200)}...`
-                        })
+                      const steps = campaign.flow_config?.steps || project?.flow_config?.steps || []
+
+                      // Sort outputs by step order
+                      const sortedOutputs = steps
+                        .sort((a, b) => a.order - b.order)
+                        .map(step => ({
+                          stepName: step.name,
+                          stepOrder: step.order,
+                          data: outputs[step.id]
+                        }))
+                        .filter(item => item.data && item.data.output)
+
+                      const message = sortedOutputs
+                        .map(item => `Step ${item.stepOrder} - ${item.stepName}:\n${item.data.output.substring(0, 200)}...`)
                         .join('\n\n')
                       alert(message)
                     }}
                     className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                   >
                     View Summary
+                  </button>
+                )}
+
+                {/* Re-run button for completed or error campaigns */}
+                {(campaign.status === 'completed' || campaign.status === 'error') && (
+                  <button
+                    onClick={() => handleRunCampaign(campaign.id)}
+                    disabled={running === campaign.id}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                  >
+                    <Play size={16} />
+                    {running === campaign.id ? 'Running...' : 'Re-run Campaign'}
                   </button>
                 )}
 
