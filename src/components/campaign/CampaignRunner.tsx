@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
+import StepOutputEditor from './StepOutputEditor'
 import { FlowConfig, FlowStep } from '@/types/flow.types'
 
 interface CampaignRunnerProps {
@@ -51,6 +52,13 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
   const [documents, setDocuments] = useState<any[]>([])
   const [editingCampaignName, setEditingCampaignName] = useState<string | null>(null)
   const [editingNameValue, setEditingNameValue] = useState('')
+  const [editingStepOutput, setEditingStepOutput] = useState<{
+    campaignId: string
+    campaignName: string
+    stepId: string
+    stepName: string
+    stepOrder: number
+  } | null>(null)
 
   // Form state - only custom variables
   const [customVariables, setCustomVariables] = useState<Array<{ key: string; value: string }>>([])
@@ -822,23 +830,42 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                                   {stepRunning ? 'Running...' : 'Run'}
                                 </button>
                                 {stepOutput && stepOutput.output && (
-                                  <button
-                                    onClick={() => {
-                                      const { extension, mimeType } = getFileExtensionAndMimeType(step.output_format)
-                                      const text = `=== ${step.name} ===\n\n${stepOutput.output}\n\nTokens: ${stepOutput.tokens || 'N/A'}\nCompleted: ${stepOutput.completed_at || 'N/A'}`
-                                      const blob = new Blob([text], { type: mimeType })
-                                      const url = URL.createObjectURL(blob)
-                                      const a = document.createElement('a')
-                                      a.href = url
-                                      a.download = `${campaign.ecp_name.replace(/\s+/g, '_')}_${step.name.replace(/\s+/g, '_')}.${extension}`
-                                      a.click()
-                                    }}
-                                    className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 inline-flex items-center gap-1"
-                                    title={`Download as .${getFileExtensionAndMimeType(step.output_format).extension}`}
-                                  >
-                                    <Download size={14} />
-                                    Download
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => setEditingStepOutput({
+                                        campaignId: campaign.id,
+                                        campaignName: campaign.ecp_name,
+                                        stepId: step.id,
+                                        stepName: step.name,
+                                        stepOrder: step.order,
+                                      })}
+                                      className={`px-3 py-1.5 text-sm rounded-lg inline-flex items-center gap-1 ${
+                                        stepOutput.edited_at
+                                          ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                          : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                      }`}
+                                      title="Revisar y editar el output antes de pasar al siguiente paso"
+                                    >
+                                      <Eye size={14} />
+                                      {stepOutput.edited_at ? 'Editado' : 'Revisar'}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const { extension, mimeType } = getFileExtensionAndMimeType(step.output_format)
+                                        const text = `=== ${step.name} ===\n\n${stepOutput.output}\n\nTokens: ${stepOutput.tokens || 'N/A'}\nCompleted: ${stepOutput.completed_at || 'N/A'}`
+                                        const blob = new Blob([text], { type: mimeType })
+                                        const url = URL.createObjectURL(blob)
+                                        const a = document.createElement('a')
+                                        a.href = url
+                                        a.download = `${campaign.ecp_name.replace(/\s+/g, '_')}_${step.name.replace(/\s+/g, '_')}.${extension}`
+                                        a.click()
+                                      }}
+                                      className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 inline-flex items-center gap-1"
+                                      title={`Download as .${getFileExtensionAndMimeType(step.output_format).extension}`}
+                                    >
+                                      <Download size={14} />
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -958,6 +985,35 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
           }}
         />
       )}
+
+      {/* Step Output Editor */}
+      {editingStepOutput && (() => {
+        const campaign = campaigns.find(c => c.id === editingStepOutput.campaignId)
+        const stepOutput = campaign?.step_outputs?.[editingStepOutput.stepId]
+
+        if (!campaign || !stepOutput) return null
+
+        return (
+          <StepOutputEditor
+            campaignId={editingStepOutput.campaignId}
+            campaignName={editingStepOutput.campaignName}
+            stepId={editingStepOutput.stepId}
+            stepName={editingStepOutput.stepName}
+            stepOrder={editingStepOutput.stepOrder}
+            currentOutput={stepOutput}
+            allStepOutputs={campaign.step_outputs || {}}
+            onSave={(updatedStepOutputs) => {
+              // Update local campaign state with edited outputs
+              setCampaigns(prev => prev.map(c =>
+                c.id === editingStepOutput.campaignId
+                  ? { ...c, step_outputs: updatedStepOutputs }
+                  : c
+              ))
+            }}
+            onClose={() => setEditingStepOutput(null)}
+          />
+        )
+      })()}
     </div>
   )
 }
