@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Save, RotateCcw, Eye, Edit2, CheckCircle, AlertTriangle } from 'lucide-react'
+import { X, Save, RotateCcw, Eye, Edit2, AlertTriangle, FileText } from 'lucide-react'
 
 interface StepOutputEditorProps {
   campaignId: string
@@ -36,7 +36,7 @@ export default function StepOutputEditor({
 }: StepOutputEditorProps) {
   const [editedOutput, setEditedOutput] = useState(currentOutput.output || '')
   const [saving, setSaving] = useState(false)
-  const [isPreview, setIsPreview] = useState(true)
+  const [isEditing, setIsEditing] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
 
   // Store original output for revert functionality
@@ -75,6 +75,7 @@ export default function StepOutputEditor({
       if (data.success) {
         onSave(updatedStepOutputs)
         setHasChanges(false)
+        setIsEditing(false)
         alert('Output guardado correctamente. Los pasos siguientes usarán este output editado.')
       } else {
         throw new Error(data.error || 'Failed to save')
@@ -96,11 +97,15 @@ export default function StepOutputEditor({
 
   const isEdited = !!currentOutput.edited_at || !!currentOutput.original_output
 
+  // Calculate character count
+  const charCount = editedOutput.length
+  const wordCount = editedOutput.trim() ? editedOutput.trim().split(/\s+/).length : 0
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
@@ -124,85 +129,66 @@ export default function StepOutputEditor({
           </button>
         </div>
 
-        {/* Info Banner */}
-        <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
-          <div className="flex items-start gap-2">
-            <AlertTriangle size={16} className="text-blue-600 mt-0.5 shrink-0" />
-            <p className="text-sm text-blue-800">
-              <strong>Revisa y edita</strong> el output de este paso antes de continuar.
-              Los pasos siguientes que dependan de este usarán el contenido que guardes aquí.
-            </p>
-          </div>
-        </div>
-
-        {/* Toggle View/Edit */}
-        <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-          <div className="flex gap-1">
-            <button
-              onClick={() => setIsPreview(true)}
-              className={`px-3 py-1.5 text-sm rounded-lg inline-flex items-center gap-1.5 transition-colors ${
-                isPreview
-                  ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Eye size={14} />
-              Vista Previa
-            </button>
-            <button
-              onClick={() => setIsPreview(false)}
-              className={`px-3 py-1.5 text-sm rounded-lg inline-flex items-center gap-1.5 transition-colors ${
-                !isPreview
-                  ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Edit2 size={14} />
-              Editar
-            </button>
+        {/* Toolbar */}
+        <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between bg-gray-50 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 text-sm text-gray-600">
+              <FileText size={14} />
+              <span>Output Generado</span>
+            </div>
+            <span className="text-gray-300">|</span>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>{charCount.toLocaleString()} caracteres</span>
+              <span>•</span>
+              <span>{wordCount.toLocaleString()} palabras</span>
+              {currentOutput.tokens && (
+                <>
+                  <span>•</span>
+                  <span>{currentOutput.tokens.toLocaleString()} tokens</span>
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-gray-500">
-            {currentOutput.tokens && (
-              <span>
-                <strong>Tokens:</strong> {currentOutput.tokens}
-              </span>
-            )}
+          <div className="flex items-center gap-2">
             {currentOutput.completed_at && (
-              <span>
-                <strong>Generado:</strong> {new Date(currentOutput.completed_at).toLocaleString()}
+              <span className="text-xs text-gray-500">
+                Generado: {new Date(currentOutput.completed_at).toLocaleString()}
               </span>
             )}
             {currentOutput.edited_at && (
-              <span className="text-amber-600">
-                <strong>Editado:</strong> {new Date(currentOutput.edited_at).toLocaleString()}
+              <span className="text-xs text-amber-600">
+                • Editado: {new Date(currentOutput.edited_at).toLocaleString()}
               </span>
             )}
           </div>
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-hidden p-4">
-          {isPreview ? (
-            <div className="h-full overflow-auto bg-gray-50 rounded-lg border border-gray-200 p-4">
-              <pre className="whitespace-pre-wrap text-sm text-gray-800 font-mono leading-relaxed">
-                {editedOutput}
-              </pre>
-            </div>
-          ) : (
+        <div className="flex-1 overflow-hidden p-4 min-h-0">
+          {isEditing ? (
             <textarea
               value={editedOutput}
               onChange={(e) => handleTextChange(e.target.value)}
-              className="w-full h-full resize-none bg-white rounded-lg border border-gray-300 p-4 text-sm text-gray-900 font-mono leading-relaxed focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full h-full resize-none bg-white rounded-lg border border-blue-300 p-4 text-sm text-gray-900 leading-relaxed focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
               placeholder="Output del paso..."
+              autoFocus
             />
+          ) : (
+            <div className="h-full overflow-auto bg-gray-50 rounded-lg border border-gray-200 p-4">
+              <div className="prose prose-sm max-w-none text-gray-800 whitespace-pre-wrap leading-relaxed">
+                {editedOutput || (
+                  <span className="text-gray-400 italic">No hay output generado todavía.</span>
+                )}
+              </div>
+            </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50 shrink-0">
           <div className="flex items-center gap-2">
-            {isEdited && (
+            {isEdited && !isEditing && (
               <button
                 onClick={handleRevert}
                 disabled={saving}
@@ -221,29 +207,54 @@ export default function StepOutputEditor({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving || !hasChanges}
-              className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-            >
-              {saving ? (
-                <>
-                  <span className="animate-spin">⏳</span>
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save size={14} />
-                  Guardar y Continuar
-                </>
-              )}
-            </button>
+            {isEditing ? (
+              <>
+                <button
+                  onClick={() => {
+                    if (hasChanges && !confirm('¿Descartar cambios?')) return
+                    setEditedOutput(currentOutput.output || '')
+                    setHasChanges(false)
+                    setIsEditing(false)
+                  }}
+                  className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
+                >
+                  Cancelar Edición
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !hasChanges}
+                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+                >
+                  {saving ? (
+                    <>
+                      <span className="animate-spin">⏳</span>
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={14} />
+                      Guardar Cambios
+                    </>
+                  )}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
+                >
+                  Cerrar
+                </button>
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center gap-1.5"
+                >
+                  <Edit2 size={14} />
+                  Editar Output
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
