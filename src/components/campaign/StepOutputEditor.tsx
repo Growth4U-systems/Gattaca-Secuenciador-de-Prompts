@@ -92,6 +92,7 @@ export default function StepOutputEditor({
     if (confirm('¿Restaurar el output original generado por la IA? Los cambios actuales se perderán.')) {
       setEditedOutput(originalOutput)
       setHasChanges(originalOutput !== currentOutput.output)
+      setIsEditing(true) // Auto-enable editing to show save button
     }
   }
 
