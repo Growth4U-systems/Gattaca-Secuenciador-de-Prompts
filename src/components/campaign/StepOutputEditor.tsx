@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Save, RotateCcw, Eye, Edit2, AlertTriangle, FileText } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { X, Save, RotateCcw, Eye, Edit2, AlertTriangle, FileText, Table, Download } from 'lucide-react'
+import MarkdownRenderer, { extractTables, tablesToCSV } from '../common/MarkdownRenderer'
 
 interface StepOutputEditorProps {
   campaignId: string
@@ -41,6 +42,9 @@ export default function StepOutputEditor({
 
   // Store original output for revert functionality
   const originalOutput = currentOutput.original_output || currentOutput.output
+
+  // Extract tables from the content
+  const tables = useMemo(() => extractTables(editedOutput), [editedOutput])
 
   const handleTextChange = (value: string) => {
     setEditedOutput(value)
@@ -96,6 +100,22 @@ export default function StepOutputEditor({
     }
   }
 
+  const handleExportTables = () => {
+    if (tables.length === 0) {
+      alert('No se encontraron tablas en el output.')
+      return
+    }
+
+    const csv = tablesToCSV(tables)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${stepName.replace(/\s+/g, '_')}_tables.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const isEdited = !!currentOutput.edited_at || !!currentOutput.original_output
 
   // Calculate character count
@@ -104,7 +124,7 @@ export default function StepOutputEditor({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 shrink-0">
           <div>
@@ -149,6 +169,20 @@ export default function StepOutputEditor({
                 </>
               )}
             </div>
+            {tables.length > 0 && (
+              <>
+                <span className="text-gray-300">|</span>
+                <button
+                  onClick={handleExportTables}
+                  className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 px-2 py-1 rounded transition-colors"
+                  title={`Exportar ${tables.length} tabla(s) como CSV`}
+                >
+                  <Table size={12} />
+                  <span>Exportar {tables.length} tabla{tables.length > 1 ? 's' : ''}</span>
+                  <Download size={10} />
+                </button>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -171,17 +205,17 @@ export default function StepOutputEditor({
             <textarea
               value={editedOutput}
               onChange={(e) => handleTextChange(e.target.value)}
-              className="w-full h-full resize-none bg-white rounded-lg border border-blue-300 p-4 text-sm text-gray-900 leading-relaxed focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
+              className="w-full h-full resize-none bg-white rounded-lg border border-blue-300 p-4 text-sm text-gray-900 font-mono leading-relaxed focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
               placeholder="Output del paso..."
               autoFocus
             />
           ) : (
-            <div className="h-full overflow-auto bg-gray-50 rounded-lg border border-gray-200 p-4">
-              <div className="prose prose-sm max-w-none text-gray-800 whitespace-pre-wrap leading-relaxed">
-                {editedOutput || (
-                  <span className="text-gray-400 italic">No hay output generado todavía.</span>
-                )}
-              </div>
+            <div className="h-full overflow-auto bg-white rounded-lg border border-gray-200 p-6">
+              {editedOutput ? (
+                <MarkdownRenderer content={editedOutput} />
+              ) : (
+                <span className="text-gray-400 italic">No hay output generado todavía.</span>
+              )}
             </div>
           )}
         </div>
