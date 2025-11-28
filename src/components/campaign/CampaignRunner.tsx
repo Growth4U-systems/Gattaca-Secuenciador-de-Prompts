@@ -999,11 +999,11 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                 {/* Run/Re-run button - always available */}
                 <button
                   onClick={() => handleRunCampaign(campaign.id)}
-                  disabled={running === campaign.id || campaign.status === 'running'}
+                  disabled={running === campaign.id}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-2"
                 >
                   <Play size={16} />
-                  {(running === campaign.id || campaign.status === 'running')
+                  {running === campaign.id
                     ? 'Running...'
                     : (campaign.status === 'draft' ? 'Run Campaign' : 'Re-run Campaign')
                   }
