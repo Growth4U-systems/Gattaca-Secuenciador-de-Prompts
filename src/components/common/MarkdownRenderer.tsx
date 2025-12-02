@@ -137,8 +137,8 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
     // Ordered lists
     html = html.replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal list-inside text-gray-700">$1</li>')
 
-    // Tables
-    const tableRegex = /(\|.+\|[\r\n]+)+/g
+    // Tables - capture table rows including the last one without trailing newline
+    const tableRegex = /(\|.+\|(?:[\r\n]+|$))+/g
     html = html.replace(tableRegex, (tableMatch) => {
       const rows = tableMatch.trim().split('\n').filter(row => row.trim())
       if (rows.length < 2) return tableMatch
