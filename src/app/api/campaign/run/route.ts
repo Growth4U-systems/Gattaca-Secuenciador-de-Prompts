@@ -20,9 +20,22 @@ interface FlowStep {
  * Execute entire campaign automatically
  */
 export async function POST(request: NextRequest) {
+  let campaignId: string | null = null
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  )
+
   try {
     const body = await request.json()
-    const { campaignId } = body as { campaignId: string }
+    campaignId = body.campaignId as string
 
     if (!campaignId) {
       return NextResponse.json(
@@ -30,17 +43,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    )
 
     // Load campaign and project
     const { data: campaign, error: campaignError } = await supabase
@@ -166,6 +168,22 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Run campaign error:', error)
+
+    // Update campaign status to error if we have the campaignId
+    if (campaignId) {
+      try {
+        await supabase
+          .from('ecp_campaigns')
+          .update({
+            status: 'error',
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', campaignId)
+      } catch (e) {
+        console.error('Failed to update campaign status to error:', e)
+      }
+    }
+
     return NextResponse.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

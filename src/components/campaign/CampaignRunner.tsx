@@ -414,7 +414,6 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
 
       if (data.success) {
         alert(`✅ Campaign completed! ${data.steps_completed} steps executed in ${(data.duration_ms / 1000).toFixed(1)}s`)
-        loadCampaigns()
       } else {
         // Show detailed error message
         let errorMsg = data.error || 'Execution failed'
@@ -424,13 +423,14 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
         if (data.completed_steps && data.completed_steps.length > 0) {
           errorMsg += `\n\nPasos completados: ${data.completed_steps.length}`
         }
-        throw new Error(errorMsg)
+        alert(`❌ Error: ${errorMsg}`)
       }
     } catch (error) {
       console.error('Error running campaign:', error)
       alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setRunning(null)
+      loadCampaigns() // Always reload to get latest status
     }
   }
 
@@ -453,20 +453,20 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
 
       if (data.success) {
         alert(`✅ Step "${stepName}" completed in ${(data.duration_ms / 1000).toFixed(1)}s`)
-        loadCampaigns()
       } else {
         // Show detailed error message
         let errorMsg = data.error || 'Execution failed'
         if (data.details) {
           errorMsg += `\n\nDetalles: ${data.details}`
         }
-        throw new Error(errorMsg)
+        alert(`❌ Error: ${errorMsg}`)
       }
     } catch (error) {
       console.error('Error running step:', error)
       alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setRunningStep(null)
+      loadCampaigns() // Always reload to get latest status
     }
   }
 

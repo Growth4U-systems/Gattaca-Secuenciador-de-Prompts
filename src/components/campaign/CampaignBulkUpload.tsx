@@ -189,6 +189,8 @@ export default function CampaignBulkUpload({
 
   // Create all campaigns
   const handleCreateCampaigns = async () => {
+    console.log('handleCreateCampaigns called', { campaigns, projectId })
+
     if (campaigns.length === 0) {
       setErrors(['No hay campañas para crear'])
       return
@@ -197,6 +199,7 @@ export default function CampaignBulkUpload({
     // Validate required variables from project
     const validationErrors: string[] = []
     const requiredVars = projectVariables.filter(v => v.required).map(v => v.name)
+    console.log('Required variables:', requiredVars)
 
     campaigns.forEach((campaign, index) => {
       requiredVars.forEach(varName => {
@@ -207,6 +210,7 @@ export default function CampaignBulkUpload({
     })
 
     if (validationErrors.length > 0) {
+      console.log('Validation errors:', validationErrors)
       setErrors(validationErrors.slice(0, 10)) // Show max 10 errors
       if (validationErrors.length > 10) {
         setErrors(prev => [...prev, `... y ${validationErrors.length - 10} errores más`])
@@ -218,6 +222,7 @@ export default function CampaignBulkUpload({
     setErrors([])
 
     try {
+      console.log('Sending request to /api/campaign/bulk-create')
       const response = await fetch('/api/campaign/bulk-create', {
         method: 'POST',
         headers: {
@@ -229,18 +234,27 @@ export default function CampaignBulkUpload({
         }),
       })
 
+      console.log('Response status:', response.status)
       const data = await response.json()
+      console.log('Response data:', data)
 
       if (data.success) {
         alert(`✅ ${data.count} campañas creadas exitosamente`)
         onSuccess()
         onClose()
       } else {
-        setErrors([data.error || 'Error al crear campañas'])
+        let errorMsg = data.error || 'Error al crear campañas'
+        if (data.details) errorMsg += `: ${data.details}`
+        if (data.hint) errorMsg += ` (${data.hint})`
+        console.error('API error:', errorMsg)
+        setErrors([errorMsg])
+        alert(`❌ Error: ${errorMsg}`)
       }
     } catch (error) {
       console.error('Error creating campaigns:', error)
-      setErrors([error instanceof Error ? error.message : 'Error desconocido'])
+      const errorMsg = error instanceof Error ? error.message : 'Error desconocido'
+      setErrors([errorMsg])
+      alert(`❌ Error de red: ${errorMsg}`)
     } finally {
       setCreating(false)
     }
