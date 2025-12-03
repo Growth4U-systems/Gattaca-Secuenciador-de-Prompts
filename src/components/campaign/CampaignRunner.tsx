@@ -98,6 +98,11 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   const [showDocsGuide, setShowDocsGuide] = useState<string | null>(null)
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null)
 
+  // Inline variable editing
+  const [editingVariablesCampaignId, setEditingVariablesCampaignId] = useState<string | null>(null)
+  const [editingVariablesData, setEditingVariablesData] = useState<Record<string, string>>({})
+  const [savingVariables, setSavingVariables] = useState(false)
+
   // Form state - only custom variables
   const [customVariables, setCustomVariables] = useState<Array<{ key: string; value: string }>>([])
 
@@ -113,6 +118,48 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
 
   const removeCustomVariable = (index: number) => {
     setCustomVariables(customVariables.filter((_, i) => i !== index))
+  }
+
+  // Start inline editing for a campaign's variables
+  const startEditingVariables = (campaign: Campaign) => {
+    setEditingVariablesCampaignId(campaign.id)
+    setEditingVariablesData({ ...(campaign.custom_variables as Record<string, string>) })
+  }
+
+  // Cancel inline editing
+  const cancelEditingVariables = () => {
+    setEditingVariablesCampaignId(null)
+    setEditingVariablesData({})
+  }
+
+  // Save inline edited variables
+  const saveEditingVariables = async (campaignId: string) => {
+    setSavingVariables(true)
+    try {
+      const response = await fetch(`/api/campaign/${campaignId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ custom_variables: editingVariablesData }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Update local state
+        setCampaigns(prev => prev.map(c =>
+          c.id === campaignId ? { ...c, custom_variables: editingVariablesData } : c
+        ))
+        setEditingVariablesCampaignId(null)
+        setEditingVariablesData({})
+      } else {
+        throw new Error(data.error || 'Failed to save')
+      }
+    } catch (error) {
+      console.error('Error saving variables:', error)
+      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setSavingVariables(false)
+    }
   }
 
   // Sync with project prop if provided
@@ -1305,18 +1352,37 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                                     </div>
                                     <div className="flex items-center gap-2">
                                       {stepOutput?.output && (
-                                        <button
-                                          onClick={() => setEditingStepOutput({
-                                            campaignId: campaign.id,
-                                            campaignName: campaign.ecp_name,
-                                            stepId: step.id,
-                                            stepName: step.name,
-                                            stepOrder: step.order,
-                                          })}
-                                          className="px-2.5 py-1 text-xs bg-white border border-gray-300 text-gray-600 rounded hover:bg-gray-50"
-                                        >
-                                          Ver resultado
-                                        </button>
+                                        <>
+                                          <button
+                                            onClick={() => {
+                                              // Download step output
+                                              const { extension, mimeType } = getFileExtensionAndMimeType(step.output_format)
+                                              const blob = new Blob([stepOutput.output], { type: mimeType })
+                                              const url = URL.createObjectURL(blob)
+                                              const a = document.createElement('a')
+                                              a.href = url
+                                              a.download = `${campaign.ecp_name.replace(/\s+/g, '_')}_${step.name.replace(/\s+/g, '_')}.${extension}`
+                                              a.click()
+                                              URL.revokeObjectURL(url)
+                                            }}
+                                            className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                                            title="Descargar resultado"
+                                          >
+                                            <Download size={14} />
+                                          </button>
+                                          <button
+                                            onClick={() => setEditingStepOutput({
+                                              campaignId: campaign.id,
+                                              campaignName: campaign.ecp_name,
+                                              stepId: step.id,
+                                              stepName: step.name,
+                                              stepOrder: step.order,
+                                            })}
+                                            className="px-2.5 py-1 text-xs bg-white border border-gray-300 text-gray-600 rounded hover:bg-gray-50"
+                                          >
+                                            Ver resultado
+                                          </button>
+                                        </>
                                       )}
                                       <button
                                         onClick={() => handleRunStep(campaign.id, step.id, step.name)}
@@ -1336,22 +1402,63 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                       {/* Variables Tab */}
                       {expandedVariables.has(campaign.id) && (
                         <div>
-                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                            {Object.entries(campaign.custom_variables as Record<string, string>).map(([key, value]) => (
-                              <div key={key} className="bg-white rounded-lg p-3 border border-gray-200">
-                                <code className="text-xs font-mono text-blue-600 block mb-1">{key}</code>
-                                <span className="text-sm text-gray-800 block truncate" title={value}>
-                                  {value || <span className="italic text-gray-400">vacío</span>}
-                                </span>
+                          {editingVariablesCampaignId === campaign.id ? (
+                            // Editing mode
+                            <>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                                {Object.entries(editingVariablesData).map(([key, value]) => (
+                                  <div key={key} className="bg-white rounded-lg p-3 border border-blue-200">
+                                    <label className="text-xs font-mono text-blue-600 block mb-1">{key}</label>
+                                    <input
+                                      type="text"
+                                      value={value}
+                                      onChange={(e) => setEditingVariablesData(prev => ({
+                                        ...prev,
+                                        [key]: e.target.value
+                                      }))}
+                                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                    />
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                          <button
-                            onClick={() => handleEditCampaign(campaign)}
-                            className="mt-4 text-sm text-blue-600 hover:text-blue-800"
-                          >
-                            Editar variables →
-                          </button>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => saveEditingVariables(campaign.id)}
+                                  disabled={savingVariables}
+                                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300"
+                                >
+                                  {savingVariables ? 'Guardando...' : '✓ Guardar'}
+                                </button>
+                                <button
+                                  onClick={cancelEditingVariables}
+                                  disabled={savingVariables}
+                                  className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            // View mode
+                            <>
+                              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                {Object.entries(campaign.custom_variables as Record<string, string>).map(([key, value]) => (
+                                  <div key={key} className="bg-white rounded-lg p-3 border border-gray-200">
+                                    <code className="text-xs font-mono text-blue-600 block mb-1">{key}</code>
+                                    <span className="text-sm text-gray-800 block truncate" title={value}>
+                                      {value || <span className="italic text-gray-400">vacío</span>}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                              <button
+                                onClick={() => startEditingVariables(campaign)}
+                                className="mt-4 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                              >
+                                Editar variables
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
 
