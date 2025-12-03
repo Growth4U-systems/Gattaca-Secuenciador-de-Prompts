@@ -98,28 +98,26 @@ export async function POST(request: NextRequest) {
     // Reserved fields that go into dedicated columns
     const reservedFields = ['ecp_name', 'problem_core', 'country', 'industry']
 
-    // Get project variable definitions for default values
+    // Get project variable definitions
     const projectVariables = project.variable_definitions as Array<{
       name: string
       default_value: string
       required: boolean
     }> || []
 
+    // Get list of valid variable names from project
+    const validVariableNames = new Set(projectVariables.map(v => v.name))
+
     // Prepare campaigns for insertion
     const campaignsToInsert = campaigns.map((campaign) => {
-      // Start with default values from project variable definitions
+      // Only include variables that are defined in the project
+      // Use CSV value if present, otherwise leave empty
       const customVariables: Record<string, string> = {}
-      projectVariables.forEach((varDef) => {
-        if (varDef.default_value) {
-          customVariables[varDef.name] = varDef.default_value
-        }
-      })
 
-      // Override with values from CSV (everything except reserved fields)
-      Object.entries(campaign).forEach(([key, value]) => {
-        if (!reservedFields.includes(key) && value !== undefined && value !== '') {
-          customVariables[key] = value
-        }
+      projectVariables.forEach((varDef) => {
+        const csvValue = campaign[varDef.name]
+        // Use CSV value if present, otherwise empty string
+        customVariables[varDef.name] = csvValue?.trim() || ''
       })
 
       return {
