@@ -42,6 +42,8 @@ export async function PATCH(
     if (industry !== undefined) updateData.industry = industry
     if (custom_variables !== undefined) updateData.custom_variables = custom_variables
     if (body.step_outputs !== undefined) updateData.step_outputs = body.step_outputs
+    if (body.status !== undefined) updateData.status = body.status
+    if (body.current_step_id !== undefined) updateData.current_step_id = body.current_step_id
 
     const { data, error } = await supabase
       .from('ecp_campaigns')

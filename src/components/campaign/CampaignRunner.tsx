@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
 import CampaignBulkUpload from './CampaignBulkUpload'
@@ -447,6 +447,37 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     } finally {
       setRunning(null)
       loadCampaigns() // Always reload to get latest status
+    }
+  }
+
+  const handleResetCampaignStatus = async (campaignId: string) => {
+    if (!confirm('¿Resetear el estado de esta campaña a "draft"? Esto no borrará los resultados generados.')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/campaign/${campaignId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'draft',
+          current_step_id: null,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('✅ Estado de campaña reseteado a "draft"')
+        loadCampaigns()
+      } else {
+        throw new Error(data.error || 'Failed to reset')
+      }
+    } catch (error) {
+      console.error('Error resetting campaign status:', error)
+      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -1067,6 +1098,16 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
 
                     {/* Quick Actions */}
                     <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                      {/* Show reset button for stuck campaigns */}
+                      {campaign.status === 'running' && running !== campaign.id && (
+                        <button
+                          onClick={() => handleResetCampaignStatus(campaign.id)}
+                          className="p-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+                          title="Resetear estado (campaña atascada)"
+                        >
+                          <RefreshCw size={16} />
+                        </button>
+                      )}
                       <button
                         onClick={() => handleRunCampaign(campaign.id)}
                         disabled={running === campaign.id}
