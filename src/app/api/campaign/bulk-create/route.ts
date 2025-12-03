@@ -127,7 +127,6 @@ export async function POST(request: NextRequest) {
         problem_core: campaign.problem_core?.trim() || '',
         country: campaign.country?.trim() || '',
         industry: campaign.industry?.trim() || '',
-        research_prompt: campaign.prompt_research?.trim() || null,
         status: 'draft',
         custom_variables: customVariables,
         step_outputs: {},
