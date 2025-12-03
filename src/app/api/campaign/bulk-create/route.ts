@@ -16,7 +16,6 @@ interface CampaignRow {
 interface BulkCreateRequest {
   projectId: string
   campaigns: CampaignRow[]
-  documentIds?: string[] // Document IDs to assign to all created campaigns
 }
 
 /**
@@ -25,7 +24,7 @@ interface BulkCreateRequest {
 export async function POST(request: NextRequest) {
   try {
     const body: BulkCreateRequest = await request.json()
-    const { projectId, campaigns, documentIds = [] } = body
+    const { projectId, campaigns } = body
 
     if (!projectId) {
       return NextResponse.json(
@@ -160,33 +159,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Assign selected documents to created campaigns
-    // Since the schema has campaign_id as a single FK, we distribute documents across campaigns
-    // Each document gets assigned to one campaign (round-robin distribution)
-    let documentsAssigned = 0
-    if (documentIds.length > 0 && data && data.length > 0) {
-      // Distribute documents across campaigns (round-robin)
-      for (let i = 0; i < documentIds.length; i++) {
-        const campaignIndex = i % data.length
-        const campaignId = data[campaignIndex].id
-
-        const { error: docError } = await supabase
-          .from('knowledge_base_docs')
-          .update({ campaign_id: campaignId })
-          .eq('id', documentIds[i])
-
-        if (!docError) {
-          documentsAssigned++
-        }
-      }
-    }
+    // All project documents are automatically inherited by campaigns
+    // Documents without campaign_id apply to all campaigns
+    // Campaign-specific documents can be assigned later if needed
 
     return NextResponse.json({
       success: true,
       campaigns: data,
       count: data.length,
-      documentsAssigned,
-      message: `Successfully created ${data.length} campaigns${documentsAssigned > 0 ? ` (${documentsAssigned} documents assigned)` : ''}`,
+      message: `Successfully created ${data.length} campaigns. All project documents are available to each campaign.`,
     })
   } catch (error) {
     console.error('Bulk create campaign error:', error)
