@@ -113,10 +113,16 @@ export async function POST(request: NextRequest) {
     const campaignsToInsert = campaigns.map((campaign) => {
       // Only include variables that are defined in the project
       // Use CSV value if present, otherwise leave empty
+      // Match case-insensitively since CSV headers are lowercased
       const customVariables: Record<string, string> = {}
 
       projectVariables.forEach((varDef) => {
-        const csvValue = campaign[varDef.name]
+        // Try exact match first, then case-insensitive match
+        let csvValue = campaign[varDef.name]
+        if (csvValue === undefined) {
+          // Try lowercase version
+          csvValue = campaign[varDef.name.toLowerCase()]
+        }
         // Use CSV value if present, otherwise empty string
         customVariables[varDef.name] = csvValue?.trim() || ''
       })
