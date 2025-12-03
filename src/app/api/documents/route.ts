@@ -97,9 +97,19 @@ export async function PATCH(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('Database error:', error)
+      console.error('Database error:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      })
       return NextResponse.json(
-        { error: 'Failed to update document', details: error.message },
+        {
+          error: 'Failed to update document',
+          details: error.message,
+          code: error.code,
+          hint: error.hint || 'Make sure the migration 20250123000001_add_campaign_documents.sql has been applied',
+        },
         { status: 500 }
       )
     }

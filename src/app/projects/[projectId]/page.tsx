@@ -319,7 +319,11 @@ function DocumentsTab({
       if (data.success) {
         onReload() // Reload documents to reflect the change
       } else {
-        throw new Error(data.error || 'Failed to update')
+        let errorMsg = data.error || 'Failed to update'
+        if (data.details) errorMsg += `\n\nDetalles: ${data.details}`
+        if (data.hint) errorMsg += `\n\nSugerencia: ${data.hint}`
+        if (data.code) errorMsg += `\n\nCódigo: ${data.code}`
+        throw new Error(errorMsg)
       }
     } catch (error) {
       alert(`Error al asignar documento: ${error instanceof Error ? error.message : 'Unknown'}`)
