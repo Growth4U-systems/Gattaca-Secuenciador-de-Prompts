@@ -4,13 +4,16 @@ import { createClient } from '@supabase/supabase-js'
 export const runtime = 'nodejs'
 
 /**
- * GET /api/documents?projectId=xxx
- * List all documents for a project
+ * GET /api/documents?projectId=xxx[&campaignId=xxx]
+ * List documents for a project, optionally filtered by campaign
+ * - If campaignId is provided: returns only documents for that specific campaign
+ * - If campaignId is not provided: returns all project documents (including those without campaign_id)
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const projectId = searchParams.get('projectId')
+    const campaignId = searchParams.get('campaignId')
 
     if (!projectId) {
       return NextResponse.json(
@@ -30,11 +33,17 @@ export async function GET(request: NextRequest) {
       }
     )
 
-    const { data: documents, error } = await supabase
+    let query = supabase
       .from('knowledge_base_docs')
       .select('*')
       .eq('project_id', projectId)
-      .order('created_at', { ascending: false })
+
+    // Filter by campaign if specified
+    if (campaignId) {
+      query = query.eq('campaign_id', campaignId)
+    }
+
+    const { data: documents, error } = await query.order('created_at', { ascending: false })
 
     if (error) {
       console.error('Database error:', error)

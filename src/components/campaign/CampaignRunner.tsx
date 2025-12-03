@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
 import CampaignBulkUpload from './CampaignBulkUpload'
@@ -37,6 +37,15 @@ interface Project {
     description?: string
   }>
   flow_config?: FlowConfig
+  campaign_docs_guide?: string
+}
+
+interface CampaignDocument {
+  id: string
+  filename: string
+  category: string
+  token_count: number | null
+  created_at: string
 }
 
 export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
@@ -67,6 +76,9 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [expandedVariables, setExpandedVariables] = useState<Set<string>>(new Set())
+  const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
+  const [campaignDocs, setCampaignDocs] = useState<Record<string, CampaignDocument[]>>({})
+  const [showDocsGuide, setShowDocsGuide] = useState<string | null>(null)
 
   // Form state - only custom variables
   const [customVariables, setCustomVariables] = useState<Array<{ key: string; value: string }>>([])
@@ -501,6 +513,36 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
       }
       return newSet
     })
+  }
+
+  const toggleDocsExpanded = async (campaignId: string) => {
+    const isExpanding = !expandedDocs.has(campaignId)
+
+    setExpandedDocs(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(campaignId)) {
+        newSet.delete(campaignId)
+      } else {
+        newSet.add(campaignId)
+      }
+      return newSet
+    })
+
+    // Load campaign docs if expanding and not already loaded
+    if (isExpanding && !campaignDocs[campaignId]) {
+      try {
+        const response = await fetch(`/api/documents?projectId=${projectId}&campaignId=${campaignId}`)
+        const data = await response.json()
+        if (data.success) {
+          setCampaignDocs(prev => ({
+            ...prev,
+            [campaignId]: data.documents || []
+          }))
+        }
+      } catch (error) {
+        console.error('Error loading campaign documents:', error)
+      }
+    }
   }
 
   // Filter campaigns based on search and status
@@ -966,6 +1008,62 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
                   </div>
                 )}
 
+                {/* Documents Section - Collapsible */}
+                <div className="border-b border-gray-100">
+                  <button
+                    onClick={() => toggleDocsExpanded(campaign.id)}
+                    className="w-full px-4 py-2 flex items-center justify-between text-xs font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <FileText size={14} />
+                      Documentos específicos
+                      {campaignDocs[campaign.id]?.length > 0 && (
+                        <span className="bg-blue-100 text-blue-600 px-1.5 rounded-full">
+                          {campaignDocs[campaign.id].length}
+                        </span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setShowDocsGuide(campaign.id)
+                        }}
+                        className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded"
+                        title="Ver guía de documentación"
+                      >
+                        <Info size={14} />
+                      </button>
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform ${expandedDocs.has(campaign.id) ? 'rotate-180' : ''}`}
+                      />
+                    </div>
+                  </button>
+                  {expandedDocs.has(campaign.id) && (
+                    <div className="px-4 pb-3 space-y-2">
+                      {campaignDocs[campaign.id]?.length > 0 ? (
+                        campaignDocs[campaign.id].map(doc => (
+                          <div key={doc.id} className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <FileText size={12} className="text-gray-400 shrink-0" />
+                              <span className="text-gray-700 truncate">{doc.filename}</span>
+                              <span className="text-gray-400">({doc.category})</span>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-gray-500 italic py-2">
+                          No hay documentos específicos para esta campaña.
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-2">
+                        Sube documentos desde la pestaña Documentos y asígnalos a esta campaña.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 {/* Steps Section - Collapsible */}
                 {(campaign.flow_config?.steps || project?.flow_config?.steps) && (
                   <div className="border-b border-gray-100">
@@ -1175,6 +1273,60 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
             loadCampaigns()
           }}
         />
+      )}
+
+      {/* Documentation Guide Modal */}
+      {showDocsGuide && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">📚 Guía de Documentación para Campaña</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Documentos adicionales recomendados para esta campaña
+                </p>
+              </div>
+              <button
+                onClick={() => setShowDocsGuide(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              <div className="prose prose-sm max-w-none text-gray-700">
+                {project?.campaign_docs_guide ? (
+                  <div className="whitespace-pre-wrap">{project.campaign_docs_guide}</div>
+                ) : (
+                  <div className="space-y-4">
+                    <p>Para cada campaña, considera subir los siguientes documentos específicos:</p>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h4 className="font-semibold text-blue-800 mb-2">1. Análisis de competidores del ECP</h4>
+                      <p className="text-blue-700 text-sm">Investiga cómo los competidores abordan este problema específico en el mercado objetivo.</p>
+                    </div>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <h4 className="font-semibold text-green-800 mb-2">2. Research de mercado del segmento</h4>
+                      <p className="text-green-700 text-sm">Datos y estadísticas específicas del segmento objetivo de la campaña.</p>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                      <h4 className="font-semibold text-purple-800 mb-2">3. Casos de uso específicos</h4>
+                      <p className="text-purple-700 text-sm">Ejemplos o testimonios relevantes para este ECP particular.</p>
+                    </div>
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                      <h4 className="font-semibold text-orange-800 mb-2">4. Materiales de producto relevantes</h4>
+                      <p className="text-orange-700 text-sm">Características o beneficios del producto que aplican especialmente a este ECP.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <p className="text-xs text-gray-500">
+                💡 Sube estos documentos desde la pestaña "Documentos" y asígnalos a esta campaña específica.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
