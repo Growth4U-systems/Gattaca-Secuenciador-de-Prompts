@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
+import CampaignBulkUpload from './CampaignBulkUpload'
 import { FlowConfig, FlowStep } from '@/types/flow.types'
 
 interface CampaignRunnerProps {
@@ -60,6 +61,7 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
     stepOrder: number
   } | null>(null)
   const [downloadFormatMenu, setDownloadFormatMenu] = useState<string | null>(null)
+  const [showBulkUpload, setShowBulkUpload] = useState(false)
 
   // Form state - only custom variables
   const [customVariables, setCustomVariables] = useState<Array<{ key: string; value: string }>>([])
@@ -609,18 +611,27 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Campañas</h2>
-        <button
-          onClick={() => {
-            if (showNewForm) {
-              setShowNewForm(false)
-            } else {
-              openNewCampaignForm()
-            }
-          }}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          {showNewForm ? 'Cancelar' : '+ Nueva Campaña'}
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowBulkUpload(true)}
+            className="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 inline-flex items-center gap-2"
+          >
+            <FileSpreadsheet size={18} />
+            Importar CSV
+          </button>
+          <button
+            onClick={() => {
+              if (showNewForm) {
+                setShowNewForm(false)
+              } else {
+                openNewCampaignForm()
+              }
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            {showNewForm ? 'Cancelar' : '+ Nueva Campaña'}
+          </button>
+        </div>
       </div>
 
       {/* New Campaign Form */}
@@ -1154,6 +1165,18 @@ export default function CampaignRunner({ projectId }: CampaignRunnerProps) {
           />
         )
       })()}
+
+      {/* Bulk Upload Modal */}
+      {showBulkUpload && (
+        <CampaignBulkUpload
+          projectId={projectId}
+          projectVariables={project?.variable_definitions || []}
+          onClose={() => setShowBulkUpload(false)}
+          onSuccess={() => {
+            loadCampaigns()
+          }}
+        />
+      )}
     </div>
   )
 }
