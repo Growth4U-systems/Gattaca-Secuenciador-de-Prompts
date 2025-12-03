@@ -1,15 +1,19 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
-import { Upload, FileSpreadsheet, X, AlertCircle, CheckCircle, Download, Trash2 } from 'lucide-react'
+import { Upload, FileSpreadsheet, X, AlertCircle, CheckCircle, Download, Trash2, ArrowRight, RefreshCw } from 'lucide-react'
 
 interface CampaignRow {
   ecp_name: string
   problem_core?: string
   country?: string
   industry?: string
-  prompt_research?: string
   [key: string]: string | undefined
+}
+
+interface RawCsvData {
+  headers: string[]
+  rows: string[][]
 }
 
 interface CampaignBulkUploadProps {
@@ -24,27 +28,37 @@ interface CampaignBulkUploadProps {
   onSuccess: () => void
 }
 
+type Step = 'upload' | 'mapping' | 'preview'
+
 export default function CampaignBulkUpload({
   projectId,
   projectVariables = [],
   onClose,
   onSuccess
 }: CampaignBulkUploadProps) {
+  const [step, setStep] = useState<Step>('upload')
+  const [rawCsvData, setRawCsvData] = useState<RawCsvData | null>(null)
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({}) // projectVar -> csvColumn
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([])
-  const [headers, setHeaders] = useState<string[]>([])
   const [errors, setErrors] = useState<string[]>([])
   const [creating, setCreating] = useState(false)
   const [csvText, setCsvText] = useState('')
   const [editingCell, setEditingCell] = useState<{ row: number; col: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Parse CSV text into campaigns array
+  // All variables we need to map (reserved + project variables)
+  const reservedFields = ['ecp_name', 'problem_core', 'country', 'industry']
+  const allVariables = [
+    ...reservedFields,
+    ...projectVariables.map(v => v.name).filter(name => !reservedFields.includes(name))
+  ]
+
+  // Parse CSV text into raw data (preserving original headers)
   const parseCSV = useCallback((text: string) => {
     setErrors([])
 
     if (!text.trim()) {
-      setCampaigns([])
-      setHeaders([])
+      setRawCsvData(null)
       return
     }
 
@@ -54,7 +68,7 @@ export default function CampaignBulkUpload({
       return
     }
 
-    // Detect separator: tab, semicolon, or comma (in priority order)
+    // Detect separator
     const headerLine = lines[0]
     let separator = ','
     if (headerLine.includes('\t')) {
@@ -63,52 +77,48 @@ export default function CampaignBulkUpload({
       separator = ';'
     }
 
-    // Parse and clean headers - remove {{ }} if present, trim, lowercase
+    // Parse headers (keep original case, just trim and remove {{ }})
     const rawHeaders = parseCSVLine(headerLine, separator)
-    const parsedHeaders = rawHeaders.map(h => {
+    const headers = rawHeaders.map(h => {
       let cleaned = h.trim()
-      // Remove {{ and }} from header names
       cleaned = cleaned.replace(/^\{\{/, '').replace(/\}\}$/, '')
-      return cleaned.toLowerCase()
+      return cleaned
     })
 
-    // Validate required header
-    if (!parsedHeaders.includes('ecp_name')) {
-      setErrors(['El CSV debe incluir una columna "ecp_name" o "{{ecp_name}}" para el nombre de cada campaña'])
+    // Parse data rows
+    const rows: string[][] = []
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim()
+      if (!line) continue
+      const values = parseCSVLine(line, separator)
+      rows.push(values.map(v => v.trim()))
+    }
+
+    if (rows.length === 0) {
+      setErrors(['No se encontraron filas de datos en el CSV'])
       return
     }
 
-    setHeaders(parsedHeaders)
+    setRawCsvData({ headers, rows })
 
-    // Parse data rows
-    const parsedCampaigns: CampaignRow[] = []
-    const parseErrors: string[] = []
-
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue // Skip empty lines
-
-      const values = parseCSVLine(line, separator)
-      const campaign: CampaignRow = { ecp_name: '' }
-
-      parsedHeaders.forEach((header, index) => {
-        const value = values[index]?.trim() || ''
-        campaign[header] = value
-      })
-
-      if (!campaign.ecp_name) {
-        parseErrors.push(`Fila ${i + 1}: falta el nombre de la campaña (ecp_name)`)
-      } else {
-        parsedCampaigns.push(campaign)
+    // Auto-detect column mapping
+    const autoMapping: Record<string, string> = {}
+    allVariables.forEach(varName => {
+      // Try exact match first
+      let match = headers.find(h => h === varName)
+      // Then case-insensitive
+      if (!match) {
+        match = headers.find(h => h.toLowerCase() === varName.toLowerCase())
       }
-    }
+      if (match) {
+        autoMapping[varName] = match
+      }
+    })
+    setColumnMapping(autoMapping)
 
-    if (parseErrors.length > 0) {
-      setErrors(parseErrors)
-    }
-
-    setCampaigns(parsedCampaigns)
-  }, [])
+    // Go to mapping step
+    setStep('mapping')
+  }, [allVariables])
 
   // Parse a single CSV line handling quoted values
   const parseCSVLine = (line: string, separator: string): string[] => {
@@ -138,6 +148,44 @@ export default function CampaignBulkUpload({
     return result
   }
 
+  // Apply mapping and go to preview
+  const applyMapping = () => {
+    if (!rawCsvData) return
+
+    // Check required fields
+    if (!columnMapping['ecp_name']) {
+      setErrors(['Debes mapear la columna "ecp_name" (nombre de campaña)'])
+      return
+    }
+
+    setErrors([])
+
+    // Transform raw data using mapping
+    const mappedCampaigns: CampaignRow[] = rawCsvData.rows.map(row => {
+      const campaign: CampaignRow = { ecp_name: '' }
+
+      allVariables.forEach(varName => {
+        const csvColumn = columnMapping[varName]
+        if (csvColumn) {
+          const colIndex = rawCsvData.headers.indexOf(csvColumn)
+          if (colIndex >= 0) {
+            campaign[varName] = row[colIndex] || ''
+          }
+        }
+      })
+
+      return campaign
+    }).filter(c => c.ecp_name) // Filter out rows without ecp_name
+
+    if (mappedCampaigns.length === 0) {
+      setErrors(['No se encontraron campañas válidas después del mapeo'])
+      return
+    }
+
+    setCampaigns(mappedCampaigns)
+    setStep('preview')
+  }
+
   // Handle file upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -150,8 +198,6 @@ export default function CampaignBulkUpload({
       parseCSV(text)
     }
     reader.readAsText(file)
-
-    // Reset input so same file can be re-uploaded
     e.target.value = ''
   }
 
@@ -187,19 +233,26 @@ export default function CampaignBulkUpload({
     setCampaigns(prev => prev.filter((_, i) => i !== index))
   }
 
+  // Reset to upload step
+  const resetToUpload = () => {
+    setStep('upload')
+    setRawCsvData(null)
+    setColumnMapping({})
+    setCampaigns([])
+    setCsvText('')
+    setErrors([])
+  }
+
   // Create all campaigns
   const handleCreateCampaigns = async () => {
-    console.log('handleCreateCampaigns called', { campaigns, projectId })
-
     if (campaigns.length === 0) {
       setErrors(['No hay campañas para crear'])
       return
     }
 
-    // Validate required variables from project
+    // Validate required variables
     const validationErrors: string[] = []
     const requiredVars = projectVariables.filter(v => v.required).map(v => v.name)
-    console.log('Required variables:', requiredVars)
 
     campaigns.forEach((campaign, index) => {
       requiredVars.forEach(varName => {
@@ -210,8 +263,7 @@ export default function CampaignBulkUpload({
     })
 
     if (validationErrors.length > 0) {
-      console.log('Validation errors:', validationErrors)
-      setErrors(validationErrors.slice(0, 10)) // Show max 10 errors
+      setErrors(validationErrors.slice(0, 10))
       if (validationErrors.length > 10) {
         setErrors(prev => [...prev, `... y ${validationErrors.length - 10} errores más`])
       }
@@ -222,21 +274,13 @@ export default function CampaignBulkUpload({
     setErrors([])
 
     try {
-      console.log('Sending request to /api/campaign/bulk-create')
       const response = await fetch('/api/campaign/bulk-create', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          projectId,
-          campaigns,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, campaigns }),
       })
 
-      console.log('Response status:', response.status)
       const data = await response.json()
-      console.log('Response data:', data)
 
       if (data.success) {
         alert(`✅ ${data.count} campañas creadas exitosamente`)
@@ -245,13 +289,10 @@ export default function CampaignBulkUpload({
       } else {
         let errorMsg = data.error || 'Error al crear campañas'
         if (data.details) errorMsg += `: ${data.details}`
-        if (data.hint) errorMsg += ` (${data.hint})`
-        console.error('API error:', errorMsg)
         setErrors([errorMsg])
         alert(`❌ Error: ${errorMsg}`)
       }
     } catch (error) {
-      console.error('Error creating campaigns:', error)
       const errorMsg = error instanceof Error ? error.message : 'Error desconocido'
       setErrors([errorMsg])
       alert(`❌ Error de red: ${errorMsg}`)
@@ -262,27 +303,17 @@ export default function CampaignBulkUpload({
 
   // Download CSV template
   const downloadTemplate = () => {
-    // Build header from reserved fields + project variables + prompt_research
-    const reservedHeaders = ['ecp_name', 'problem_core', 'country', 'industry', 'prompt_research']
-    const variableHeaders = projectVariables.map(v => v.name)
-    const allHeaders = [...reservedHeaders, ...variableHeaders.filter(v => !reservedHeaders.includes(v))]
-
-    // Create sample row
+    const allHeaders = [...reservedFields, ...projectVariables.map(v => v.name).filter(v => !reservedFields.includes(v))]
     const sampleRow = allHeaders.map(h => {
       if (h === 'ecp_name') return 'Nombre de Campaña 1'
       if (h === 'problem_core') return 'Descripción del problema'
       if (h === 'country') return 'España'
       if (h === 'industry') return 'Tecnología'
-      if (h === 'prompt_research') return 'Prompt para deep research de esta campaña...'
       const varDef = projectVariables.find(v => v.name === h)
       return varDef?.default_value || `Valor de ${h}`
     })
 
-    const csv = [
-      allHeaders.join(','),
-      sampleRow.join(','),
-    ].join('\n')
-
+    const csv = [allHeaders.join(','), sampleRow.join(',')].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -292,6 +323,11 @@ export default function CampaignBulkUpload({
     URL.revokeObjectURL(url)
   }
 
+  // Get mapped columns (for preview headers)
+  const getMappedHeaders = () => {
+    return allVariables.filter(v => columnMapping[v])
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -299,48 +335,42 @@ export default function CampaignBulkUpload({
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div>
             <h2 className="text-xl font-semibold text-gray-900">Importar Campañas desde CSV</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Carga un archivo CSV con múltiples campañas y sus variables
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`text-xs px-2 py-0.5 rounded ${step === 'upload' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                1. Subir
+              </span>
+              <ArrowRight size={12} className="text-gray-400" />
+              <span className={`text-xs px-2 py-0.5 rounded ${step === 'mapping' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                2. Mapear
+              </span>
+              <ArrowRight size={12} className="text-gray-400" />
+              <span className={`text-xs px-2 py-0.5 rounded ${step === 'preview' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                3. Crear
+              </span>
+            </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-          >
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
             <X size={20} />
           </button>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
-          {campaigns.length === 0 ? (
+          {/* Step 1: Upload */}
+          {step === 'upload' && (
             <>
-              {/* Upload Section */}
               <div
                 onDrop={handleDrop}
                 onDragOver={(e) => e.preventDefault()}
                 className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-500 hover:bg-blue-50/50 transition-colors cursor-pointer"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
+                <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
                 <FileSpreadsheet size={48} className="mx-auto text-gray-400 mb-4" />
-                <p className="text-lg font-medium text-gray-700 mb-2">
-                  Arrastra tu archivo CSV aquí
-                </p>
-                <p className="text-sm text-gray-500 mb-4">
-                  o haz clic para seleccionar un archivo
-                </p>
+                <p className="text-lg font-medium text-gray-700 mb-2">Arrastra tu archivo CSV aquí</p>
+                <p className="text-sm text-gray-500 mb-4">o haz clic para seleccionar un archivo</p>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    downloadTemplate()
-                  }}
+                  onClick={(e) => { e.stopPropagation(); downloadTemplate() }}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm"
                 >
                   <Download size={16} />
@@ -348,83 +378,97 @@ export default function CampaignBulkUpload({
                 </button>
               </div>
 
-              {/* Or paste CSV */}
               <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  O pega el contenido CSV directamente:
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">O pega el contenido CSV directamente:</label>
                 <textarea
                   value={csvText}
-                  onChange={(e) => {
-                    setCsvText(e.target.value)
-                    parseCSV(e.target.value)
-                  }}
-                  placeholder={`ecp_name,problem_core,country,industry,variable1,variable2
-Campaña 1,Problema A,España,Tech,valor1,valor2
-Campaña 2,Problema B,México,Retail,valor3,valor4`}
-                  rows={8}
+                  onChange={(e) => { setCsvText(e.target.value); parseCSV(e.target.value) }}
+                  placeholder={`ecp_name,problem_core,country,industry
+Campaña 1,Problema A,España,Tech
+Campaña 2,Problema B,México,Retail`}
+                  rows={6}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm text-gray-900 placeholder:text-gray-400"
                 />
               </div>
+            </>
+          )}
 
-              {/* Format Help */}
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <h4 className="font-medium text-blue-800 mb-2">Formato del CSV:</h4>
-                <ul className="text-sm text-blue-700 space-y-1">
-                  <li>• La primera fila debe ser los nombres de las columnas (headers)</li>
-                  <li>• Los headers pueden tener formato <code className="bg-blue-100 px-1 rounded">{'{{variable}}'}</code> o solo <code className="bg-blue-100 px-1 rounded">variable</code></li>
-                  <li>• <code className="bg-blue-100 px-1 rounded">ecp_name</code> es obligatorio - es el nombre de cada campaña</li>
-                  <li>• <code className="bg-blue-100 px-1 rounded">prompt_research</code> es opcional - prompt de deep research para la campaña</li>
-                  <li>• Soporta separadores: tabulador, coma (,) o punto y coma (;)</li>
-                  <li>• Solo se importarán las variables definidas en el proyecto</li>
-                </ul>
+          {/* Step 2: Mapping */}
+          {step === 'mapping' && rawCsvData && (
+            <>
+              <div className="mb-4">
+                <h3 className="font-medium text-gray-900 mb-1">Mapear columnas del CSV</h3>
+                <p className="text-sm text-gray-500">
+                  Selecciona qué columna del CSV corresponde a cada variable del proyecto.
+                  Se detectaron {rawCsvData.headers.length} columnas y {rawCsvData.rows.length} filas.
+                </p>
+              </div>
 
-                {projectVariables.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-blue-200">
-                    <h5 className="font-medium text-blue-800 mb-1">Variables del proyecto:</h5>
-                    <div className="flex flex-wrap gap-2">
-                      {projectVariables.map(v => (
-                        <span
-                          key={v.name}
-                          className={`px-2 py-1 text-xs rounded ${
-                            v.required
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-gray-100 text-gray-700'
-                          }`}
-                        >
-                          {v.name}{v.required && ' *'}
-                        </span>
-                      ))}
+              <div className="grid gap-3 max-h-[400px] overflow-y-auto">
+                {allVariables.map(varName => {
+                  const isRequired = varName === 'ecp_name' || projectVariables.find(v => v.name === varName)?.required
+                  const isMapped = !!columnMapping[varName]
+
+                  return (
+                    <div
+                      key={varName}
+                      className={`flex items-center gap-4 p-3 rounded-lg border ${
+                        isMapped ? 'bg-green-50 border-green-200' : isRequired ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'
+                      }`}
+                    >
+                      <div className="w-1/3">
+                        <span className="font-mono text-sm text-gray-900">{varName}</span>
+                        {isRequired && <span className="text-red-500 ml-1">*</span>}
+                        {projectVariables.find(v => v.name === varName)?.description && (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {projectVariables.find(v => v.name === varName)?.description}
+                          </p>
+                        )}
+                      </div>
+                      <ArrowRight size={16} className="text-gray-400" />
+                      <select
+                        value={columnMapping[varName] || ''}
+                        onChange={(e) => setColumnMapping(prev => ({ ...prev, [varName]: e.target.value }))}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">-- No mapear --</option>
+                        {rawCsvData.headers.map((header, idx) => (
+                          <option key={idx} value={header}>
+                            {header} (ej: {rawCsvData.rows[0]?.[idx]?.substring(0, 30) || 'vacío'}...)
+                          </option>
+                        ))}
+                      </select>
+                      {isMapped && <CheckCircle size={18} className="text-green-600" />}
                     </div>
-                  </div>
-                )}
+                  )
+                })}
+              </div>
+
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  💡 Las columnas se auto-detectaron por nombre similar. Ajusta manualmente si es necesario.
+                </p>
               </div>
             </>
-          ) : (
+          )}
+
+          {/* Step 3: Preview */}
+          {step === 'preview' && (
             <>
-              {/* Preview Table */}
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h3 className="font-medium text-gray-900">
-                    Vista previa: {campaigns.length} campañas
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    Revisa y edita los datos antes de crear las campañas
-                  </p>
+                  <h3 className="font-medium text-gray-900">Vista previa: {campaigns.length} campañas</h3>
+                  <p className="text-sm text-gray-500">Revisa los datos antes de crear las campañas</p>
                 </div>
                 <button
-                  onClick={() => {
-                    setCampaigns([])
-                    setHeaders([])
-                    setCsvText('')
-                  }}
-                  className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
+                  onClick={() => setStep('mapping')}
+                  className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg inline-flex items-center gap-1"
                 >
-                  Cargar otro archivo
+                  <RefreshCw size={14} />
+                  Ajustar mapeo
                 </button>
               </div>
 
-              {/* Info: All project documents are inherited automatically */}
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                 <p className="text-sm text-green-700">
                   ✓ Todas las campañas heredarán automáticamente los documentos del proyecto y su configuración de flujo.
@@ -437,13 +481,10 @@ Campaña 2,Problema B,México,Retail,valor3,valor4`}
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 w-10">#</th>
-                        {headers.map((header) => (
-                          <th
-                            key={header}
-                            className="px-3 py-2 text-left text-xs font-semibold text-gray-600 min-w-[120px]"
-                          >
-                            <span className="font-mono">{`{{${header}}}`}</span>
-                            {projectVariables.find(v => v.name === header)?.required && (
+                        {getMappedHeaders().map((header) => (
+                          <th key={header} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 min-w-[120px]">
+                            <span className="font-mono">{header}</span>
+                            {(header === 'ecp_name' || projectVariables.find(v => v.name === header)?.required) && (
                               <span className="text-red-500 ml-1">*</span>
                             )}
                           </th>
@@ -452,10 +493,10 @@ Campaña 2,Problema B,México,Retail,valor3,valor4`}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
-                      {campaigns.map((campaign, rowIndex) => (
+                      {campaigns.slice(0, 50).map((campaign, rowIndex) => (
                         <tr key={rowIndex} className="hover:bg-gray-50">
                           <td className="px-3 py-2 text-gray-500">{rowIndex + 1}</td>
-                          {headers.map((header) => (
+                          {getMappedHeaders().map((header) => (
                             <td key={header} className="px-3 py-2">
                               {editingCell?.row === rowIndex && editingCell?.col === header ? (
                                 <input
@@ -463,22 +504,18 @@ Campaña 2,Problema B,México,Retail,valor3,valor4`}
                                   value={campaign[header] || ''}
                                   onChange={(e) => updateCampaignValue(rowIndex, header, e.target.value)}
                                   onBlur={() => setEditingCell(null)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === 'Escape') {
-                                      setEditingCell(null)
-                                    }
-                                  }}
+                                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setEditingCell(null) }}
                                   autoFocus
-                                  className="w-full px-2 py-1 border border-blue-500 rounded text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  className="w-full px-2 py-1 border border-blue-500 rounded text-gray-900 focus:outline-none"
                                 />
                               ) : (
                                 <div
                                   onClick={() => setEditingCell({ row: rowIndex, col: header })}
-                                  className={`px-2 py-1 rounded cursor-pointer hover:bg-gray-100 ${
-                                    !campaign[header] && projectVariables.find(v => v.name === header)?.required
-                                      ? 'bg-red-50 border border-red-200'
-                                      : ''
+                                  className={`px-2 py-1 rounded cursor-pointer hover:bg-gray-100 truncate max-w-[200px] ${
+                                    !campaign[header] && (header === 'ecp_name' || projectVariables.find(v => v.name === header)?.required)
+                                      ? 'bg-red-50 border border-red-200' : ''
                                   }`}
+                                  title={campaign[header] || ''}
                                 >
                                   <span className="text-gray-900">
                                     {campaign[header] || <span className="text-gray-400 italic">vacío</span>}
@@ -488,10 +525,7 @@ Campaña 2,Problema B,México,Retail,valor3,valor4`}
                             </td>
                           ))}
                           <td className="px-3 py-2">
-                            <button
-                              onClick={() => removeCampaign(rowIndex)}
-                              className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                            >
+                            <button onClick={() => removeCampaign(rowIndex)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded">
                               <Trash2 size={16} />
                             </button>
                           </td>
@@ -500,6 +534,11 @@ Campaña 2,Problema B,México,Retail,valor3,valor4`}
                     </tbody>
                   </table>
                 </div>
+                {campaigns.length > 50 && (
+                  <div className="px-4 py-2 bg-gray-50 text-sm text-gray-500 text-center">
+                    Mostrando 50 de {campaigns.length} campañas
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -510,11 +549,9 @@ Campaña 2,Problema B,México,Retail,valor3,valor4`}
               <div className="flex items-start gap-2">
                 <AlertCircle size={20} className="text-red-600 shrink-0 mt-0.5" />
                 <div>
-                  <h4 className="font-medium text-red-800 mb-1">Errores encontrados:</h4>
+                  <h4 className="font-medium text-red-800 mb-1">Errores:</h4>
                   <ul className="text-sm text-red-700 space-y-1">
-                    {errors.map((error, index) => (
-                      <li key={index}>{error}</li>
-                    ))}
+                    {errors.map((error, index) => <li key={index}>{error}</li>)}
                   </ul>
                 </div>
               </div>
@@ -525,37 +562,61 @@ Campaña 2,Problema B,México,Retail,valor3,valor4`}
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
           <div className="text-sm text-gray-500">
-            {campaigns.length > 0 && (
+            {step === 'mapping' && rawCsvData && (
+              <span>{Object.keys(columnMapping).filter(k => columnMapping[k]).length} de {allVariables.length} variables mapeadas</span>
+            )}
+            {step === 'preview' && campaigns.length > 0 && (
               <span className="inline-flex items-center gap-1">
                 <CheckCircle size={16} className="text-green-600" />
-                {campaigns.length} campañas listas para crear
+                {campaigns.length} campañas listas
               </span>
             )}
           </div>
           <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleCreateCampaigns}
-              disabled={creating || campaigns.length === 0}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-2"
-            >
-              {creating ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Creando...
-                </>
-              ) : (
-                <>
-                  <Upload size={16} />
-                  Crear {campaigns.length} Campañas
-                </>
-              )}
-            </button>
+            {step === 'upload' && (
+              <button onClick={onClose} className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100">
+                Cancelar
+              </button>
+            )}
+            {step === 'mapping' && (
+              <>
+                <button onClick={resetToUpload} className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100">
+                  ← Volver
+                </button>
+                <button
+                  onClick={applyMapping}
+                  disabled={!columnMapping['ecp_name']}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  Aplicar mapeo
+                  <ArrowRight size={16} />
+                </button>
+              </>
+            )}
+            {step === 'preview' && (
+              <>
+                <button onClick={() => setStep('mapping')} className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100">
+                  ← Volver
+                </button>
+                <button
+                  onClick={handleCreateCampaigns}
+                  disabled={creating || campaigns.length === 0}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  {creating ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Creando...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={16} />
+                      Crear {campaigns.length} Campañas
+                    </>
+                  )}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
