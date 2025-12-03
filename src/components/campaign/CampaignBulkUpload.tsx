@@ -39,6 +39,7 @@ export default function CampaignBulkUpload({
   const [step, setStep] = useState<Step>('upload')
   const [rawCsvData, setRawCsvData] = useState<RawCsvData | null>(null)
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({}) // projectVar -> csvColumn
+  const [fixedValues, setFixedValues] = useState<Record<string, string>>({}) // projectVar -> fixed value
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([])
   const [errors, setErrors] = useState<string[]>([])
   const [creating, setCreating] = useState(false)
@@ -48,10 +49,16 @@ export default function CampaignBulkUpload({
 
   // All variables we need to map (reserved + project variables)
   const reservedFields = ['ecp_name', 'problem_core', 'country', 'industry']
+
+  // Get all unique variable names from project
+  const projectVarNames = projectVariables.map(v => v.name)
   const allVariables = [
-    ...reservedFields,
-    ...projectVariables.map(v => v.name).filter(name => !reservedFields.includes(name))
+    ...reservedFields.filter(f => !projectVarNames.includes(f)), // Reserved fields not in project vars
+    ...projectVarNames // All project variables (includes reserved if defined there)
   ]
+
+  // Deduplicate and ensure ecp_name is first
+  const uniqueVariables = Array.from(new Set(['ecp_name', ...allVariables]))
 
   // Parse CSV text into raw data (preserving original headers)
   const parseCSV = useCallback((text: string) => {
@@ -103,7 +110,7 @@ export default function CampaignBulkUpload({
 
     // Auto-detect column mapping
     const autoMapping: Record<string, string> = {}
-    allVariables.forEach(varName => {
+    uniqueVariables.forEach(varName => {
       // Try exact match first
       let match = headers.find(h => h === varName)
       // Then case-insensitive
@@ -115,10 +122,11 @@ export default function CampaignBulkUpload({
       }
     })
     setColumnMapping(autoMapping)
+    setFixedValues({}) // Reset fixed values
 
     // Go to mapping step
     setStep('mapping')
-  }, [allVariables])
+  }, [uniqueVariables])
 
   // Parse a single CSV line handling quoted values
   const parseCSVLine = (line: string, separator: string): string[] => {
@@ -152,27 +160,38 @@ export default function CampaignBulkUpload({
   const applyMapping = () => {
     if (!rawCsvData) return
 
-    // Check required fields
-    if (!columnMapping['ecp_name']) {
-      setErrors(['Debes mapear la columna "ecp_name" (nombre de campaña)'])
+    // Check required fields - either mapped or has fixed value
+    if (!columnMapping['ecp_name'] && !fixedValues['ecp_name']) {
+      setErrors(['Debes mapear la columna "ecp_name" (nombre de campaña) o establecer un valor fijo'])
       return
     }
 
     setErrors([])
 
-    // Transform raw data using mapping
-    const mappedCampaigns: CampaignRow[] = rawCsvData.rows.map(row => {
+    // Transform raw data using mapping and fixed values
+    const mappedCampaigns: CampaignRow[] = rawCsvData.rows.map((row, rowIndex) => {
       const campaign: CampaignRow = { ecp_name: '' }
 
-      allVariables.forEach(varName => {
-        const csvColumn = columnMapping[varName]
-        if (csvColumn) {
-          const colIndex = rawCsvData.headers.indexOf(csvColumn)
-          if (colIndex >= 0) {
-            campaign[varName] = row[colIndex] || ''
+      uniqueVariables.forEach(varName => {
+        // First check for fixed value
+        if (fixedValues[varName]) {
+          campaign[varName] = fixedValues[varName]
+        } else {
+          // Then check for column mapping
+          const csvColumn = columnMapping[varName]
+          if (csvColumn) {
+            const colIndex = rawCsvData.headers.indexOf(csvColumn)
+            if (colIndex >= 0) {
+              campaign[varName] = row[colIndex] || ''
+            }
           }
         }
       })
+
+      // If ecp_name is fixed but not unique, append row number
+      if (fixedValues['ecp_name'] && !columnMapping['ecp_name']) {
+        campaign.ecp_name = `${fixedValues['ecp_name']} ${rowIndex + 1}`
+      }
 
       return campaign
     }).filter(c => c.ecp_name) // Filter out rows without ecp_name
@@ -238,6 +257,7 @@ export default function CampaignBulkUpload({
     setStep('upload')
     setRawCsvData(null)
     setColumnMapping({})
+    setFixedValues({})
     setCampaigns([])
     setCsvText('')
     setErrors([])
@@ -323,9 +343,9 @@ export default function CampaignBulkUpload({
     URL.revokeObjectURL(url)
   }
 
-  // Get mapped columns (for preview headers)
+  // Get mapped columns (for preview headers) - includes both CSV mapped and fixed values
   const getMappedHeaders = () => {
-    return allVariables.filter(v => columnMapping[v])
+    return uniqueVariables.filter(v => columnMapping[v] || fixedValues[v])
   }
 
   return (
@@ -399,46 +419,71 @@ Campaña 2,Problema B,México,Retail`}
               <div className="mb-4">
                 <h3 className="font-medium text-gray-900 mb-1">Mapear columnas del CSV</h3>
                 <p className="text-sm text-gray-500">
-                  Selecciona qué columna del CSV corresponde a cada variable del proyecto.
+                  Selecciona qué columna del CSV corresponde a cada variable, o escribe un valor fijo.
                   Se detectaron {rawCsvData.headers.length} columnas y {rawCsvData.rows.length} filas.
                 </p>
               </div>
 
-              <div className="grid gap-3 max-h-[400px] overflow-y-auto">
-                {allVariables.map(varName => {
+              <div className="grid gap-2 max-h-[400px] overflow-y-auto pr-2">
+                {uniqueVariables.map(varName => {
                   const isRequired = varName === 'ecp_name' || projectVariables.find(v => v.name === varName)?.required
                   const isMapped = !!columnMapping[varName]
+                  const hasFixedValue = !!fixedValues[varName]
+                  const isConfigured = isMapped || hasFixedValue
 
                   return (
                     <div
                       key={varName}
-                      className={`flex items-center gap-4 p-3 rounded-lg border ${
-                        isMapped ? 'bg-green-50 border-green-200' : isRequired ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'
+                      className={`p-3 rounded-lg border ${
+                        isConfigured ? 'bg-green-50 border-green-200' : isRequired ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'
                       }`}
                     >
-                      <div className="w-1/3">
-                        <span className="font-mono text-sm text-gray-900">{varName}</span>
-                        {isRequired && <span className="text-red-500 ml-1">*</span>}
-                        {projectVariables.find(v => v.name === varName)?.description && (
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {projectVariables.find(v => v.name === varName)?.description}
-                          </p>
-                        )}
+                      <div className="flex items-center gap-3">
+                        <div className="w-48 shrink-0">
+                          <span className="font-mono text-sm text-gray-900">{varName}</span>
+                          {isRequired && <span className="text-red-500 ml-1">*</span>}
+                        </div>
+                        <ArrowRight size={16} className="text-gray-400 shrink-0" />
+                        <div className="flex-1 flex gap-2">
+                          <select
+                            value={columnMapping[varName] || ''}
+                            onChange={(e) => {
+                              setColumnMapping(prev => ({ ...prev, [varName]: e.target.value }))
+                              if (e.target.value) {
+                                setFixedValues(prev => ({ ...prev, [varName]: '' }))
+                              }
+                            }}
+                            disabled={!!fixedValues[varName]}
+                            className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+                          >
+                            <option value="">-- Columna CSV --</option>
+                            {rawCsvData.headers.map((header, idx) => (
+                              <option key={idx} value={header}>
+                                {header} ({rawCsvData.rows[0]?.[idx]?.substring(0, 20) || 'vacío'})
+                              </option>
+                            ))}
+                          </select>
+                          <span className="text-gray-400 text-sm self-center">o</span>
+                          <input
+                            type="text"
+                            value={fixedValues[varName] || ''}
+                            onChange={(e) => {
+                              setFixedValues(prev => ({ ...prev, [varName]: e.target.value }))
+                              if (e.target.value) {
+                                setColumnMapping(prev => ({ ...prev, [varName]: '' }))
+                              }
+                            }}
+                            placeholder="Valor fijo..."
+                            className="w-40 px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        {isConfigured && <CheckCircle size={18} className="text-green-600 shrink-0" />}
                       </div>
-                      <ArrowRight size={16} className="text-gray-400" />
-                      <select
-                        value={columnMapping[varName] || ''}
-                        onChange={(e) => setColumnMapping(prev => ({ ...prev, [varName]: e.target.value }))}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">-- No mapear --</option>
-                        {rawCsvData.headers.map((header, idx) => (
-                          <option key={idx} value={header}>
-                            {header} (ej: {rawCsvData.rows[0]?.[idx]?.substring(0, 30) || 'vacío'}...)
-                          </option>
-                        ))}
-                      </select>
-                      {isMapped && <CheckCircle size={18} className="text-green-600" />}
+                      {projectVariables.find(v => v.name === varName)?.description && (
+                        <p className="text-xs text-gray-500 mt-1 ml-[204px]">
+                          {projectVariables.find(v => v.name === varName)?.description}
+                        </p>
+                      )}
                     </div>
                   )
                 })}
@@ -446,7 +491,7 @@ Campaña 2,Problema B,México,Retail`}
 
               <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-700">
-                  💡 Las columnas se auto-detectaron por nombre similar. Ajusta manualmente si es necesario.
+                  💡 Mapea desde CSV o escribe un valor fijo que se aplicará a todas las campañas.
                 </p>
               </div>
             </>
@@ -563,7 +608,9 @@ Campaña 2,Problema B,México,Retail`}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
           <div className="text-sm text-gray-500">
             {step === 'mapping' && rawCsvData && (
-              <span>{Object.keys(columnMapping).filter(k => columnMapping[k]).length} de {allVariables.length} variables mapeadas</span>
+              <span>
+                {Object.keys(columnMapping).filter(k => columnMapping[k]).length + Object.keys(fixedValues).filter(k => fixedValues[k]).length} de {uniqueVariables.length} variables configuradas
+              </span>
             )}
             {step === 'preview' && campaigns.length > 0 && (
               <span className="inline-flex items-center gap-1">
@@ -585,7 +632,7 @@ Campaña 2,Problema B,México,Retail`}
                 </button>
                 <button
                   onClick={applyMapping}
-                  disabled={!columnMapping['ecp_name']}
+                  disabled={!columnMapping['ecp_name'] && !fixedValues['ecp_name']}
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-2"
                 >
                   Aplicar mapeo
