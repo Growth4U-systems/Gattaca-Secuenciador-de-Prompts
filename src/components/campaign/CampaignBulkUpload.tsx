@@ -53,14 +53,27 @@ export default function CampaignBulkUpload({
       return
     }
 
-    // Parse headers - support both comma and semicolon separators
-    const separator = lines[0].includes(';') ? ';' : ','
+    // Detect separator: tab, semicolon, or comma (in priority order)
     const headerLine = lines[0]
-    const parsedHeaders = parseCSVLine(headerLine, separator).map(h => h.trim().toLowerCase())
+    let separator = ','
+    if (headerLine.includes('\t')) {
+      separator = '\t'
+    } else if (headerLine.includes(';')) {
+      separator = ';'
+    }
+
+    // Parse and clean headers - remove {{ }} if present, trim, lowercase
+    const rawHeaders = parseCSVLine(headerLine, separator)
+    const parsedHeaders = rawHeaders.map(h => {
+      let cleaned = h.trim()
+      // Remove {{ and }} from header names
+      cleaned = cleaned.replace(/^\{\{/, '').replace(/\}\}$/, '')
+      return cleaned.toLowerCase()
+    })
 
     // Validate required header
     if (!parsedHeaders.includes('ecp_name')) {
-      setErrors(['El CSV debe incluir una columna "ecp_name" para el nombre de cada campaña'])
+      setErrors(['El CSV debe incluir una columna "ecp_name" o "{{ecp_name}}" para el nombre de cada campaña'])
       return
     }
 
@@ -343,10 +356,10 @@ Campaña 2,Problema B,México,Retail,valor3,valor4`}
                 <h4 className="font-medium text-blue-800 mb-2">Formato del CSV:</h4>
                 <ul className="text-sm text-blue-700 space-y-1">
                   <li>• La primera fila debe ser los nombres de las columnas (headers)</li>
+                  <li>• Los headers pueden tener formato <code className="bg-blue-100 px-1 rounded">{'{{variable}}'}</code> o solo <code className="bg-blue-100 px-1 rounded">variable</code></li>
                   <li>• <code className="bg-blue-100 px-1 rounded">ecp_name</code> es obligatorio - es el nombre de cada campaña</li>
-                  <li>• Columnas opcionales: <code className="bg-blue-100 px-1 rounded">problem_core</code>, <code className="bg-blue-100 px-1 rounded">country</code>, <code className="bg-blue-100 px-1 rounded">industry</code></li>
-                  <li>• Cualquier otra columna se guardará como variable personalizada</li>
-                  <li>• Soporta separadores: coma (,) o punto y coma (;)</li>
+                  <li>• Soporta separadores: tabulador, coma (,) o punto y coma (;)</li>
+                  <li>• Solo se importarán las variables definidas en el proyecto</li>
                 </ul>
 
                 {projectVariables.length > 0 && (
