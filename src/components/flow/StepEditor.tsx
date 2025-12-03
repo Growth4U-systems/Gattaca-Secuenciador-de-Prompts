@@ -107,6 +107,25 @@ export default function StepEditor({
 
         {/* Content - Scrollable */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Step Order */}
+          <div>
+            <label className="block font-medium text-gray-900 mb-2">
+              🔢 Position (Order)
+            </label>
+            <input
+              type="number"
+              min="1"
+              value={editedStep.order}
+              onChange={(e) =>
+                setEditedStep((prev) => ({ ...prev, order: parseInt(e.target.value) || 1 }))
+              }
+              className="w-32 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Los pasos se ejecutan en orden ascendente. Al guardar, los pasos se reordenarán automáticamente.
+            </p>
+          </div>
+
           {/* Step Name */}
           <div>
             <label className="block font-medium text-gray-900 mb-2">

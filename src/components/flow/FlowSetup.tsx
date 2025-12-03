@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Save, Edit, FileText, ArrowRight, Trash2, Plus } from 'lucide-react'
+import { Save, Edit, FileText, ArrowRight, Trash2, Plus, ChevronUp, ChevronDown, RefreshCw } from 'lucide-react'
 import { FlowStep, FlowConfig } from '@/types/flow.types'
 import { DEFAULT_FLOW_CONFIG } from '@/lib/defaultFlowConfig'
 import StepEditor from './StepEditor'
@@ -129,6 +129,61 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
     setEditingStep(newStep)
   }
 
+  // Move step up (decrease order)
+  const handleMoveUp = (stepId: string) => {
+    const sortedSteps = [...flowConfig.steps].sort((a, b) => a.order - b.order)
+    const currentIndex = sortedSteps.findIndex(s => s.id === stepId)
+
+    if (currentIndex <= 0) return // Already at top
+
+    // Swap orders with previous step
+    const currentStep = sortedSteps[currentIndex]
+    const prevStep = sortedSteps[currentIndex - 1]
+
+    setFlowConfig((prev) => ({
+      ...prev,
+      steps: prev.steps.map((step) => {
+        if (step.id === currentStep.id) return { ...step, order: prevStep.order }
+        if (step.id === prevStep.id) return { ...step, order: currentStep.order }
+        return step
+      }),
+    }))
+  }
+
+  // Move step down (increase order)
+  const handleMoveDown = (stepId: string) => {
+    const sortedSteps = [...flowConfig.steps].sort((a, b) => a.order - b.order)
+    const currentIndex = sortedSteps.findIndex(s => s.id === stepId)
+
+    if (currentIndex >= sortedSteps.length - 1) return // Already at bottom
+
+    // Swap orders with next step
+    const currentStep = sortedSteps[currentIndex]
+    const nextStep = sortedSteps[currentIndex + 1]
+
+    setFlowConfig((prev) => ({
+      ...prev,
+      steps: prev.steps.map((step) => {
+        if (step.id === currentStep.id) return { ...step, order: nextStep.order }
+        if (step.id === nextStep.id) return { ...step, order: currentStep.order }
+        return step
+      }),
+    }))
+  }
+
+  // Auto-renumber all steps sequentially (1, 2, 3, ...)
+  const handleAutoRenumber = () => {
+    const sortedSteps = [...flowConfig.steps].sort((a, b) => a.order - b.order)
+
+    setFlowConfig((prev) => ({
+      ...prev,
+      steps: prev.steps.map((step) => {
+        const newOrder = sortedSteps.findIndex(s => s.id === step.id) + 1
+        return { ...step, order: newOrder }
+      }),
+    }))
+  }
+
   if (loading) {
     return (
       <div className="text-center py-12">
@@ -148,13 +203,23 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
             Configure documents and prompts for each step. This configuration will be used for all campaigns.
           </p>
         </div>
-        <button
-          onClick={handleAddStep}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center gap-2"
-        >
-          <Plus size={18} />
-          Add Step
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleAutoRenumber}
+            className="px-3 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 inline-flex items-center gap-2"
+            title="Renumerar pasos secuencialmente (1, 2, 3...)"
+          >
+            <RefreshCw size={16} />
+            Renumerar
+          </button>
+          <button
+            onClick={handleAddStep}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center gap-2"
+          >
+            <Plus size={18} />
+            Add Step
+          </button>
+        </div>
       </div>
 
       {/* Steps list */}
@@ -175,6 +240,25 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
                   )}
                 </div>
                 <div className="flex gap-2">
+                  {/* Move up/down buttons */}
+                  <div className="flex flex-col gap-0.5">
+                    <button
+                      onClick={() => handleMoveUp(step.id)}
+                      disabled={index === 0}
+                      className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Mover arriba"
+                    >
+                      <ChevronUp size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleMoveDown(step.id)}
+                      disabled={index === sortedSteps.length - 1}
+                      className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Mover abajo"
+                    >
+                      <ChevronDown size={16} />
+                    </button>
+                  </div>
                   <button
                     onClick={() => setEditingStep(step)}
                     className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 inline-flex items-center gap-1"
