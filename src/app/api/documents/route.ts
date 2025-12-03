@@ -3,6 +3,19 @@ import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
 
+function getSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  )
+}
+
 /**
  * GET /api/documents?projectId=xxx[&campaignId=xxx]
  * List documents for a project, optionally filtered by campaign
@@ -22,16 +35,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    )
+    const supabase = getSupabaseClient()
 
     let query = supabase
       .from('knowledge_base_docs')
@@ -59,6 +63,53 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('List documents error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * PATCH /api/documents
+ * Update document campaign assignment
+ * Body: { documentId: string, campaignId: string | null }
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { documentId, campaignId } = body
+
+    if (!documentId) {
+      return NextResponse.json(
+        { error: 'Missing documentId' },
+        { status: 400 }
+      )
+    }
+
+    const supabase = getSupabaseClient()
+
+    const { data: document, error } = await supabase
+      .from('knowledge_base_docs')
+      .update({ campaign_id: campaignId || null })
+      .eq('id', documentId)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Database error:', error)
+      return NextResponse.json(
+        { error: 'Failed to update document', details: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      document,
+    })
+  } catch (error) {
+    console.error('Update document error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

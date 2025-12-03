@@ -1,6 +1,7 @@
 'use client'
 
-import { FileText, Trash2, Eye } from 'lucide-react'
+import { useState } from 'react'
+import { FileText, Trash2, Eye, Link2 } from 'lucide-react'
 import { DocCategory } from '@/types/database.types'
 import { formatTokenCount } from '@/lib/supabase'
 
@@ -11,19 +12,48 @@ interface Document {
   token_count: number | null
   file_size_bytes: number | null
   created_at: string
+  campaign_id?: string | null
+}
+
+interface Campaign {
+  id: string
+  ecp_name: string
 }
 
 interface DocumentListProps {
   documents: Document[]
+  campaigns?: Campaign[]
   onDelete: (id: string) => void
   onView: (doc: Document) => void
+  onCampaignChange?: (docId: string, campaignId: string | null) => void
 }
 
 export default function DocumentList({
   documents,
+  campaigns = [],
   onDelete,
   onView,
+  onCampaignChange,
 }: DocumentListProps) {
+  const [updatingDoc, setUpdatingDoc] = useState<string | null>(null)
+
+  const handleCampaignChange = async (docId: string, campaignId: string) => {
+    if (!onCampaignChange) return
+
+    setUpdatingDoc(docId)
+    try {
+      await onCampaignChange(docId, campaignId === '' ? null : campaignId)
+    } finally {
+      setUpdatingDoc(null)
+    }
+  }
+
+  const getCampaignName = (campaignId: string | null | undefined) => {
+    if (!campaignId) return null
+    const campaign = campaigns.find(c => c.id === campaignId)
+    return campaign?.ecp_name || 'Unknown'
+  }
+
   const getCategoryBadge = (category: DocCategory) => {
     const styles = {
       product: 'bg-blue-100 text-blue-800',
@@ -76,7 +106,7 @@ export default function DocumentList({
                 </h3>
               </div>
 
-              <div className="flex items-center gap-3 text-sm text-gray-600">
+              <div className="flex items-center flex-wrap gap-3 text-sm text-gray-600">
                 {getCategoryBadge(doc.category)}
                 {doc.token_count && (
                   <span className="text-gray-500">
@@ -92,6 +122,34 @@ export default function DocumentList({
                   {new Date(doc.created_at).toLocaleDateString('es-ES')}
                 </span>
               </div>
+
+              {/* Campaign Assignment */}
+              {campaigns.length > 0 && onCampaignChange && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Link2 size={16} className="text-gray-400" />
+                  <select
+                    value={doc.campaign_id || ''}
+                    onChange={(e) => handleCampaignChange(doc.id, e.target.value)}
+                    disabled={updatingDoc === doc.id}
+                    className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 text-gray-700 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                  >
+                    <option value="">📂 Documento general (todas las campañas)</option>
+                    {campaigns.map(campaign => (
+                      <option key={campaign.id} value={campaign.id}>
+                        🎯 {campaign.ecp_name}
+                      </option>
+                    ))}
+                  </select>
+                  {updatingDoc === doc.id && (
+                    <span className="text-xs text-gray-500">Guardando...</span>
+                  )}
+                  {doc.campaign_id && (
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                      Asignado a campaña
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2">

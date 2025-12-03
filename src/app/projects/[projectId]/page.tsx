@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, FileText, Settings, Rocket, Database, Workflow, Sliders, Edit2, Check, X, Trash2 } from 'lucide-react'
@@ -279,6 +279,23 @@ function DocumentsTab({
 }) {
   const [viewingDoc, setViewingDoc] = useState<any | null>(null)
   const [showGuide, setShowGuide] = useState(true)
+  const [campaigns, setCampaigns] = useState<Array<{ id: string; ecp_name: string }>>([])
+
+  // Load campaigns for assignment
+  useEffect(() => {
+    const loadCampaigns = async () => {
+      try {
+        const response = await fetch(`/api/campaign/create?projectId=${projectId}`)
+        const data = await response.json()
+        if (data.success) {
+          setCampaigns(data.campaigns || [])
+        }
+      } catch (error) {
+        console.error('Error loading campaigns:', error)
+      }
+    }
+    loadCampaigns()
+  }, [projectId])
 
   const handleDelete = async (docId: string) => {
     try {
@@ -286,6 +303,26 @@ function DocumentsTab({
       onReload()
     } catch (error) {
       alert(`Error al eliminar: ${error instanceof Error ? error.message : 'Unknown'}`)
+    }
+  }
+
+  const handleCampaignChange = async (docId: string, campaignId: string | null) => {
+    try {
+      const response = await fetch('/api/documents', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ documentId: docId, campaignId }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        onReload() // Reload documents to reflect the change
+      } else {
+        throw new Error(data.error || 'Failed to update')
+      }
+    } catch (error) {
+      alert(`Error al asignar documento: ${error instanceof Error ? error.message : 'Unknown'}`)
     }
   }
 
@@ -332,8 +369,7 @@ function DocumentsTab({
                 </div>
               </div>
               <p className="text-xs text-blue-700 mt-3">
-                💡 <strong>Tip:</strong> Los documentos que subas aquí aplican a todas las campañas del proyecto.
-                En el futuro podrás asignar documentos específicos a campañas individuales.
+                💡 <strong>Tip:</strong> Los documentos sin asignar aplican a todas las campañas. Usa el selector de campaña en cada documento para asignarlo a una campaña específica.
               </p>
             </div>
             <button
@@ -356,7 +392,13 @@ function DocumentsTab({
       {loading ? (
         <p className="text-gray-500 text-center py-8">Cargando documentos...</p>
       ) : (
-        <DocumentList documents={documents} onDelete={handleDelete} onView={setViewingDoc} />
+        <DocumentList
+          documents={documents}
+          campaigns={campaigns}
+          onDelete={handleDelete}
+          onView={setViewingDoc}
+          onCampaignChange={handleCampaignChange}
+        />
       )}
 
       {/* Document Viewer Modal */}
