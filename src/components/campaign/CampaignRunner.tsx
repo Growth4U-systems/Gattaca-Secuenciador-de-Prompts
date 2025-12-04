@@ -691,6 +691,53 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     }
   }
 
+  // Copy all prompts from a campaign in markdown format for Notion
+  const copyAllPromptsAsMarkdown = async (campaign: Campaign) => {
+    const flowConfig = campaign.flow_config || project?.flow_config
+    if (!flowConfig?.steps) {
+      alert('No hay pasos configurados en esta campaña')
+      return
+    }
+
+    const campaignVars = campaign.custom_variables as Record<string, string> || {}
+    const sortedSteps = [...flowConfig.steps].sort((a, b) => a.order - b.order)
+
+    let markdown = `# ${campaign.ecp_name}\n\n`
+    markdown += `**Problema:** ${campaign.problem_core}\n`
+    markdown += `**País:** ${campaign.country}\n`
+    markdown += `**Industria:** ${campaign.industry}\n\n`
+    markdown += `---\n\n`
+
+    // Add each step prompt
+    sortedSteps.forEach((step, index) => {
+      const processedPrompt = getPromptWithRealValues(step.prompt, campaignVars)
+      markdown += `## ${step.order}. ${step.name}\n\n`
+      if (step.description) {
+        markdown += `> ${step.description}\n\n`
+      }
+      markdown += `\`\`\`\n${processedPrompt}\n\`\`\`\n\n`
+    })
+
+    // Add research prompts if any
+    if (project?.deep_research_prompts?.length > 0) {
+      markdown += `---\n\n## 🔬 Prompts de Investigación\n\n`
+      project.deep_research_prompts.forEach((prompt: { name: string; content: string }) => {
+        const processedPrompt = getPromptWithRealValues(prompt.content, campaignVars)
+        markdown += `### ${prompt.name}\n\n`
+        markdown += `\`\`\`\n${processedPrompt}\n\`\`\`\n\n`
+      })
+    }
+
+    try {
+      await navigator.clipboard.writeText(markdown)
+      setCopiedPromptId(`all-${campaign.id}`)
+      setTimeout(() => setCopiedPromptId(null), 2000)
+    } catch (error) {
+      console.error('Error copying to clipboard:', error)
+      alert('No se pudo copiar al portapapeles')
+    }
+  }
+
   // Filter campaigns based on search and status
   const filteredCampaigns = campaigns.filter(campaign => {
     const matchesSearch = searchQuery === '' ||
@@ -1181,6 +1228,17 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                           </div>
                         )}
                       </div>
+                      <button
+                        onClick={() => copyAllPromptsAsMarkdown(campaign)}
+                        className={`p-2 rounded-lg ${
+                          copiedPromptId === `all-${campaign.id}`
+                            ? 'bg-green-100 text-green-600'
+                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                        }`}
+                        title="Copiar prompts en Markdown (para Notion)"
+                      >
+                        {copiedPromptId === `all-${campaign.id}` ? <Check size={16} /> : <Copy size={16} />}
+                      </button>
                       <button
                         onClick={() => handleDuplicateCampaign(campaign)}
                         className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
