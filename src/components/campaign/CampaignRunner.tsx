@@ -1072,7 +1072,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
           <p className="text-sm mt-2">Intenta con otros filtros</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {filteredCampaigns.map((campaign) => {
             const varsCount = campaign.custom_variables ? Object.keys(campaign.custom_variables).length : 0
             const stepsCount = campaign.step_outputs ? Object.keys(campaign.step_outputs).length : 0
@@ -1083,25 +1083,27 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             return (
               <div
                 key={campaign.id}
-                className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:border-gray-300 transition-colors"
+                className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-gray-300 transition-colors"
               >
-                {/* Compact Header - Always Visible */}
+                {/* Row Header - Full Width */}
                 <div
-                  className="p-4 cursor-pointer"
+                  className="cursor-pointer"
                   onClick={() => toggleCampaignExpanded(campaign.id)}
                 >
-                  <div className="flex items-center gap-4">
-                    {/* Expand/Collapse Icon */}
-                    <button className="p-1 text-gray-400 hover:text-gray-600 rounded">
+                  {/* Main Row */}
+                  <div className="px-4 py-3 flex items-start gap-3">
+                    {/* Expand Icon */}
+                    <button className="mt-1 p-0.5 text-gray-400 hover:text-gray-600 rounded flex-shrink-0">
                       <ChevronRight
-                        size={20}
+                        size={18}
                         className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                       />
                     </button>
 
-                    {/* Campaign Info */}
+                    {/* Campaign Content - Full Width */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3">
+                      {/* Title Row */}
+                      <div className="flex items-center gap-2 flex-wrap">
                         {editingCampaignName === campaign.id ? (
                           <div className="flex items-center gap-2 flex-1" onClick={e => e.stopPropagation()}>
                             <input
@@ -1115,143 +1117,121 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                                 if (e.key === 'Escape') handleCancelEditCampaignName()
                               }}
                             />
-                            <button
-                              onClick={() => handleSaveCampaignName(campaign.id)}
-                              className="p-1 bg-green-600 text-white rounded hover:bg-green-700"
-                            >
-                              <Check size={16} />
+                            <button onClick={() => handleSaveCampaignName(campaign.id)} className="p-1 bg-green-600 text-white rounded hover:bg-green-700">
+                              <Check size={14} />
                             </button>
-                            <button
-                              onClick={handleCancelEditCampaignName}
-                              className="p-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                            >
-                              <X size={16} />
+                            <button onClick={handleCancelEditCampaignName} className="p-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
+                              <X size={14} />
                             </button>
                           </div>
                         ) : (
                           <>
-                            <h3 className="font-semibold text-gray-900 truncate">
-                              {campaign.ecp_name}
-                            </h3>
+                            <h3 className="font-semibold text-gray-900">{campaign.ecp_name}</h3>
                             {campaign.status === 'draft' && (
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleEditCampaignName(campaign.id, campaign.ecp_name)
-                                }}
-                                className="p-1 text-gray-400 hover:text-gray-600 rounded opacity-0 group-hover:opacity-100"
+                                onClick={(e) => { e.stopPropagation(); handleEditCampaignName(campaign.id, campaign.ecp_name) }}
+                                className="p-0.5 text-gray-400 hover:text-gray-600 rounded"
                               >
-                                <Edit2 size={14} />
+                                <Edit2 size={12} />
                               </button>
                             )}
+                            {/* Status Badge */}
+                            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1 ${
+                              running === campaign.id ? 'bg-blue-100 text-blue-700'
+                                : campaign.status === 'completed' ? 'bg-green-100 text-green-700'
+                                : campaign.status === 'error' ? 'bg-red-100 text-red-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {running === campaign.id ? <Clock size={10} className="animate-spin" /> : getStatusIcon(campaign.status)}
+                              {running === campaign.id ? 'Ejecutando' : getStatusLabel(campaign.status)}
+                            </span>
+                            {/* Progress */}
+                            <span className="text-xs text-gray-500 ml-2">{stepsCount}/{totalSteps} pasos ({progress}%)</span>
                           </>
                         )}
                       </div>
-                      {/* Quick Info */}
-                      <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                        {campaign.country && <span>{campaign.country}</span>}
-                        {campaign.industry && <span>• {campaign.industry}</span>}
-                        <span>• {stepsCount}/{totalSteps} pasos</span>
-                        {varsCount > 0 && <span>• {varsCount} variables</span>}
+
+                      {/* Details Row - Always Visible */}
+                      <div className="mt-1.5 text-sm text-gray-600 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-1">
+                        {campaign.problem_core && (
+                          <div className="col-span-1 md:col-span-2">
+                            <span className="text-gray-400 text-xs">Problema:</span>{' '}
+                            <span className="text-gray-700">{campaign.problem_core}</span>
+                          </div>
+                        )}
+                        {campaign.country && (
+                          <div>
+                            <span className="text-gray-400 text-xs">País:</span>{' '}
+                            <span className="text-gray-700">{campaign.country}</span>
+                          </div>
+                        )}
+                        {campaign.industry && (
+                          <div>
+                            <span className="text-gray-400 text-xs">Industria:</span>{' '}
+                            <span className="text-gray-700">{campaign.industry}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    {/* Progress Bar */}
-                    <div className="w-24 hidden sm:block" onClick={e => e.stopPropagation()}>
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all ${
-                            progress === 100 ? 'bg-green-500' : 'bg-blue-500'
-                          }`}
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-500 text-center mt-1">{progress}%</p>
-                    </div>
-
-                    {/* Status */}
-                    <div
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1.5 ${
-                        running === campaign.id
-                          ? 'bg-blue-100 text-blue-700'
-                          : campaign.status === 'completed'
-                          ? 'bg-green-100 text-green-700'
-                          : campaign.status === 'error'
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      {running === campaign.id ? (
-                        <Clock size={12} className="animate-spin" />
-                      ) : (
-                        getStatusIcon(campaign.status)
-                      )}
-                      {running === campaign.id ? 'Ejecutando' : getStatusLabel(campaign.status)}
-                    </div>
-
-                    {/* Quick Actions */}
-                    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                      {/* Show reset button for stuck campaigns */}
+                    {/* Actions - Right Side */}
+                    <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                      {/* Reset button for stuck campaigns */}
                       {campaign.status === 'running' && running !== campaign.id && (
                         <button
                           onClick={() => handleResetCampaignStatus(campaign.id)}
-                          className="p-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
-                          title="Resetear estado (campaña atascada)"
+                          className="p-1.5 bg-orange-500 text-white rounded hover:bg-orange-600"
+                          title="Resetear estado"
                         >
-                          <RefreshCw size={16} />
+                          <RefreshCw size={14} />
                         </button>
                       )}
                       <button
                         onClick={() => handleRunCampaign(campaign.id)}
                         disabled={running === campaign.id}
-                        className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                        title="Ejecutar campaña"
+                        className="p-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300"
+                        title="Ejecutar"
                       >
-                        <Play size={16} />
+                        <Play size={14} />
                       </button>
                       <div className="relative">
                         <button
                           onClick={() => setDownloadFormatMenu(downloadFormatMenu === campaign.id ? null : campaign.id)}
                           disabled={stepsCount === 0}
-                          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-30"
+                          className="p-1.5 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-30"
                           title="Descargar"
                         >
-                          <Download size={16} />
+                          <Download size={14} />
                         </button>
                         {downloadFormatMenu === campaign.id && (
-                          <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[140px] py-1">
-                            <button onClick={() => downloadAllOutputs(campaign, 'text')} className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">Texto</button>
-                            <button onClick={() => downloadAllOutputs(campaign, 'markdown')} className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">Markdown</button>
-                            <button onClick={() => downloadAllOutputs(campaign, 'html')} className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">HTML</button>
-                            <button onClick={() => downloadAllOutputs(campaign, 'json')} className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">JSON</button>
+                          <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[120px] py-1">
+                            <button onClick={() => downloadAllOutputs(campaign, 'text')} className="w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50">Texto</button>
+                            <button onClick={() => downloadAllOutputs(campaign, 'markdown')} className="w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50">Markdown</button>
+                            <button onClick={() => downloadAllOutputs(campaign, 'html')} className="w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50">HTML</button>
+                            <button onClick={() => downloadAllOutputs(campaign, 'json')} className="w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50">JSON</button>
                           </div>
                         )}
                       </div>
                       <button
                         onClick={() => copyAllPromptsAsMarkdown(campaign)}
-                        className={`p-2 rounded-lg ${
-                          copiedPromptId === `all-${campaign.id}`
-                            ? 'bg-green-100 text-green-600'
-                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                        }`}
-                        title="Copiar prompts en Markdown (para Notion)"
+                        className={`p-1.5 rounded ${copiedPromptId === `all-${campaign.id}` ? 'bg-green-100 text-green-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                        title="Copiar prompts (Markdown)"
                       >
-                        {copiedPromptId === `all-${campaign.id}` ? <Check size={16} /> : <Copy size={16} />}
+                        {copiedPromptId === `all-${campaign.id}` ? <Check size={14} /> : <Copy size={14} />}
                       </button>
                       <button
                         onClick={() => handleDuplicateCampaign(campaign)}
-                        className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+                        className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"
                         title="Duplicar"
                       >
-                        <Plus size={16} />
+                        <Plus size={14} />
                       </button>
                       <button
                         onClick={() => handleDeleteCampaign(campaign.id, campaign.ecp_name)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
                         title="Eliminar"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
