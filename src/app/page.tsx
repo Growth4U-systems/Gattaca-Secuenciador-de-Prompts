@@ -12,9 +12,9 @@ export default function HomePage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">ECP Generator</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Gattaca (secuenciador de prompts)</h1>
             <p className="mt-2 text-gray-600">
-              Sistema automatizado para generar estrategias de marketing ECP
+              Sistema automatizado para generar estrategias de marketing
             </p>
           </div>
           <Link
@@ -45,7 +45,7 @@ export default function HomePage() {
               No hay proyectos todavía
             </h3>
             <p className="text-gray-600 mb-6">
-              Crea tu primer proyecto para empezar a generar estrategias ECP
+              Crea tu primer proyecto para empezar a generar estrategias
             </p>
             <Link
               href="/projects/new"
