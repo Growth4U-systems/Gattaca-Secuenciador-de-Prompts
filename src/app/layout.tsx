@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'ECP Generator',
-  description: 'Sistema automatizado para generar estrategias de marketing ECP',
+  title: 'Gattaca (secuenciador de prompts)',
+  description: 'Sistema automatizado para generar estrategias de marketing',
 }
 
 export default function RootLayout({
