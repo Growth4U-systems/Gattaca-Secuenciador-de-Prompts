@@ -30,6 +30,26 @@ export default function CampaignFlowEditor({
   const [saving, setSaving] = useState(false)
   const [editingStep, setEditingStep] = useState<FlowStep | null>(null)
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S or Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        if (!saving && !editingStep) {
+          handleSave()
+        }
+      }
+      // Escape to close
+      if (e.key === 'Escape' && !editingStep) {
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [saving, editingStep])
+
   const handleSave = async () => {
     if (!flowConfig) return
 

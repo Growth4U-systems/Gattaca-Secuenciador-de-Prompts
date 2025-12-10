@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { X, Eye, Code, Copy, Check } from 'lucide-react'
 import { FlowStep, OutputFormat } from '@/types/flow.types'
 import { formatTokenCount } from '@/lib/supabase'
@@ -38,6 +38,29 @@ export default function StepEditor({
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
   const [showRealValues, setShowRealValues] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  // Handle save with keyboard
+  const handleSaveStep = useCallback(() => {
+    onSave(editedStep)
+  }, [editedStep, onSave])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S or Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        handleSaveStep()
+      }
+      // Escape to cancel
+      if (e.key === 'Escape') {
+        onCancel()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleSaveStep, onCancel])
 
   // Copy prompt to clipboard
   const handleCopyPrompt = async (withValues: boolean = false) => {
@@ -512,19 +535,24 @@ export default function StepEditor({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-200 flex gap-3">
-          <button
-            onClick={() => onSave(editedStep)}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Save Step
-          </button>
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-          >
-            Cancel
-          </button>
+        <div className="p-6 border-t border-gray-200">
+          <div className="flex gap-3 mb-2">
+            <button
+              onClick={() => onSave(editedStep)}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Save Step
+            </button>
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 text-center">
+            Atajos: <kbd className="px-1.5 py-0.5 bg-gray-100 rounded border border-gray-300">Ctrl+S</kbd> guardar · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded border border-gray-300">Esc</kbd> cancelar
+          </p>
         </div>
       </div>
     </div>
