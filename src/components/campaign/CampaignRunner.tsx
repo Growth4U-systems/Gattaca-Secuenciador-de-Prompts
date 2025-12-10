@@ -1617,11 +1617,15 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
       {/* Campaign Flow Editor */}
       {editingFlowCampaignId && (() => {
         const editingCampaign = campaigns.find(c => c.id === editingFlowCampaignId)
+        // Filter documents: show global docs (no campaign_id) + docs assigned to this campaign
+        const filteredDocuments = documents.filter(doc =>
+          !doc.campaign_id || doc.campaign_id === editingFlowCampaignId
+        )
         return (
           <CampaignFlowEditor
             campaignId={editingFlowCampaignId}
             initialFlowConfig={editingCampaign?.flow_config || project?.flow_config || null}
-            documents={documents}
+            documents={filteredDocuments}
             projectVariables={project?.variable_definitions || []}
             campaignVariables={editingCampaign?.custom_variables as Record<string, string> || {}}
             onClose={() => setEditingFlowCampaignId(null)}
