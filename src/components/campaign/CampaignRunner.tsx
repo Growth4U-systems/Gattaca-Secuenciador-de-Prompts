@@ -599,8 +599,6 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     switch (status) {
       case 'completed':
         return <CheckCircle size={20} className="text-green-600" />
-      case 'running':
-        return <Clock size={20} className="text-blue-600 animate-spin" />
       case 'error':
         return <AlertCircle size={20} className="text-red-600" />
       default:
@@ -612,14 +610,11 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     switch (status) {
       case 'completed':
         return 'Completed'
-      case 'running':
-        return 'Running...'
       case 'error':
         return 'Error'
       case 'draft':
-        return 'Ready to run'
       default:
-        return status
+        return 'Ready to run'
     }
   }
 
@@ -1192,9 +1187,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                     {/* Status */}
                     <div
                       className={`px-2.5 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1.5 ${
-                        running === campaign.id
-                          ? 'bg-blue-100 text-blue-700'
-                          : campaign.status === 'completed'
+                        campaign.status === 'completed'
                           ? 'bg-green-100 text-green-700'
                           : campaign.status === 'error'
                           ? 'bg-red-100 text-red-700'
@@ -1202,26 +1195,12 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                       }`}
                       onClick={e => e.stopPropagation()}
                     >
-                      {running === campaign.id ? (
-                        <Clock size={12} className="animate-spin" />
-                      ) : (
-                        getStatusIcon(campaign.status)
-                      )}
-                      {running === campaign.id ? 'Ejecutando' : getStatusLabel(campaign.status)}
+                      {getStatusIcon(campaign.status)}
+                      {getStatusLabel(campaign.status)}
                     </div>
 
                     {/* Quick Actions */}
                     <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                      {/* Show reset button for stuck campaigns */}
-                      {campaign.status === 'running' && running !== campaign.id && (
-                        <button
-                          onClick={() => handleResetCampaignStatus(campaign.id)}
-                          className="p-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
-                          title="Resetear estado (campaña atascada)"
-                        >
-                          <RefreshCw size={16} />
-                        </button>
-                      )}
                       <button
                         onClick={() => handleRunCampaign(campaign.id)}
                         disabled={running === campaign.id}
