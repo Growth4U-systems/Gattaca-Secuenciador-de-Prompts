@@ -332,14 +332,18 @@ export default function StepEditor({
 
             <p className="text-xs text-gray-500 mt-2">
               <span className="font-medium">Available variables:</span>{' '}
-              {[
+              {Array.from(new Set([
+                // Base variables
                 'ecp_name',
                 'problem_core',
                 'country',
                 'industry',
                 'client_name',
+                // Project-defined variables
                 ...projectVariables.map((v) => v.name),
-              ].map((varName, index, arr) => (
+                // Campaign variables (may include additional custom vars)
+                ...Object.keys(campaignVariables),
+              ])).map((varName, index, arr) => (
                 <span key={varName}>
                   <code className="text-gray-700 bg-gray-100 px-1 rounded">
                     {'{'}{'{'} {varName} {'}'}{'}'}
