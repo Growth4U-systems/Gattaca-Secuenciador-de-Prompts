@@ -183,6 +183,115 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     }
   }
 
+  // Duplicate campaign
+  const handleDuplicateCampaign = async (campaign: Campaign) => {
+    if (!confirm(`¿Duplicar la campaña "${campaign.ecp_name}"?`)) return
+
+    try {
+      const newCampaign = {
+        ecp_name: `${campaign.ecp_name} (copia)`,
+        problem_core: campaign.problem_core,
+        country: campaign.country,
+        industry: campaign.industry,
+        custom_variables: campaign.custom_variables,
+        flow_config: campaign.flow_config,
+        research_prompt: campaign.research_prompt,
+      }
+
+      const response = await fetch('/api/campaign/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, ...newCampaign }),
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        loadCampaigns()
+        alert('✅ Campaña duplicada exitosamente')
+      } else {
+        throw new Error(data.error || 'Failed to duplicate')
+      }
+    } catch (error) {
+      console.error('Error duplicating campaign:', error)
+      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  // Export all prompts as JSON or Markdown
+  const handleExportPrompts = (format: 'json' | 'markdown') => {
+    const flowConfig = project?.flow_config
+    if (!flowConfig?.steps?.length) {
+      alert('No hay pasos configurados para exportar')
+      return
+    }
+
+    let content: string
+    let filename: string
+
+    if (format === 'json') {
+      const exportData = {
+        project: project?.name,
+        exportedAt: new Date().toISOString(),
+        steps: flowConfig.steps.map(step => ({
+          order: step.order,
+          name: step.name,
+          description: step.description,
+          prompt: step.prompt,
+          output_format: step.output_format,
+        })),
+        variables: project?.variable_definitions || [],
+      }
+      content = JSON.stringify(exportData, null, 2)
+      filename = `prompts-${project?.name || 'export'}.json`
+    } else {
+      // Markdown format
+      const lines = [
+        `# Prompts - ${project?.name || 'Proyecto'}`,
+        '',
+        `Exportado: ${new Date().toLocaleString()}`,
+        '',
+        '---',
+        '',
+      ]
+
+      // Add variables section
+      if (project?.variable_definitions?.length) {
+        lines.push('## Variables disponibles', '')
+        project.variable_definitions.forEach(v => {
+          lines.push(`- **${v.name}**: ${v.description || 'Sin descripción'} (default: "${v.default_value || ''}")`)
+        })
+        lines.push('', '---', '')
+      }
+
+      // Add steps
+      flowConfig.steps.sort((a, b) => a.order - b.order).forEach(step => {
+        lines.push(`## ${step.order}. ${step.name}`, '')
+        if (step.description) {
+          lines.push(`*${step.description}*`, '')
+        }
+        lines.push('### Prompt:', '', '```')
+        lines.push(step.prompt)
+        lines.push('```', '')
+        lines.push(`**Formato de salida:** ${step.output_format || 'text'}`, '')
+        lines.push('---', '')
+      })
+
+      content = lines.join('\n')
+      filename = `prompts-${project?.name || 'export'}.md`
+    }
+
+    // Download file
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   // Sync with project prop if provided
   useEffect(() => {
     if (projectProp) {
@@ -903,6 +1012,29 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             <FileSpreadsheet size={18} />
             Importar CSV
           </button>
+          {/* Export Prompts Dropdown */}
+          <div className="relative group">
+            <button
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 inline-flex items-center gap-2"
+            >
+              <Download size={18} />
+              Exportar Prompts
+            </button>
+            <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+              <button
+                onClick={() => handleExportPrompts('json')}
+                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-t-lg"
+              >
+                📄 Exportar como JSON
+              </button>
+              <button
+                onClick={() => handleExportPrompts('markdown')}
+                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-b-lg"
+              >
+                📝 Exportar como Markdown
+              </button>
+            </div>
+          </div>
           <button
             onClick={() => {
               if (showNewForm) {

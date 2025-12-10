@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Eye, Code } from 'lucide-react'
+import { X, Eye, Code, Copy, Check } from 'lucide-react'
 import { FlowStep, OutputFormat } from '@/types/flow.types'
 import { formatTokenCount } from '@/lib/supabase'
 
@@ -37,6 +37,19 @@ export default function StepEditor({
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
   const [showRealValues, setShowRealValues] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  // Copy prompt to clipboard
+  const handleCopyPrompt = async (withValues: boolean = false) => {
+    const textToCopy = withValues ? getPromptWithRealValues(editedStep.prompt) : editedStep.prompt
+    try {
+      await navigator.clipboard.writeText(textToCopy)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
 
   // Reemplazar variables en el prompt con valores reales
   const getPromptWithRealValues = (prompt: string): string => {
@@ -353,29 +366,52 @@ export default function StepEditor({
               <label className="block font-medium text-gray-900">
                 📝 Prompt
               </label>
-              {hasVariables && (
+              <div className="flex items-center gap-2">
+                {/* Copy buttons */}
                 <button
                   type="button"
-                  onClick={() => setShowRealValues(!showRealValues)}
-                  className={`px-3 py-1.5 text-xs rounded-lg inline-flex items-center gap-1.5 transition-colors ${
-                    showRealValues
-                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
+                  onClick={() => handleCopyPrompt(false)}
+                  className="px-2 py-1.5 text-xs rounded-lg inline-flex items-center gap-1 bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                  title="Copiar prompt con variables"
                 >
-                  {showRealValues ? (
-                    <>
-                      <Eye size={14} />
-                      Valores reales
-                    </>
-                  ) : (
-                    <>
-                      <Code size={14} />
-                      Variables genéricas
-                    </>
-                  )}
+                  {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                  Copiar
                 </button>
-              )}
+                {hasVariables && (
+                  <button
+                    type="button"
+                    onClick={() => handleCopyPrompt(true)}
+                    className="px-2 py-1.5 text-xs rounded-lg inline-flex items-center gap-1 bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                    title="Copiar con valores reales"
+                  >
+                    <Copy size={14} />
+                    Con valores
+                  </button>
+                )}
+                {hasVariables && (
+                  <button
+                    type="button"
+                    onClick={() => setShowRealValues(!showRealValues)}
+                    className={`px-3 py-1.5 text-xs rounded-lg inline-flex items-center gap-1.5 transition-colors ${
+                      showRealValues
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {showRealValues ? (
+                      <>
+                        <Eye size={14} />
+                        Valores reales
+                      </>
+                    ) : (
+                      <>
+                        <Code size={14} />
+                        Variables genéricas
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
 
             {showRealValues ? (
