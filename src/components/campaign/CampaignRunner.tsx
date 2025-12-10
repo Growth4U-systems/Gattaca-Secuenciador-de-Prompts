@@ -721,7 +721,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     // Add research prompts if any
     if ((project?.deep_research_prompts?.length ?? 0) > 0) {
       markdown += `---\n\n## 🔬 Prompts de Investigación\n\n`
-      project.deep_research_prompts.forEach((prompt: { name: string; content: string }) => {
+      project!.deep_research_prompts!.forEach((prompt: { name: string; content: string }) => {
         const processedPrompt = getPromptWithRealValues(prompt.content, campaignVars)
         markdown += `### ${prompt.name}\n\n`
         markdown += `\`\`\`\n${processedPrompt}\n\`\`\`\n\n`
