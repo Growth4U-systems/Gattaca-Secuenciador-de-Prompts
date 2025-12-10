@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
 import CampaignBulkUpload from './CampaignBulkUpload'
+import CampaignComparison from './CampaignComparison'
 import { FlowConfig, FlowStep } from '@/types/flow.types'
 
 interface CampaignRunnerProps {
@@ -87,6 +88,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   } | null>(null)
   const [downloadFormatMenu, setDownloadFormatMenu] = useState<string | null>(null)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
+  const [showComparison, setShowComparison] = useState(false)
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('')
@@ -181,6 +183,81 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     } finally {
       setSavingVariables(false)
     }
+  }
+
+  // Export all prompts as JSON or Markdown
+  const handleExportPrompts = (format: 'json' | 'markdown') => {
+    const flowConfig = project?.flow_config
+    if (!flowConfig?.steps?.length) {
+      alert('No hay pasos configurados para exportar')
+      return
+    }
+
+    let content: string
+    let filename: string
+
+    if (format === 'json') {
+      const exportData = {
+        project: project?.name,
+        exportedAt: new Date().toISOString(),
+        steps: flowConfig.steps.map(step => ({
+          order: step.order,
+          name: step.name,
+          description: step.description,
+          prompt: step.prompt,
+          output_format: step.output_format,
+        })),
+        variables: project?.variable_definitions || [],
+      }
+      content = JSON.stringify(exportData, null, 2)
+      filename = `prompts-${project?.name || 'export'}.json`
+    } else {
+      // Markdown format
+      const lines = [
+        `# Prompts - ${project?.name || 'Proyecto'}`,
+        '',
+        `Exportado: ${new Date().toLocaleString()}`,
+        '',
+        '---',
+        '',
+      ]
+
+      // Add variables section
+      if (project?.variable_definitions?.length) {
+        lines.push('## Variables disponibles', '')
+        project.variable_definitions.forEach(v => {
+          lines.push(`- **${v.name}**: ${v.description || 'Sin descripción'} (default: "${v.default_value || ''}")`)
+        })
+        lines.push('', '---', '')
+      }
+
+      // Add steps
+      flowConfig.steps.sort((a, b) => a.order - b.order).forEach(step => {
+        lines.push(`## ${step.order}. ${step.name}`, '')
+        if (step.description) {
+          lines.push(`*${step.description}*`, '')
+        }
+        lines.push('### Prompt:', '', '```')
+        lines.push(step.prompt)
+        lines.push('```', '')
+        lines.push(`**Formato de salida:** ${step.output_format || 'text'}`, '')
+        lines.push('---', '')
+      })
+
+      content = lines.join('\n')
+      filename = `prompts-${project?.name || 'export'}.md`
+    }
+
+    // Download file
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   // Sync with project prop if provided
@@ -599,8 +676,6 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     switch (status) {
       case 'completed':
         return <CheckCircle size={20} className="text-green-600" />
-      case 'running':
-        return <Clock size={20} className="text-blue-600 animate-spin" />
       case 'error':
         return <AlertCircle size={20} className="text-red-600" />
       default:
@@ -612,14 +687,11 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     switch (status) {
       case 'completed':
         return 'Completed'
-      case 'running':
-        return 'Running...'
       case 'error':
         return 'Error'
       case 'draft':
-        return 'Ready to run'
       default:
-        return status
+        return 'Ready to run'
     }
   }
 
@@ -901,6 +973,16 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Campañas</h2>
         <div className="flex gap-3">
+          {campaigns.length >= 2 && (
+            <button
+              onClick={() => setShowComparison(true)}
+              className="px-4 py-2 border border-purple-600 text-purple-600 rounded-lg hover:bg-purple-50 inline-flex items-center gap-2"
+              title="Comparar campañas"
+            >
+              <ArrowLeftRight size={18} />
+              Comparar
+            </button>
+          )}
           <button
             onClick={() => setShowBulkUpload(true)}
             className="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 inline-flex items-center gap-2"
@@ -908,6 +990,29 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             <FileSpreadsheet size={18} />
             Importar CSV
           </button>
+          {/* Export Prompts Dropdown */}
+          <div className="relative group">
+            <button
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 inline-flex items-center gap-2"
+            >
+              <Download size={18} />
+              Exportar Prompts
+            </button>
+            <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+              <button
+                onClick={() => handleExportPrompts('json')}
+                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-t-lg"
+              >
+                📄 Exportar como JSON
+              </button>
+              <button
+                onClick={() => handleExportPrompts('markdown')}
+                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-b-lg"
+              >
+                📝 Exportar como Markdown
+              </button>
+            </div>
+          </div>
           <button
             onClick={() => {
               if (showNewForm) {
@@ -1192,9 +1297,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                     {/* Status */}
                     <div
                       className={`px-2.5 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1.5 ${
-                        running === campaign.id
-                          ? 'bg-blue-100 text-blue-700'
-                          : campaign.status === 'completed'
+                        campaign.status === 'completed'
                           ? 'bg-green-100 text-green-700'
                           : campaign.status === 'error'
                           ? 'bg-red-100 text-red-700'
@@ -1202,26 +1305,12 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                       }`}
                       onClick={e => e.stopPropagation()}
                     >
-                      {running === campaign.id ? (
-                        <Clock size={12} className="animate-spin" />
-                      ) : (
-                        getStatusIcon(campaign.status)
-                      )}
-                      {running === campaign.id ? 'Ejecutando' : getStatusLabel(campaign.status)}
+                      {getStatusIcon(campaign.status)}
+                      {getStatusLabel(campaign.status)}
                     </div>
 
                     {/* Quick Actions */}
                     <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                      {/* Show reset button for stuck campaigns */}
-                      {campaign.status === 'running' && running !== campaign.id && (
-                        <button
-                          onClick={() => handleResetCampaignStatus(campaign.id)}
-                          className="p-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
-                          title="Resetear estado (campaña atascada)"
-                        >
-                          <RefreshCw size={16} />
-                        </button>
-                      )}
                       <button
                         onClick={() => handleRunCampaign(campaign.id)}
                         disabled={running === campaign.id}
@@ -1739,6 +1828,15 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
           />
         )
       })()}
+
+      {/* Campaign Comparison Modal */}
+      {showComparison && campaigns.length >= 2 && (
+        <CampaignComparison
+          campaigns={campaigns}
+          projectFlowConfig={project?.flow_config || null}
+          onClose={() => setShowComparison(false)}
+        />
+      )}
 
       {/* Documentation Guide Modal */}
       {showDocsGuide && (
