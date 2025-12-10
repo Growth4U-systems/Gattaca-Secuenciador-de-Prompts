@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
 import CampaignBulkUpload from './CampaignBulkUpload'
+import CampaignComparison from './CampaignComparison'
 import { FlowConfig, FlowStep } from '@/types/flow.types'
 
 interface CampaignRunnerProps {
@@ -87,6 +88,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   } | null>(null)
   const [downloadFormatMenu, setDownloadFormatMenu] = useState<string | null>(null)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
+  const [showComparison, setShowComparison] = useState(false)
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('')
@@ -1005,6 +1007,16 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Campañas</h2>
         <div className="flex gap-3">
+          {campaigns.length >= 2 && (
+            <button
+              onClick={() => setShowComparison(true)}
+              className="px-4 py-2 border border-purple-600 text-purple-600 rounded-lg hover:bg-purple-50 inline-flex items-center gap-2"
+              title="Comparar campañas"
+            >
+              <ArrowLeftRight size={18} />
+              Comparar
+            </button>
+          )}
           <button
             onClick={() => setShowBulkUpload(true)}
             className="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 inline-flex items-center gap-2"
@@ -1850,6 +1862,15 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
           />
         )
       })()}
+
+      {/* Campaign Comparison Modal */}
+      {showComparison && campaigns.length >= 2 && (
+        <CampaignComparison
+          campaigns={campaigns}
+          projectFlowConfig={project?.flow_config || null}
+          onClose={() => setShowComparison(false)}
+        />
+      )}
 
       {/* Documentation Guide Modal */}
       {showDocsGuide && (

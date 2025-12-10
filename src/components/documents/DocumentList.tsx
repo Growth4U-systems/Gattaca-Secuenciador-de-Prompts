@@ -13,6 +13,7 @@ interface Document {
   file_size_bytes: number | null
   created_at: string
   campaign_id?: string | null
+  extracted_content?: string | null
 }
 
 interface Campaign {
@@ -37,6 +38,7 @@ export default function DocumentList({
 }: DocumentListProps) {
   const [updatingDoc, setUpdatingDoc] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchInContent, setSearchInContent] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'global' | 'assigned'>('all')
 
@@ -49,8 +51,13 @@ export default function DocumentList({
   const filteredDocs = useMemo(() => {
     return documents.filter(doc => {
       // Search filter
-      if (searchQuery && !doc.filename.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return false
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        const matchesFilename = doc.filename.toLowerCase().includes(query)
+        const matchesContent = searchInContent && doc.extracted_content?.toLowerCase().includes(query)
+        if (!matchesFilename && !matchesContent) {
+          return false
+        }
       }
       // Category filter
       if (categoryFilter !== 'all' && doc.category !== categoryFilter) {
@@ -65,7 +72,23 @@ export default function DocumentList({
       }
       return true
     })
-  }, [documents, searchQuery, categoryFilter, assignmentFilter])
+  }, [documents, searchQuery, searchInContent, categoryFilter, assignmentFilter])
+
+  // Get content match snippet
+  const getContentMatchSnippet = (content: string | null | undefined, query: string): string | null => {
+    if (!content || !query) return null
+    const lowerContent = content.toLowerCase()
+    const lowerQuery = query.toLowerCase()
+    const index = lowerContent.indexOf(lowerQuery)
+    if (index === -1) return null
+
+    const start = Math.max(0, index - 50)
+    const end = Math.min(content.length, index + query.length + 50)
+    let snippet = content.substring(start, end)
+    if (start > 0) snippet = '...' + snippet
+    if (end < content.length) snippet = snippet + '...'
+    return snippet
+  }
 
   const handleCampaignChange = async (docId: string, campaignId: string) => {
     if (!onCampaignChange) return
@@ -129,15 +152,26 @@ export default function DocumentList({
       {/* Search and Filters */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar documentos..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-          />
+        <div className="flex-1 min-w-[200px]">
+          <div className="relative">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={searchInContent ? "Buscar en nombre y contenido..." : "Buscar por nombre..."}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+            />
+          </div>
+          <label className="flex items-center gap-2 mt-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={searchInContent}
+              onChange={(e) => setSearchInContent(e.target.checked)}
+              className="w-3.5 h-3.5 text-blue-600 rounded"
+            />
+            <span className="text-xs text-gray-500">Buscar dentro del contenido</span>
+          </label>
         </div>
 
         {/* Category Filter */}
@@ -201,7 +235,12 @@ export default function DocumentList({
       {(searchQuery || categoryFilter !== 'all' || assignmentFilter !== 'all') && (
         <p className="text-sm text-gray-500">
           Mostrando {filteredDocs.length} de {documents.length} documentos
-          {searchQuery && <span className="ml-1">para "{searchQuery}"</span>}
+          {searchQuery && (
+            <span className="ml-1">
+              para "{searchQuery}"
+              {searchInContent && <span className="text-blue-600 ml-1">(búsqueda en contenido)</span>}
+            </span>
+          )}
         </p>
       )}
 
@@ -242,6 +281,24 @@ export default function DocumentList({
                   {new Date(doc.created_at).toLocaleDateString('es-ES')}
                 </span>
               </div>
+
+              {/* Content match snippet */}
+              {searchInContent && searchQuery && (() => {
+                const snippet = getContentMatchSnippet(doc.extracted_content, searchQuery)
+                if (!snippet) return null
+                // Highlight the match
+                const parts = snippet.split(new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
+                return (
+                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-gray-700">
+                    <span className="text-yellow-700 font-medium mr-1">Coincidencia:</span>
+                    {parts.map((part, i) =>
+                      part.toLowerCase() === searchQuery.toLowerCase()
+                        ? <mark key={i} className="bg-yellow-300 px-0.5 rounded">{part}</mark>
+                        : <span key={i}>{part}</span>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Campaign Assignment */}
               {campaigns.length > 0 && onCampaignChange && (

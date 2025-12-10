@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, Eye, Code, Copy, Check } from 'lucide-react'
 import { FlowStep, OutputFormat } from '@/types/flow.types'
 import { formatTokenCount } from '@/lib/supabase'
@@ -39,6 +39,91 @@ export default function StepEditor({
   const [showRealValues, setShowRealValues] = useState(false)
   const [copied, setCopied] = useState(false)
   const [hoveredDoc, setHoveredDoc] = useState<any | null>(null)
+  const [showAutocomplete, setShowAutocomplete] = useState(false)
+  const [autocompleteFilter, setAutocompleteFilter] = useState('')
+  const [autocompleteIndex, setAutocompleteIndex] = useState(0)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Get all available variables
+  const getAllVariables = useCallback(() => {
+    const allVarsSet = new Set<string>()
+    ;['ecp_name', 'problem_core', 'country', 'industry', 'client_name'].forEach(v => allVarsSet.add(v))
+    if (projectVariables) projectVariables.forEach(v => v?.name && allVarsSet.add(v.name))
+    if (campaignVariables) Object.keys(campaignVariables).forEach(k => allVarsSet.add(k))
+    return Array.from(allVarsSet).sort()
+  }, [projectVariables, campaignVariables])
+
+  // Filter variables for autocomplete
+  const filteredVariables = getAllVariables().filter(v =>
+    v.toLowerCase().includes(autocompleteFilter.toLowerCase())
+  )
+
+  // Handle prompt change with autocomplete detection
+  const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value
+    const cursorPos = e.target.selectionStart
+    setEditedStep(prev => ({ ...prev, prompt: value }))
+
+    // Check for {{ trigger
+    const textBeforeCursor = value.substring(0, cursorPos)
+    const match = textBeforeCursor.match(/\{\{\s*([a-zA-Z_]*)$/)
+
+    if (match) {
+      setShowAutocomplete(true)
+      setAutocompleteFilter(match[1] || '')
+      setAutocompleteIndex(0)
+    } else {
+      setShowAutocomplete(false)
+      setAutocompleteFilter('')
+    }
+  }
+
+  // Insert variable from autocomplete
+  const insertVariable = (varName: string) => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const cursorPos = textarea.selectionStart
+    const text = editedStep.prompt
+    const textBeforeCursor = text.substring(0, cursorPos)
+    const textAfterCursor = text.substring(cursorPos)
+
+    // Find where {{ starts
+    const match = textBeforeCursor.match(/\{\{\s*[a-zA-Z_]*$/)
+    if (match) {
+      const startPos = cursorPos - match[0].length
+      const newText = text.substring(0, startPos) + `{{ ${varName} }}` + textAfterCursor
+      setEditedStep(prev => ({ ...prev, prompt: newText }))
+
+      // Reset cursor position
+      setTimeout(() => {
+        const newPos = startPos + `{{ ${varName} }}`.length
+        textarea.focus()
+        textarea.setSelectionRange(newPos, newPos)
+      }, 0)
+    }
+
+    setShowAutocomplete(false)
+    setAutocompleteFilter('')
+  }
+
+  // Handle keyboard navigation in autocomplete
+  const handlePromptKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!showAutocomplete) return
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setAutocompleteIndex(prev => Math.min(prev + 1, filteredVariables.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setAutocompleteIndex(prev => Math.max(prev - 1, 0))
+    } else if (e.key === 'Enter' && filteredVariables.length > 0) {
+      e.preventDefault()
+      insertVariable(filteredVariables[autocompleteIndex])
+    } else if (e.key === 'Escape') {
+      setShowAutocomplete(false)
+    }
+  }
 
   // Handle save with keyboard
   const handleSaveStep = useCallback(() => {
@@ -456,15 +541,38 @@ export default function StepEditor({
                 {displayPrompt}
               </div>
             ) : (
-              // Vista editable con variables
-              <textarea
-                value={editedStep.prompt}
-                onChange={(e) =>
-                  setEditedStep((prev) => ({ ...prev, prompt: e.target.value }))
-                }
-                rows={12}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 text-gray-900"
-              />
+              // Vista editable con variables y autocompletado
+              <div className="relative">
+                <textarea
+                  ref={textareaRef}
+                  value={editedStep.prompt}
+                  onChange={handlePromptChange}
+                  onKeyDown={handlePromptKeyDown}
+                  rows={12}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="Escribe {{ para ver las variables disponibles..."
+                />
+                {/* Autocomplete dropdown */}
+                {showAutocomplete && filteredVariables.length > 0 && (
+                  <div className="absolute left-4 bottom-4 z-50 w-64 bg-white border border-gray-300 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                    <div className="p-2 border-b border-gray-200 bg-gray-50">
+                      <p className="text-xs text-gray-500">Variables disponibles (↑↓ navegar, Enter seleccionar)</p>
+                    </div>
+                    {filteredVariables.map((varName, index) => (
+                      <button
+                        key={varName}
+                        type="button"
+                        onClick={() => insertVariable(varName)}
+                        className={`w-full text-left px-3 py-2 text-sm font-mono hover:bg-blue-50 ${
+                          index === autocompleteIndex ? 'bg-blue-100 text-blue-700' : 'text-gray-700'
+                        }`}
+                      >
+                        {'{{ '}{varName}{' }}'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
             {showRealValues && (
