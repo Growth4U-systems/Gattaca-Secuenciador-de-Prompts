@@ -6,7 +6,8 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type DocCategory = 'product' | 'competitor' | 'research' | 'output'
+// Base categories + custom string categories are allowed
+export type DocCategory = 'product' | 'competitor' | 'research' | 'output' | string
 
 export type CampaignStatus =
   | 'pending_research'

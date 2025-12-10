@@ -35,6 +35,7 @@ export default function StepEditor({
 }: StepEditorProps) {
   const [editedStep, setEditedStep] = useState<FlowStep>({ ...step })
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
   const [showRealValues, setShowRealValues] = useState(false)
 
   // Reemplazar variables en el prompt con valores reales
@@ -56,13 +57,28 @@ export default function StepEditor({
   // Previous steps (lower order) that can be dependencies
   const availablePrevSteps = allSteps.filter((s) => s.order < step.order)
 
-  // Filter documents by category
-  const filteredDocs = categoryFilter === 'all'
-    ? documents
-    : documents.filter((doc) => doc.category === categoryFilter)
+  // Filter documents by category and assignment status
+  const filteredDocs = documents.filter((doc) => {
+    // Category filter
+    if (categoryFilter !== 'all' && doc.category !== categoryFilter) {
+      return false
+    }
+    // Assignment filter
+    if (assignmentFilter === 'assigned' && !editedStep.base_doc_ids.includes(doc.id)) {
+      return false
+    }
+    if (assignmentFilter === 'unassigned' && editedStep.base_doc_ids.includes(doc.id)) {
+      return false
+    }
+    return true
+  })
 
-  // Get unique categories
-  const categories = Array.from(new Set(documents.map((doc) => doc.category)))
+  // Get unique categories from all documents
+  const categories = Array.from(new Set(documents.map((doc) => doc.category))).sort()
+
+  // Count documents by assignment
+  const assignedCount = documents.filter(doc => editedStep.base_doc_ids.includes(doc.id)).length
+  const unassignedCount = documents.length - assignedCount
 
   const handleToggleDoc = (docId: string) => {
     setEditedStep((prev) => ({
@@ -160,27 +176,77 @@ export default function StepEditor({
 
           {/* Base Documents */}
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="block font-medium text-gray-900">
-                📄 Base Documents
-              </label>
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="text-sm px-3 py-1 border border-gray-300 rounded text-gray-900"
-              >
-                <option value="all">All categories</option>
-                {categories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
+            <label className="block font-medium text-gray-900 mb-3">
+              📄 Base Documents
+            </label>
+
+            {/* Filters Row */}
+            <div className="flex flex-wrap items-center gap-3 mb-3">
+              {/* Category Filter */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Categoría:</span>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="text-sm px-2 py-1 border border-gray-300 rounded text-gray-900 bg-white"
+                >
+                  <option value="all">Todas ({documents.length})</option>
+                  {categories.map((cat) => {
+                    const count = documents.filter(d => d.category === cat).length
+                    return (
+                      <option key={cat} value={cat}>
+                        {cat} ({count})
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+
+              {/* Assignment Filter */}
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setAssignmentFilter('all')}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    assignmentFilter === 'all'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Todos ({documents.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignmentFilter('assigned')}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    assignmentFilter === 'assigned'
+                      ? 'bg-green-100 text-green-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Asignados ({assignedCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignmentFilter('unassigned')}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    assignmentFilter === 'unassigned'
+                      ? 'bg-yellow-100 text-yellow-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Sin asignar ({unassignedCount})
+                </button>
+              </div>
             </div>
 
             {documents.length === 0 ? (
               <p className="text-sm text-gray-500 italic">
                 No documents available. Upload documents first.
+              </p>
+            ) : filteredDocs.length === 0 ? (
+              <p className="text-sm text-gray-500 italic py-4 text-center border border-gray-200 rounded-lg">
+                No hay documentos con estos filtros
               </p>
             ) : (
               <>
@@ -188,7 +254,9 @@ export default function StepEditor({
                   {filteredDocs.map((doc) => (
                     <label
                       key={doc.id}
-                      className="flex items-center gap-3 p-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 cursor-pointer"
+                      className={`flex items-center gap-3 p-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 cursor-pointer ${
+                        editedStep.base_doc_ids.includes(doc.id) ? 'bg-green-50' : ''
+                      }`}
                     >
                       <input
                         type="checkbox"
@@ -201,7 +269,10 @@ export default function StepEditor({
                           {doc.filename}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {doc.category} • {formatTokenCount(doc.token_count || 0)} tokens
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 mr-1">
+                            {doc.category}
+                          </span>
+                          {formatTokenCount(doc.token_count || 0)} tokens
                         </p>
                       </div>
                     </label>
