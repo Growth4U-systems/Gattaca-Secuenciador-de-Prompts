@@ -120,10 +120,31 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     setCustomVariables(customVariables.filter((_, i) => i !== index))
   }
 
+  // Get merged variables (project definitions + campaign values)
+  const getMergedVariables = (campaign: Campaign): Record<string, string> => {
+    const merged: Record<string, string> = {}
+
+    // First, add all project-defined variables with their default values
+    if (project?.variable_definitions) {
+      project.variable_definitions.forEach(varDef => {
+        merged[varDef.name] = varDef.default_value || ''
+      })
+    }
+
+    // Then, override with campaign's actual custom_variables values
+    const customVars = campaign.custom_variables as Record<string, string> || {}
+    Object.entries(customVars).forEach(([key, value]) => {
+      merged[key] = value
+    })
+
+    return merged
+  }
+
   // Start inline editing for a campaign's variables
   const startEditingVariables = (campaign: Campaign) => {
     setEditingVariablesCampaignId(campaign.id)
-    setEditingVariablesData({ ...(campaign.custom_variables as Record<string, string>) })
+    // Use merged variables to include project-defined vars not yet in campaign
+    setEditingVariablesData(getMergedVariables(campaign))
   }
 
   // Cancel inline editing
@@ -1074,7 +1095,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
       ) : (
         <div className="space-y-3">
           {filteredCampaigns.map((campaign) => {
-            const varsCount = campaign.custom_variables ? Object.keys(campaign.custom_variables).length : 0
+            const varsCount = Object.keys(getMergedVariables(campaign)).length
             const stepsCount = campaign.step_outputs ? Object.keys(campaign.step_outputs).length : 0
             const totalSteps = (campaign.flow_config?.steps || project?.flow_config?.steps || []).length
             const isExpanded = expandedCampaigns.has(campaign.id)
@@ -1464,20 +1485,29 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                             // Editing mode
                             <>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                                {Object.entries(editingVariablesData).map(([key, value]) => (
-                                  <div key={key} className="bg-white rounded-lg p-3 border border-blue-200">
-                                    <label className="text-xs font-mono text-blue-600 block mb-1">{key}</label>
-                                    <input
-                                      type="text"
-                                      value={value}
-                                      onChange={(e) => setEditingVariablesData(prev => ({
-                                        ...prev,
-                                        [key]: e.target.value
-                                      }))}
-                                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                                    />
-                                  </div>
-                                ))}
+                                {Object.entries(editingVariablesData).map(([key, value]) => {
+                                  const isProjectVar = project?.variable_definitions?.some(v => v.name === key)
+                                  const varDef = project?.variable_definitions?.find(v => v.name === key)
+                                  return (
+                                    <div key={key} className={`bg-white rounded-lg p-3 border ${isProjectVar ? 'border-blue-200' : 'border-gray-200'}`}>
+                                      <label className="text-xs font-mono text-blue-600 block mb-1 flex items-center gap-1">
+                                        {key}
+                                        {varDef?.required && <span className="text-red-500">*</span>}
+                                        {isProjectVar && <span className="text-gray-400 text-xs ml-1">(proyecto)</span>}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={value}
+                                        onChange={(e) => setEditingVariablesData(prev => ({
+                                          ...prev,
+                                          [key]: e.target.value
+                                        }))}
+                                        placeholder={varDef?.description || ''}
+                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                      />
+                                    </div>
+                                  )
+                                })}
                               </div>
                               <div className="flex gap-2">
                                 <button
@@ -1497,17 +1527,28 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                               </div>
                             </>
                           ) : (
-                            // View mode
+                            // View mode - show merged variables (project + campaign)
                             <>
                               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                {Object.entries(campaign.custom_variables as Record<string, string>).map(([key, value]) => (
-                                  <div key={key} className="bg-white rounded-lg p-3 border border-gray-200">
-                                    <code className="text-xs font-mono text-blue-600 block mb-1">{key}</code>
-                                    <span className="text-sm text-gray-800 block truncate" title={value}>
-                                      {value || <span className="italic text-gray-400">vacío</span>}
-                                    </span>
-                                  </div>
-                                ))}
+                                {Object.entries(getMergedVariables(campaign)).map(([key, value]) => {
+                                  const isProjectVar = project?.variable_definitions?.some(v => v.name === key)
+                                  const varDef = project?.variable_definitions?.find(v => v.name === key)
+                                  const hasValue = value && value.trim() !== ''
+                                  return (
+                                    <div key={key} className={`bg-white rounded-lg p-3 border ${isProjectVar ? 'border-blue-200' : 'border-gray-200'}`}>
+                                      <code className="text-xs font-mono text-blue-600 block mb-1 flex items-center gap-1">
+                                        {key}
+                                        {varDef?.required && <span className="text-red-500">*</span>}
+                                        {isProjectVar && !hasValue && (
+                                          <span className="text-orange-500 text-xs ml-1">(nuevo)</span>
+                                        )}
+                                      </code>
+                                      <span className="text-sm text-gray-800 block truncate" title={value}>
+                                        {hasValue ? value : <span className="italic text-gray-400">vacío</span>}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
                               </div>
                               <button
                                 onClick={() => startEditingVariables(campaign)}
@@ -1621,14 +1662,18 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
         const filteredDocuments = documents.filter(doc =>
           !doc.campaign_id || doc.campaign_id === editingFlowCampaignId
         )
-        // Combine legacy fields + custom_variables for variable preview
-        const allCampaignVariables: Record<string, string> = {
-          ...(editingCampaign?.ecp_name && { ecp_name: editingCampaign.ecp_name }),
-          ...(editingCampaign?.problem_core && { problem_core: editingCampaign.problem_core }),
-          ...(editingCampaign?.country && { country: editingCampaign.country }),
-          ...(editingCampaign?.industry && { industry: editingCampaign.industry }),
-          ...(editingCampaign?.custom_variables as Record<string, string> || {}),
-        }
+        // Use merged variables (project definitions + campaign values + legacy fields) for variable preview
+        const allCampaignVariables: Record<string, string> = editingCampaign
+          ? {
+              // Legacy fields
+              ...(editingCampaign.ecp_name && { ecp_name: editingCampaign.ecp_name }),
+              ...(editingCampaign.problem_core && { problem_core: editingCampaign.problem_core }),
+              ...(editingCampaign.country && { country: editingCampaign.country }),
+              ...(editingCampaign.industry && { industry: editingCampaign.industry }),
+              // Merged project + campaign variables
+              ...getMergedVariables(editingCampaign),
+            }
+          : {}
         return (
           <CampaignFlowEditor
             campaignId={editingFlowCampaignId}

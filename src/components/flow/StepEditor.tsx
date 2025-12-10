@@ -403,25 +403,46 @@ export default function StepEditor({
 
             <p className="text-xs text-gray-500 mt-2">
               <span className="font-medium">Available variables:</span>{' '}
-              {Array.from(new Set([
-                // Base variables
-                'ecp_name',
-                'problem_core',
-                'country',
-                'industry',
-                'client_name',
-                // Project-defined variables
-                ...projectVariables.map((v) => v.name),
-                // Campaign variables (may include additional custom vars)
-                ...Object.keys(campaignVariables),
-              ])).map((varName, index, arr) => (
-                <span key={varName}>
-                  <code className="text-gray-700 bg-gray-100 px-1 rounded">
-                    {'{'}{'{'} {varName} {'}'}{'}'}
-                  </code>
-                  {index < arr.length - 1 ? ', ' : ''}
-                </span>
-              ))}
+              {(() => {
+                // Extract variables from all step prompts
+                const extractVariablesFromPrompts = () => {
+                  const vars: string[] = []
+                  allSteps.forEach(s => {
+                    const matches = s.prompt.match(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g)
+                    if (matches) {
+                      matches.forEach(match => {
+                        const varName = match.replace(/\{\{\s*|\s*\}\}/g, '')
+                        vars.push(varName)
+                      })
+                    }
+                  })
+                  return vars
+                }
+
+                const allVars = Array.from(new Set([
+                  // Base variables
+                  'ecp_name',
+                  'problem_core',
+                  'country',
+                  'industry',
+                  'client_name',
+                  // Project-defined variables
+                  ...projectVariables.map((v) => v.name),
+                  // Campaign variables (may include additional custom vars)
+                  ...Object.keys(campaignVariables),
+                  // Variables extracted from prompts
+                  ...extractVariablesFromPrompts(),
+                ])).sort()
+
+                return allVars.map((varName, index, arr) => (
+                  <span key={varName}>
+                    <code className="text-gray-700 bg-gray-100 px-1 rounded">
+                      {'{'}{'{'} {varName} {'}'}{'}'}
+                    </code>
+                    {index < arr.length - 1 ? ', ' : ''}
+                  </span>
+                ))
+              })()}
             </p>
           </div>
         </div>
