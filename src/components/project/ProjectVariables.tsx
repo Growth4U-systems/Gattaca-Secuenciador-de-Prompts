@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Plus, X, Save, Settings } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Plus, X, Save, Settings, Download, Upload } from 'lucide-react'
 
 interface VariableDefinition {
   name: string
@@ -24,6 +24,49 @@ export default function ProjectVariables({
   const [variables, setVariables] = useState<VariableDefinition[]>(initialVariables || [])
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Export variables to JSON
+  const handleExport = () => {
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      projectId,
+      variables,
+    }
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `variables-${projectId}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  // Import variables from JSON
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string)
+        if (data.variables && Array.isArray(data.variables)) {
+          setVariables(data.variables)
+          setIsEditing(true)
+          alert(`✅ Importadas ${data.variables.length} variables. Revisa y guarda los cambios.`)
+        } else {
+          throw new Error('Formato inválido')
+        }
+      } catch (error) {
+        alert('❌ Error al importar: formato de archivo inválido')
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = '' // Reset input
+  }
 
   const addVariable = () => {
     setVariables([
@@ -134,12 +177,35 @@ export default function ProjectVariables({
             <Settings size={20} className="text-gray-600" />
             <h3 className="text-lg font-semibold text-gray-900">Variables del Proyecto</h3>
           </div>
-          <button
-            onClick={() => setIsEditing(true)}
-            className="px-3 py-1.5 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"
-          >
-            Editar
-          </button>
+          <div className="flex items-center gap-2">
+            {variables.length > 0 && (
+              <button
+                onClick={handleExport}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg inline-flex items-center gap-1"
+                title="Exportar variables"
+              >
+                <Download size={16} />
+                Exportar
+              </button>
+            )}
+            <label className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg cursor-pointer inline-flex items-center gap-1">
+              <Upload size={16} />
+              Importar
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImport}
+                accept=".json"
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={() => setIsEditing(true)}
+              className="px-3 py-1.5 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"
+            >
+              Editar
+            </button>
+          </div>
         </div>
 
         <div className="space-y-3">
