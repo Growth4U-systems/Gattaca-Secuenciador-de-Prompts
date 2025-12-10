@@ -1068,7 +1068,6 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             >
               <option value="all">Todos los estados</option>
               <option value="draft">Ready to run</option>
-              <option value="running">Running</option>
               <option value="completed">Completed</option>
               <option value="error">Error</option>
             </select>

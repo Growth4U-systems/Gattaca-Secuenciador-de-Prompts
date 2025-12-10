@@ -26,16 +26,11 @@ export default function DocumentUpload({
   const [uploading, setUploading] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [category, setCategory] = useState<DocCategory>('product')
-  const [customCategory, setCustomCategory] = useState('')
-  const [useCustomCategory, setUseCustomCategory] = useState(false)
   const [extractionResult, setExtractionResult] = useState<{
     text: string
     tokens: number
   } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // The actual category to use (custom or selected)
-  const effectiveCategory = useCustomCategory ? customCategory.trim() : category
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -99,7 +94,7 @@ export default function DocumentUpload({
             blobUrl: blob.url,
             filename: selectedFile.name,
             projectId: projectId,
-            category: effectiveCategory,
+            category: category,
             fileSize: selectedFile.size,
             mimeType: selectedFile.type,
           }),
@@ -152,8 +147,6 @@ export default function DocumentUpload({
       setIsOpen(false)
       setSelectedFile(null)
       setExtractionResult(null)
-      setUseCustomCategory(false)
-      setCustomCategory('')
       onUploadComplete()
     } catch (error) {
       console.error('Error uploading:', error)
@@ -188,65 +181,21 @@ export default function DocumentUpload({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Categoría *
             </label>
-
-            {/* Toggle between base and custom */}
-            <div className="flex gap-2 mb-3">
-              <button
-                type="button"
-                onClick={() => setUseCustomCategory(false)}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                  !useCustomCategory
-                    ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                    : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
-                }`}
-              >
-                Categorías base
-              </button>
-              <button
-                type="button"
-                onClick={() => setUseCustomCategory(true)}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                  useCustomCategory
-                    ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                    : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
-                }`}
-              >
-                Categoría personalizada
-              </button>
-            </div>
-
-            {!useCustomCategory ? (
-              <>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as DocCategory)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-                >
-                  {BASE_CATEGORIES.map((cat) => (
-                    <option key={cat.value} value={cat.value}>
-                      {cat.icon} {cat.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-sm text-gray-500 mt-1">
-                  {BASE_CATEGORIES.find(c => c.value === category)?.icon}{' '}
-                  {BASE_CATEGORIES.find(c => c.value === category)?.description}
-                </p>
-              </>
-            ) : (
-              <>
-                <input
-                  type="text"
-                  value={customCategory}
-                  onChange={(e) => setCustomCategory(e.target.value)}
-                  placeholder="ej: Business Banking, Personal Banking, Seguros..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder:text-gray-400"
-                />
-                <p className="text-sm text-gray-500 mt-1">
-                  🏷️ Crea categorías personalizadas para organizar documentos por segmento, producto, etc.
-                </p>
-              </>
-            )}
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as DocCategory)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
+            >
+              {BASE_CATEGORIES.map((cat) => (
+                <option key={cat.value} value={cat.value}>
+                  {cat.icon} {cat.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-gray-500 mt-1">
+              {BASE_CATEGORIES.find(c => c.value === category)?.icon}{' '}
+              {BASE_CATEGORIES.find(c => c.value === category)?.description}
+            </p>
           </div>
 
           {/* File Upload */}
@@ -335,7 +284,7 @@ export default function DocumentUpload({
         <div className="p-6 border-t border-gray-200 flex gap-3">
           <button
             onClick={handleUpload}
-            disabled={!selectedFile || uploading || (useCustomCategory && !customCategory.trim())}
+            disabled={!selectedFile || uploading}
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             {uploading ? 'Subiendo...' : 'Subir Documento'}
@@ -345,8 +294,6 @@ export default function DocumentUpload({
               setIsOpen(false)
               setSelectedFile(null)
               setExtractionResult(null)
-              setUseCustomCategory(false)
-              setCustomCategory('')
             }}
             className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
           >
