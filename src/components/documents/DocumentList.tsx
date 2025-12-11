@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { FileText, Trash2, Eye, Link2, Search, Filter } from 'lucide-react'
+import { FileText, Trash2, Eye, Link2, Search, Filter, FolderOpen, X } from 'lucide-react'
 import { DocCategory } from '@/types/database.types'
 import { formatTokenCount } from '@/lib/supabase'
 
@@ -27,6 +27,13 @@ interface DocumentListProps {
   onDelete: (id: string) => void
   onView: (doc: Document) => void
   onCampaignChange?: (docId: string, campaignId: string | null) => void
+}
+
+const CATEGORY_STYLES: Record<string, { bg: string; text: string; icon: string }> = {
+  product: { bg: 'bg-blue-50', text: 'text-blue-700', icon: '📦' },
+  competitor: { bg: 'bg-purple-50', text: 'text-purple-700', icon: '🎯' },
+  research: { bg: 'bg-green-50', text: 'text-green-700', icon: '🔬' },
+  output: { bg: 'bg-orange-50', text: 'text-orange-700', icon: '📝' },
 }
 
 export default function DocumentList({
@@ -101,35 +108,13 @@ export default function DocumentList({
     }
   }
 
-  const getCampaignName = (campaignId: string | null | undefined) => {
-    if (!campaignId) return null
-    const campaign = campaigns.find(c => c.id === campaignId)
-    return campaign?.ecp_name || 'Unknown'
-  }
-
   const getCategoryBadge = (category: DocCategory) => {
-    const styles: Record<string, string> = {
-      product: 'bg-blue-100 text-blue-800',
-      competitor: 'bg-purple-100 text-purple-800',
-      research: 'bg-green-100 text-green-800',
-      output: 'bg-orange-100 text-orange-800',
-    }
-
-    const labels: Record<string, string> = {
-      product: '📦 Producto',
-      competitor: '🎯 Competidor',
-      research: '🔬 Research',
-      output: '📝 Output',
-    }
-
-    // Default style for custom categories
-    const style = styles[category] || 'bg-gray-100 text-gray-800'
-    const label = labels[category] || `🏷️ ${category}`
+    const style = CATEGORY_STYLES[category] || { bg: 'bg-gray-50', text: 'text-gray-700', icon: '🏷️' }
+    const label = category.charAt(0).toUpperCase() + category.slice(1)
 
     return (
-      <span
-        className={`px-2 py-1 rounded text-xs font-medium ${style}`}
-      >
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${style.bg} ${style.text}`}>
+        <span>{style.icon}</span>
         {label}
       </span>
     )
@@ -137,10 +122,12 @@ export default function DocumentList({
 
   if (documents.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-500">
-        <FileText size={48} className="mx-auto mb-4 opacity-50" />
-        <p>No hay documentos todavía</p>
-        <p className="text-sm mt-2">
+      <div className="text-center py-16">
+        <div className="inline-block p-4 bg-gray-100 rounded-2xl mb-4">
+          <FolderOpen className="w-12 h-12 text-gray-400" />
+        </div>
+        <h3 className="text-lg font-medium text-gray-900 mb-1">No hay documentos</h3>
+        <p className="text-gray-500 text-sm">
           Sube PDFs o DOCX con información de producto, competidores o research
         </p>
       </div>
@@ -154,21 +141,29 @@ export default function DocumentList({
         {/* Search */}
         <div className="flex-1 min-w-[200px]">
           <div className="relative">
-            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={searchInContent ? "Buscar en nombre y contenido..." : "Buscar por nombre..."}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              className="w-full pl-11 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
-          <label className="flex items-center gap-2 mt-1.5 cursor-pointer">
+          <label className="flex items-center gap-2 mt-2 cursor-pointer">
             <input
               type="checkbox"
               checked={searchInContent}
               onChange={(e) => setSearchInContent(e.target.checked)}
-              className="w-3.5 h-3.5 text-blue-600 rounded"
+              className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
             />
             <span className="text-xs text-gray-500">Buscar dentro del contenido</span>
           </label>
@@ -180,14 +175,15 @@ export default function DocumentList({
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            <option value="all">Todas las categorías ({documents.length})</option>
+            <option value="all">Todas ({documents.length})</option>
             {categories.map(cat => {
               const count = documents.filter(d => d.category === cat).length
+              const style = CATEGORY_STYLES[cat]
               return (
                 <option key={cat} value={cat}>
-                  {cat} ({count})
+                  {style?.icon || '🏷️'} {cat} ({count})
                 </option>
               )
             })}
@@ -196,168 +192,175 @@ export default function DocumentList({
 
         {/* Assignment Filter */}
         {campaigns.length > 0 && (
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-            <button
-              onClick={() => setAssignmentFilter('all')}
-              className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                assignmentFilter === 'all'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Todos
-            </button>
-            <button
-              onClick={() => setAssignmentFilter('global')}
-              className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                assignmentFilter === 'global'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Globales
-            </button>
-            <button
-              onClick={() => setAssignmentFilter('assigned')}
-              className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                assignmentFilter === 'assigned'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Asignados
-            </button>
+          <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+            {[
+              { value: 'all', label: 'Todos' },
+              { value: 'global', label: 'Globales' },
+              { value: 'assigned', label: 'Asignados' },
+            ].map((filter) => (
+              <button
+                key={filter.value}
+                onClick={() => setAssignmentFilter(filter.value as typeof assignmentFilter)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                  assignmentFilter === filter.value
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
           </div>
         )}
       </div>
 
       {/* Results count */}
       {(searchQuery || categoryFilter !== 'all' || assignmentFilter !== 'all') && (
-        <p className="text-sm text-gray-500">
-          Mostrando {filteredDocs.length} de {documents.length} documentos
-          {searchQuery && (
-            <span className="ml-1">
-              para "{searchQuery}"
-              {searchInContent && <span className="text-blue-600 ml-1">(búsqueda en contenido)</span>}
-            </span>
+        <div className="flex items-center justify-between text-sm text-gray-500">
+          <span>
+            Mostrando {filteredDocs.length} de {documents.length} documentos
+            {searchQuery && (
+              <span className="ml-1">
+                para &quot;{searchQuery}&quot;
+                {searchInContent && <span className="text-blue-600 ml-1">(en contenido)</span>}
+              </span>
+            )}
+          </span>
+          {(searchQuery || categoryFilter !== 'all' || assignmentFilter !== 'all') && (
+            <button
+              onClick={() => {
+                setSearchQuery('')
+                setCategoryFilter('all')
+                setAssignmentFilter('all')
+              }}
+              className="text-blue-600 hover:text-blue-700 font-medium"
+            >
+              Limpiar filtros
+            </button>
           )}
-        </p>
+        </div>
       )}
 
       {/* Document List */}
-      <div className="space-y-3">
-        {filteredDocs.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <p>No hay documentos que coincidan con los filtros</p>
-          </div>
-        ) : (
-          filteredDocs.map((doc) => (
-        <div
-          key={doc.id}
-          className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3 mb-2">
-                <FileText size={20} className="text-gray-400 flex-shrink-0" />
-                <h3 className="font-medium text-gray-900 truncate">
-                  {doc.filename}
-                </h3>
-              </div>
-
-              <div className="flex items-center flex-wrap gap-3 text-sm text-gray-600">
-                {getCategoryBadge(doc.category)}
-                {doc.token_count && (
-                  <span className="text-gray-500">
-                    {formatTokenCount(doc.token_count)} tokens
-                  </span>
-                )}
-                {doc.file_size_bytes && (
-                  <span className="text-gray-500">
-                    {(doc.file_size_bytes / 1024 / 1024).toFixed(2)} MB
-                  </span>
-                )}
-                <span className="text-gray-400">
-                  {new Date(doc.created_at).toLocaleDateString('es-ES')}
-                </span>
-              </div>
-
-              {/* Content match snippet */}
-              {searchInContent && searchQuery && (() => {
-                const snippet = getContentMatchSnippet(doc.extracted_content, searchQuery)
-                if (!snippet) return null
-                // Highlight the match
-                const parts = snippet.split(new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
-                return (
-                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-gray-700">
-                    <span className="text-yellow-700 font-medium mr-1">Coincidencia:</span>
-                    {parts.map((part, i) =>
-                      part.toLowerCase() === searchQuery.toLowerCase()
-                        ? <mark key={i} className="bg-yellow-300 px-0.5 rounded">{part}</mark>
-                        : <span key={i}>{part}</span>
-                    )}
+      {filteredDocs.length === 0 ? (
+        <div className="text-center py-12">
+          <Search className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500">No hay documentos que coincidan</p>
+          <button
+            onClick={() => {
+              setSearchQuery('')
+              setCategoryFilter('all')
+              setAssignmentFilter('all')
+            }}
+            className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+          >
+            Limpiar filtros
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredDocs.map((doc) => (
+            <div
+              key={doc.id}
+              className="group bg-white border border-gray-100 rounded-2xl p-4 hover:border-blue-200 hover:shadow-md transition-all"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-gray-100 rounded-lg group-hover:bg-blue-100 transition-colors">
+                      <FileText size={18} className="text-gray-500 group-hover:text-blue-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                        {doc.filename}
+                      </h3>
+                      <div className="flex items-center flex-wrap gap-2 mt-1">
+                        {getCategoryBadge(doc.category)}
+                        {doc.token_count && (
+                          <span className="text-xs text-gray-500">
+                            {formatTokenCount(doc.token_count)} tokens
+                          </span>
+                        )}
+                        {doc.file_size_bytes && (
+                          <span className="text-xs text-gray-400">
+                            {(doc.file_size_bytes / 1024 / 1024).toFixed(2)} MB
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                )
-              })()}
 
-              {/* Campaign Assignment */}
-              {campaigns.length > 0 && onCampaignChange && (
-                <div className="flex items-center gap-2 mt-2">
-                  <Link2 size={16} className="text-gray-400" />
-                  <select
-                    value={doc.campaign_id || ''}
-                    onChange={(e) => handleCampaignChange(doc.id, e.target.value)}
-                    disabled={updatingDoc === doc.id}
-                    className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 text-gray-700 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                  >
-                    <option value="">📂 Documento general (todas las campañas)</option>
-                    {campaigns.map(campaign => (
-                      <option key={campaign.id} value={campaign.id}>
-                        🎯 {campaign.ecp_name}
-                      </option>
-                    ))}
-                  </select>
-                  {updatingDoc === doc.id && (
-                    <span className="text-xs text-gray-500">Guardando...</span>
-                  )}
-                  {doc.campaign_id && (
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                      Asignado a campaña
-                    </span>
+                  {/* Content match snippet */}
+                  {searchInContent && searchQuery && (() => {
+                    const snippet = getContentMatchSnippet(doc.extracted_content, searchQuery)
+                    if (!snippet) return null
+                    const parts = snippet.split(new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
+                    return (
+                      <div className="mt-2 p-2 bg-yellow-50 border border-yellow-100 rounded-xl text-xs text-gray-700">
+                        <span className="text-yellow-700 font-medium mr-1">Coincidencia:</span>
+                        {parts.map((part, i) =>
+                          part.toLowerCase() === searchQuery.toLowerCase()
+                            ? <mark key={i} className="bg-yellow-300 px-0.5 rounded">{part}</mark>
+                            : <span key={i}>{part}</span>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Campaign Assignment */}
+                  {campaigns.length > 0 && onCampaignChange && (
+                    <div className="flex items-center gap-2 mt-3">
+                      <Link2 size={14} className="text-gray-400" />
+                      <select
+                        value={doc.campaign_id || ''}
+                        onChange={(e) => handleCampaignChange(doc.id, e.target.value)}
+                        disabled={updatingDoc === doc.id}
+                        className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 bg-white focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                      >
+                        <option value="">Documento global (todas las campañas)</option>
+                        {campaigns.map(campaign => (
+                          <option key={campaign.id} value={campaign.id}>
+                            {campaign.ecp_name}
+                          </option>
+                        ))}
+                      </select>
+                      {updatingDoc === doc.id && (
+                        <span className="text-xs text-gray-500">Guardando...</span>
+                      )}
+                      {doc.campaign_id && (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-lg">
+                          Asignado
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => onView(doc)}
-                className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                title="Ver contenido"
-              >
-                <Eye size={18} />
-              </button>
-              <button
-                onClick={() => {
-                  if (
-                    confirm(
-                      `¿Eliminar "${doc.filename}"? Esta acción no se puede deshacer.`
-                    )
-                  ) {
-                    onDelete(doc.id)
-                  }
-                }}
-                className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                title="Eliminar"
-              >
-                <Trash2 size={18} />
-              </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => onView(doc)}
+                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Ver contenido"
+                  >
+                    <Eye size={18} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`¿Eliminar "${doc.filename}"? Esta acción no se puede deshacer.`)) {
+                        onDelete(doc.id)
+                      }
+                    }}
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Eliminar"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
-          ))
-        )}
-      </div>
+      )}
     </div>
   )
 }

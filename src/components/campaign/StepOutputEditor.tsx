@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef } from 'react'
-import { X, Save, RotateCcw, Eye, Edit2, AlertTriangle, Table, Download, Sparkles, Loader2, Check, XCircle, MousePointer2, ChevronDown, ChevronUp } from 'lucide-react'
+import { X, Save, RotateCcw, Edit2, AlertTriangle, Table, Download, Sparkles, Loader2, Check, XCircle, MousePointer2, ChevronDown, ChevronUp, FileOutput, Clock, Hash, Type } from 'lucide-react'
 import MarkdownRenderer, { extractTables, tablesToCSV } from '../common/MarkdownRenderer'
 
 interface StepOutputEditorProps {
@@ -40,18 +40,18 @@ function generateChangeSummary(original: string, modified: string): string[] {
   const added = modLines.filter(l => !origSet.has(l))
 
   if (removed.length > 0) {
-    changes.push(`📝 ${removed.length} línea(s) modificada(s) o eliminada(s)`)
+    changes.push(`${removed.length} línea(s) modificada(s)`)
   }
   if (added.length > 0) {
-    changes.push(`✨ ${added.length} línea(s) nueva(s) o modificada(s)`)
+    changes.push(`${added.length} línea(s) nueva(s)`)
   }
 
   // Character count change
   const charDiff = modified.length - original.length
   if (charDiff > 0) {
-    changes.push(`📈 +${charDiff} caracteres`)
+    changes.push(`+${charDiff} caracteres`)
   } else if (charDiff < 0) {
-    changes.push(`📉 ${charDiff} caracteres`)
+    changes.push(`${charDiff} caracteres`)
   }
 
   return changes
@@ -268,47 +268,80 @@ export default function StepOutputEditor({
   const wordCount = displayContent.trim() ? displayContent.trim().split(/\s+/).length : 0
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 shrink-0">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                Step {stepOrder}
-              </span>
-              <h2 className="text-lg font-semibold text-gray-900">{stepName} - Output</h2>
-              {isEdited && (
-                <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded inline-flex items-center gap-1">
-                  <Edit2 size={10} />
-                  Editado
-                </span>
-              )}
-              {aiSuggestion && (
-                <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded inline-flex items-center gap-1">
-                  <Sparkles size={10} />
-                  Sugerencia AI
-                </span>
-              )}
+        <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-5 shrink-0">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                <FileOutput className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-white/90 bg-white/20 px-2.5 py-1 rounded-lg backdrop-blur-sm">
+                    Paso {stepOrder}
+                  </span>
+                  <h2 className="text-xl font-bold text-white">{stepName}</h2>
+                  {isEdited && (
+                    <span className="text-xs font-medium text-amber-100 bg-amber-600/50 px-2 py-0.5 rounded-lg inline-flex items-center gap-1">
+                      <Edit2 size={10} />
+                      Editado
+                    </span>
+                  )}
+                  {aiSuggestion && (
+                    <span className="text-xs font-medium text-purple-100 bg-purple-600/50 px-2 py-0.5 rounded-lg inline-flex items-center gap-1">
+                      <Sparkles size={10} />
+                      Sugerencia AI
+                    </span>
+                  )}
+                </div>
+                <p className="text-orange-100 text-sm mt-1">{campaignName}</p>
+              </div>
             </div>
-            <p className="text-sm text-gray-500 mt-0.5">{campaignName}</p>
+            <button
+              onClick={onClose}
+              className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+            >
+              <X size={20} />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-          >
-            <X size={20} />
-          </button>
+
+          {/* Stats */}
+          <div className="flex flex-wrap items-center gap-4 mt-4">
+            <div className="flex items-center gap-2 text-orange-100 text-sm">
+              <Type size={14} />
+              <span>{charCount.toLocaleString()} caracteres</span>
+            </div>
+            <div className="flex items-center gap-2 text-orange-100 text-sm">
+              <Hash size={14} />
+              <span>{wordCount.toLocaleString()} palabras</span>
+            </div>
+            {currentOutput.tokens && (
+              <div className="flex items-center gap-2 text-orange-100 text-sm">
+                <Sparkles size={14} />
+                <span>{currentOutput.tokens.toLocaleString()} tokens</span>
+              </div>
+            )}
+            {currentOutput.completed_at && (
+              <div className="flex items-center gap-2 text-orange-100 text-sm">
+                <Clock size={14} />
+                <span>{new Date(currentOutput.completed_at).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* AI Assistant Bar */}
-        <div className="px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50 shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-indigo-50 shrink-0">
+          <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-purple-600">
-              <Sparkles size={18} />
-              <span className="text-sm font-medium">AI Assistant</span>
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <Sparkles size={16} />
+              </div>
+              <span className="text-sm font-semibold">AI Assistant</span>
             </div>
-            <div className="flex-1 flex items-center gap-2">
+            <div className="flex-1 flex items-center gap-3">
               <input
                 type="text"
                 value={aiPrompt}
@@ -325,13 +358,13 @@ export default function StepOutputEditor({
                     ? "Pide más cambios a la sugerencia..."
                     : "Describe qué cambios deseas (ej: 'Agrega más detalle sobre X')..."
                 }
-                className="flex-1 px-3 py-2 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white text-gray-900 placeholder:text-gray-400"
+                className="flex-1 px-4 py-2.5 text-sm border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white text-gray-900 placeholder:text-gray-400"
                 disabled={isGenerating}
               />
               <button
                 onClick={handleGenerateSuggestion}
                 disabled={isGenerating || !aiPrompt.trim()}
-                className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm rounded-xl hover:from-purple-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed inline-flex items-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
               >
                 {isGenerating ? (
                   <>
@@ -349,16 +382,16 @@ export default function StepOutputEditor({
           </div>
 
           {/* Selection mode and info */}
-          <div className="flex items-center gap-4 mt-2">
+          <div className="flex items-center gap-4 mt-3">
             {!aiSuggestion && !isEditing && (
               <button
                 onClick={() => {
                   setSelectionMode(!selectionMode)
                   if (selectionMode) clearSelection()
                 }}
-                className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors ${
+                className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-all ${
                   selectionMode
-                    ? 'bg-purple-600 text-white'
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                     : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                 }`}
               >
@@ -369,19 +402,23 @@ export default function StepOutputEditor({
 
             {selectedText && (
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-purple-600 bg-purple-100 px-2 py-1 rounded max-w-xs truncate">
-                  📌 "{selectedText.substring(0, 50)}{selectedText.length > 50 ? '...' : ''}"
+                <span className="text-purple-700 bg-purple-100 px-3 py-1.5 rounded-lg max-w-xs truncate font-medium">
+                  Seleccionado: &quot;{selectedText.substring(0, 40)}{selectedText.length > 40 ? '...' : ''}&quot;
                 </span>
-                <button onClick={clearSelection} className="text-gray-400 hover:text-gray-600">
+                <button
+                  onClick={clearSelection}
+                  className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                >
                   <X size={14} />
                 </button>
               </div>
             )}
 
             {aiSuggestion && changeSummary.length > 0 && (
-              <div className="flex items-center gap-2 text-xs text-purple-600">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-purple-600 font-medium">Cambios:</span>
                 {changeSummary.map((change, i) => (
-                  <span key={i} className="bg-purple-100 px-2 py-0.5 rounded">{change}</span>
+                  <span key={i} className="bg-purple-100 text-purple-700 px-2 py-1 rounded-lg">{change}</span>
                 ))}
               </div>
             )}
@@ -389,68 +426,59 @@ export default function StepOutputEditor({
         </div>
 
         {/* Toolbar */}
-        <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between bg-gray-50 shrink-0">
+        <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span>{charCount.toLocaleString()} caracteres</span>
-              <span>•</span>
-              <span>{wordCount.toLocaleString()} palabras</span>
-              {currentOutput.tokens && (
-                <>
-                  <span>•</span>
-                  <span>{currentOutput.tokens.toLocaleString()} tokens</span>
-                </>
-              )}
-            </div>
             {tables.length > 0 && (
-              <>
-                <span className="text-gray-300">|</span>
-                <button
-                  onClick={handleExportTables}
-                  className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 px-2 py-1 rounded transition-colors"
-                >
-                  <Table size={12} />
-                  <span>Exportar {tables.length} tabla{tables.length > 1 ? 's' : ''}</span>
-                  <Download size={10} />
-                </button>
-              </>
+              <button
+                onClick={handleExportTables}
+                className="inline-flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg font-medium transition-colors"
+              >
+                <Table size={14} />
+                <span>Exportar {tables.length} tabla{tables.length > 1 ? 's' : ''}</span>
+                <Download size={12} />
+              </button>
             )}
             {aiSuggestion && (
-              <>
-                <span className="text-gray-300">|</span>
-                <button
-                  onClick={() => setShowComparison(!showComparison)}
-                  className="inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-2 py-1 rounded transition-colors"
-                >
-                  {showComparison ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                  {showComparison ? 'Ocultar original' : 'Comparar con original'}
-                </button>
-              </>
+              <button
+                onClick={() => setShowComparison(!showComparison)}
+                className="inline-flex items-center gap-1.5 text-xs text-purple-700 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg font-medium transition-colors"
+              >
+                {showComparison ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                {showComparison ? 'Ocultar original' : 'Comparar con original'}
+              </button>
             )}
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            {currentOutput.completed_at && (
-              <span>Generado: {new Date(currentOutput.completed_at).toLocaleString()}</span>
+          <div className="flex items-center gap-2">
+            {isEdited && !isEditing && !aiSuggestion && (
+              <button
+                onClick={handleRevert}
+                disabled={saving}
+                className="px-3 py-1.5 text-xs border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50 inline-flex items-center gap-1.5 font-medium transition-colors"
+              >
+                <RotateCcw size={12} />
+                Restaurar Original
+              </button>
             )}
           </div>
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-hidden p-4 min-h-0">
+        <div className="flex-1 overflow-hidden p-6 min-h-0 bg-gradient-to-b from-gray-50/50 to-white">
           {aiSuggestion ? (
             // AI Suggestion Mode
             showComparison ? (
               // Side by side comparison
               <div className="h-full flex gap-4">
-                <div className="flex-1 overflow-auto bg-white rounded-lg border border-gray-200 p-4">
-                  <div className="text-xs text-gray-500 mb-3 pb-2 border-b border-gray-100 font-medium">
+                <div className="flex-1 overflow-auto bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                  <div className="text-xs text-gray-500 mb-4 pb-3 border-b border-gray-100 font-semibold uppercase tracking-wide">
                     Original
                   </div>
                   <MarkdownRenderer content={editedOutput} />
                 </div>
-                <div className="flex-1 overflow-auto bg-white rounded-lg border border-purple-200 p-4">
-                  <div className="text-xs text-purple-600 mb-3 pb-2 border-b border-purple-100 font-medium">
+                <div className="flex-1 overflow-auto bg-white rounded-2xl border-2 border-purple-200 p-6 shadow-sm">
+                  <div className="text-xs text-purple-600 mb-4 pb-3 border-b border-purple-100 font-semibold uppercase tracking-wide flex items-center gap-2">
+                    <Sparkles size={12} />
                     Sugerencia AI
                   </div>
                   <MarkdownRenderer content={aiSuggestion} />
@@ -460,7 +488,7 @@ export default function StepOutputEditor({
               // Just show the suggestion with full markdown
               <div
                 ref={contentRef}
-                className="h-full overflow-auto bg-white rounded-lg border border-purple-200 p-6"
+                className="h-full overflow-auto bg-white rounded-2xl border-2 border-purple-200 p-6 shadow-sm"
               >
                 <MarkdownRenderer content={aiSuggestion} />
               </div>
@@ -469,18 +497,18 @@ export default function StepOutputEditor({
             // Manual editing mode - split view with editor and preview
             <div className="h-full flex gap-4">
               <div className="flex-1 flex flex-col min-w-0">
-                <div className="text-xs text-gray-500 mb-2 font-medium">Editor</div>
+                <div className="text-xs text-gray-500 mb-2 font-semibold uppercase tracking-wide">Editor</div>
                 <textarea
                   value={editedOutput}
                   onChange={(e) => handleTextChange(e.target.value)}
-                  className="flex-1 w-full resize-none bg-white rounded-lg border border-blue-300 p-4 text-sm text-gray-900 font-mono leading-relaxed focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
+                  className="flex-1 w-full resize-none bg-white rounded-2xl border-2 border-orange-200 p-5 text-sm text-gray-900 font-mono leading-relaxed focus:ring-2 focus:ring-orange-500 focus:border-orange-500 focus:outline-none shadow-sm"
                   placeholder="Output del paso..."
                   autoFocus
                 />
               </div>
               <div className="flex-1 flex flex-col min-w-0">
-                <div className="text-xs text-gray-500 mb-2 font-medium">Vista Previa</div>
-                <div className="flex-1 overflow-auto bg-white rounded-lg border border-gray-200 p-4">
+                <div className="text-xs text-gray-500 mb-2 font-semibold uppercase tracking-wide">Vista Previa</div>
+                <div className="flex-1 overflow-auto bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
                   {editedOutput ? (
                     <MarkdownRenderer content={editedOutput} />
                   ) : (
@@ -493,55 +521,51 @@ export default function StepOutputEditor({
             // Preview mode with markdown rendering
             <div
               ref={contentRef}
-              className={`h-full overflow-auto bg-white rounded-lg border p-6 ${
+              className={`h-full overflow-auto bg-white rounded-2xl border p-6 shadow-sm transition-all ${
                 selectionMode
-                  ? 'border-purple-300 cursor-text selection:bg-purple-200'
+                  ? 'border-2 border-purple-300 cursor-text selection:bg-purple-200'
                   : 'border-gray-200'
               }`}
               onMouseUp={handleTextSelection}
             >
               {selectionMode && (
-                <div className="text-xs text-purple-600 mb-4 pb-3 border-b border-purple-100">
-                  👆 Selecciona el texto que quieres modificar, luego escribe la instrucción arriba
+                <div className="text-sm text-purple-600 mb-4 pb-3 border-b border-purple-100 bg-purple-50 -mx-6 -mt-6 px-6 py-3 rounded-t-2xl flex items-center gap-2">
+                  <MousePointer2 size={16} />
+                  Selecciona el texto que quieres modificar, luego escribe la instrucción arriba
                 </div>
               )}
               {editedOutput ? (
                 <MarkdownRenderer content={editedOutput} />
               ) : (
-                <span className="text-gray-400 italic">No hay output generado todavía.</span>
+                <div className="text-center py-12">
+                  <div className="inline-block p-4 bg-gray-100 rounded-2xl mb-4">
+                    <FileOutput className="w-10 h-10 text-gray-400" />
+                  </div>
+                  <p className="text-gray-500">No hay output generado todavía.</p>
+                </div>
               )}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50 shrink-0">
-          <div className="flex items-center gap-2">
-            {isEdited && !isEditing && !aiSuggestion && (
-              <button
-                onClick={handleRevert}
-                disabled={saving}
-                className="px-3 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 inline-flex items-center gap-1.5"
-              >
-                <RotateCcw size={14} />
-                Restaurar Original
-              </button>
-            )}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-orange-50/30 shrink-0">
+          <div className="flex items-center gap-3">
             {hasChanges && !aiSuggestion && (
-              <span className="text-sm text-amber-600 inline-flex items-center gap-1">
+              <span className="text-sm text-amber-600 inline-flex items-center gap-1.5 bg-amber-50 px-3 py-1.5 rounded-lg font-medium">
                 <AlertTriangle size={14} />
                 Cambios sin guardar
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {aiSuggestion ? (
               // AI Suggestion actions
               <>
                 <button
                   onClick={handleDiscardSuggestion}
-                  className="px-4 py-2 text-sm border border-red-300 text-red-700 rounded-lg hover:bg-red-50 inline-flex items-center gap-1.5"
+                  className="px-4 py-2.5 text-sm border border-red-200 text-red-700 rounded-xl hover:bg-red-50 inline-flex items-center gap-1.5 font-medium transition-colors"
                 >
                   <XCircle size={14} />
                   Descartar
@@ -554,7 +578,7 @@ export default function StepOutputEditor({
                     setHasChanges(true)
                     setShowComparison(false)
                   }}
-                  className="px-4 py-2 text-sm border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50 inline-flex items-center gap-1.5"
+                  className="px-4 py-2.5 text-sm border border-purple-200 text-purple-700 rounded-xl hover:bg-purple-50 inline-flex items-center gap-1.5 font-medium transition-colors"
                 >
                   <Edit2 size={14} />
                   Editar Manualmente
@@ -562,7 +586,7 @@ export default function StepOutputEditor({
                 <button
                   onClick={handleApplySuggestion}
                   disabled={saving}
-                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 inline-flex items-center gap-1.5"
+                  className="px-5 py-2.5 text-sm bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 disabled:from-gray-300 disabled:to-gray-400 inline-flex items-center gap-1.5 font-medium shadow-md hover:shadow-lg transition-all"
                 >
                   {saving ? (
                     <Loader2 size={14} className="animate-spin" />
@@ -582,14 +606,14 @@ export default function StepOutputEditor({
                     setHasChanges(false)
                     setIsEditing(false)
                   }}
-                  className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
+                  className="px-5 py-2.5 text-sm border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 font-medium transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={saving || !hasChanges}
-                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+                  className="px-5 py-2.5 text-sm bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed inline-flex items-center gap-1.5 font-medium shadow-md hover:shadow-lg transition-all"
                 >
                   {saving ? (
                     <>
@@ -609,13 +633,13 @@ export default function StepOutputEditor({
               <>
                 <button
                   onClick={onClose}
-                  className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
+                  className="px-5 py-2.5 text-sm border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 font-medium transition-colors"
                 >
                   Cerrar
                 </button>
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center gap-1.5"
+                  className="px-5 py-2.5 text-sm bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl hover:from-orange-600 hover:to-amber-600 inline-flex items-center gap-1.5 font-medium shadow-md hover:shadow-lg transition-all"
                 >
                   <Edit2 size={14} />
                   Editar Manual

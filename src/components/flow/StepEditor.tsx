@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { X, Eye, Code, Copy, Check } from 'lucide-react'
+import { X, Eye, Code, Copy, Check, FileText, ArrowRight, Hash, MessageSquare, Sparkles, AlertTriangle, Info } from 'lucide-react'
 import { FlowStep, OutputFormat } from '@/types/flow.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { usePromptValidator } from '@/hooks/usePromptValidator'
@@ -243,92 +243,107 @@ export default function StepEditor({
     .reduce((sum, doc) => sum + (doc.token_count || 0), 0)
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Edit Step</h2>
-            <p className="text-sm text-gray-600 mt-1">
-              Configure name, description, documents, prompt, and dependencies
-            </p>
+        <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-purple-50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl flex items-center justify-center font-bold text-lg shadow-md">
+                {editedStep.order}
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Editar Paso</h2>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  Configura nombre, documentos, prompt y dependencias
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onCancel}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded-lg transition-colors"
+            >
+              <X size={24} />
+            </button>
           </div>
-          <button
-            onClick={onCancel}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            <X size={24} />
-          </button>
         </div>
 
         {/* Content - Scrollable */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Step Order */}
-          <div>
-            <label className="block font-medium text-gray-900 mb-2">
-              🔢 Position (Order)
-            </label>
-            <input
-              type="number"
-              min="1"
-              value={editedStep.order}
-              onChange={(e) =>
-                setEditedStep((prev) => ({ ...prev, order: parseInt(e.target.value) || 1 }))
-              }
-              className="w-32 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Los pasos se ejecutan en orden ascendente. Al guardar, los pasos se reordenarán automáticamente.
-            </p>
+          {/* Basic Info Section */}
+          <div className="bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-xl p-5">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Info size={18} className="text-gray-400" />
+              Información Básica
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Step Order */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                  <Hash size={14} className="inline mr-1" />
+                  Posición (Orden)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={editedStep.order}
+                  onChange={(e) =>
+                    setEditedStep((prev) => ({ ...prev, order: parseInt(e.target.value) || 1 }))
+                  }
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 transition-all"
+                />
+              </div>
+
+              {/* Step Name */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Nombre del Paso
+                </label>
+                <input
+                  type="text"
+                  value={editedStep.name}
+                  onChange={(e) =>
+                    setEditedStep((prev) => ({ ...prev, name: e.target.value }))
+                  }
+                  placeholder="ej: Market Research, Competitor Analysis"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Step Description */}
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Descripción <span className="text-gray-400">(opcional)</span>
+              </label>
+              <input
+                type="text"
+                value={editedStep.description}
+                onChange={(e) =>
+                  setEditedStep((prev) => ({ ...prev, description: e.target.value }))
+                }
+                placeholder="Breve descripción de lo que hace este paso"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 transition-all"
+              />
+            </div>
           </div>
 
-          {/* Step Name */}
-          <div>
-            <label className="block font-medium text-gray-900 mb-2">
-              📌 Step Name
-            </label>
-            <input
-              type="text"
-              value={editedStep.name}
-              onChange={(e) =>
-                setEditedStep((prev) => ({ ...prev, name: e.target.value }))
-              }
-              placeholder="e.g., Market Research, Competitor Analysis"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder:text-gray-400"
-            />
-          </div>
-
-          {/* Step Description */}
-          <div>
-            <label className="block font-medium text-gray-900 mb-2">
-              📝 Description <span className="text-gray-500 font-normal">(optional)</span>
-            </label>
-            <input
-              type="text"
-              value={editedStep.description}
-              onChange={(e) =>
-                setEditedStep((prev) => ({ ...prev, description: e.target.value }))
-              }
-              placeholder="Brief description of what this step does"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder:text-gray-400"
-            />
-          </div>
-
-          {/* Base Documents */}
-          <div>
-            <label className="block font-medium text-gray-900 mb-3">
-              📄 Base Documents
-            </label>
+          {/* Base Documents Section */}
+          <div className="bg-gradient-to-br from-blue-50 to-white border border-blue-200 rounded-xl p-5">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <FileText size={18} className="text-blue-500" />
+              Documentos Base
+            </h3>
 
             {/* Filters Row */}
-            <div className="flex flex-wrap items-center gap-3 mb-3">
+            <div className="flex flex-wrap items-center gap-3 mb-4">
               {/* Category Filter */}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-500">Categoría:</span>
                 <select
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="text-sm px-2 py-1 border border-gray-300 rounded text-gray-900 bg-white"
+                  className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg text-gray-700 bg-white focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="all">Todas ({documents.length})</option>
                   {categories.map((cat) => {
@@ -343,58 +358,50 @@ export default function StepEditor({
               </div>
 
               {/* Assignment Filter */}
-              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setAssignmentFilter('all')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    assignmentFilter === 'all'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Todos ({documents.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAssignmentFilter('assigned')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    assignmentFilter === 'assigned'
-                      ? 'bg-green-100 text-green-700 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Asignados ({assignedCount})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAssignmentFilter('unassigned')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    assignmentFilter === 'unassigned'
-                      ? 'bg-yellow-100 text-yellow-700 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Sin asignar ({unassignedCount})
-                </button>
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                {[
+                  { value: 'all', label: `Todos (${documents.length})` },
+                  { value: 'assigned', label: `Asignados (${assignedCount})` },
+                  { value: 'unassigned', label: `Sin asignar (${unassignedCount})` },
+                ].map((filter) => (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    onClick={() => setAssignmentFilter(filter.value as typeof assignmentFilter)}
+                    className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                      assignmentFilter === filter.value
+                        ? filter.value === 'assigned' ? 'bg-green-100 text-green-700 shadow-sm' :
+                          filter.value === 'unassigned' ? 'bg-yellow-100 text-yellow-700 shadow-sm' :
+                          'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
               </div>
             </div>
 
             {documents.length === 0 ? (
-              <p className="text-sm text-gray-500 italic">
-                No documents available. Upload documents first.
-              </p>
+              <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                <FileText size={32} className="mx-auto mb-2 text-gray-300" />
+                <p className="text-sm text-gray-500 italic">
+                  No hay documentos disponibles. Sube documentos primero.
+                </p>
+              </div>
             ) : filteredDocs.length === 0 ? (
-              <p className="text-sm text-gray-500 italic py-4 text-center border border-gray-200 rounded-lg">
-                No hay documentos con estos filtros
-              </p>
+              <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                <p className="text-sm text-gray-500 italic">
+                  No hay documentos con estos filtros
+                </p>
+              </div>
             ) : (
               <>
-                <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
+                <div className="border border-gray-200 rounded-xl max-h-64 overflow-y-auto bg-white">
                   {filteredDocs.map((doc) => (
                     <label
                       key={doc.id}
-                      className={`flex items-center gap-3 p-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 cursor-pointer relative ${
+                      className={`flex items-center gap-3 p-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 cursor-pointer relative transition-colors ${
                         editedStep.base_doc_ids.includes(doc.id) ? 'bg-green-50' : ''
                       }`}
                       onMouseEnter={() => setHoveredDoc(doc)}
@@ -404,7 +411,7 @@ export default function StepEditor({
                         type="checkbox"
                         checked={editedStep.base_doc_ids.includes(doc.id)}
                         onChange={() => handleToggleDoc(doc.id)}
-                        className="rounded"
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">
@@ -419,8 +426,8 @@ export default function StepEditor({
                       </div>
                       {/* Preview tooltip */}
                       {hoveredDoc?.id === doc.id && doc.extracted_content && (
-                        <div className="absolute left-full ml-2 top-0 z-50 w-80 bg-white border border-gray-300 rounded-lg shadow-xl p-3 pointer-events-none">
-                          <p className="text-xs font-medium text-gray-700 mb-1">{doc.filename}</p>
+                        <div className="absolute left-full ml-2 top-0 z-50 w-80 bg-white border border-gray-200 rounded-xl shadow-xl p-4 pointer-events-none">
+                          <p className="text-xs font-medium text-gray-700 mb-2">{doc.filename}</p>
                           <div className="text-xs text-gray-600 max-h-48 overflow-hidden whitespace-pre-wrap">
                             {doc.extracted_content.substring(0, 500)}
                             {doc.extracted_content.length > 500 && '...'}
@@ -431,40 +438,49 @@ export default function StepEditor({
                   ))}
                 </div>
 
-                <p className="text-sm text-gray-600 mt-2">
-                  Selected: {editedStep.base_doc_ids.length} document{editedStep.base_doc_ids.length !== 1 ? 's' : ''},{' '}
-                  {formatTokenCount(selectedDocsTokens)} tokens
+                <p className="text-sm text-gray-600 mt-3 flex items-center gap-2">
+                  <Check size={16} className="text-green-500" />
+                  Seleccionados: <span className="font-medium">{editedStep.base_doc_ids.length}</span> documento{editedStep.base_doc_ids.length !== 1 ? 's' : ''},{' '}
+                  <span className="font-medium">{formatTokenCount(selectedDocsTokens)}</span> tokens
                 </p>
               </>
             )}
           </div>
 
           {/* Auto-receive from previous steps */}
-          <div>
-            <label className="block font-medium text-gray-900 mb-3">
-              📥 Auto-receive output from previous steps
-            </label>
+          <div className="bg-gradient-to-br from-purple-50 to-white border border-purple-200 rounded-xl p-5">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <ArrowRight size={18} className="text-purple-500" />
+              Recibir Output de Pasos Anteriores
+            </h3>
 
             {availablePrevSteps.length === 0 ? (
-              <p className="text-sm text-gray-500 italic">
-                No previous steps available (this is one of the first steps)
-              </p>
+              <div className="text-center py-6 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                <p className="text-sm text-gray-500 italic">
+                  No hay pasos anteriores disponibles (este es uno de los primeros pasos)
+                </p>
+              </div>
             ) : (
-              <div className="border border-gray-200 rounded-lg">
+              <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
                 {availablePrevSteps.map((prevStep) => (
                   <label
                     key={prevStep.id}
-                    className="flex items-center gap-3 p-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 cursor-pointer"
+                    className={`flex items-center gap-3 p-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 cursor-pointer transition-colors ${
+                      editedStep.auto_receive_from.includes(prevStep.id) ? 'bg-purple-50' : ''
+                    }`}
                   >
                     <input
                       type="checkbox"
                       checked={editedStep.auto_receive_from.includes(prevStep.id)}
                       onChange={() => handleToggleDependency(prevStep.id)}
-                      className="rounded"
+                      className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                     />
+                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center text-purple-700 font-medium text-sm">
+                      {prevStep.order}
+                    </div>
                     <div>
                       <p className="text-sm font-medium text-gray-900">
-                        Step {prevStep.order}: {prevStep.name}
+                        {prevStep.name}
                       </p>
                       {prevStep.description && (
                         <p className="text-xs text-gray-500">{prevStep.description}</p>
@@ -477,16 +493,17 @@ export default function StepEditor({
           </div>
 
           {/* Output Format */}
-          <div>
-            <label className="block font-medium text-gray-900 mb-2">
-              📄 Output Format
-            </label>
+          <div className="bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-xl p-5">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <FileText size={18} className="text-gray-500" />
+              Formato de Salida
+            </h3>
             <select
               value={editedStep.output_format || 'text'}
               onChange={(e) =>
                 setEditedStep((prev) => ({ ...prev, output_format: e.target.value as OutputFormat }))
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
             >
               {OUTPUT_FORMATS.map((format) => (
                 <option key={format.value} value={format.value}>
@@ -494,18 +511,16 @@ export default function StepEditor({
                 </option>
               ))}
             </select>
-            <p className="text-xs text-gray-500 mt-2">
-              The AI will be instructed to format the output in the selected format.
-            </p>
           </div>
 
-          {/* Prompt */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
+          {/* Prompt Section */}
+          <div className="bg-gradient-to-br from-indigo-50 to-white border border-indigo-200 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <label className="block font-medium text-gray-900">
-                  📝 Prompt
-                </label>
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <MessageSquare size={18} className="text-indigo-500" />
+                  Prompt
+                </h3>
                 <ValidationBadge validation={validation} />
               </div>
               <div className="flex items-center gap-2">
@@ -513,52 +528,54 @@ export default function StepEditor({
                 <button
                   type="button"
                   onClick={() => handleCopyPrompt(false)}
-                  className="px-2 py-1.5 text-xs rounded-lg inline-flex items-center gap-1 bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                  className={`px-3 py-1.5 text-xs rounded-lg inline-flex items-center gap-1.5 transition-all ${
+                    copied ? 'bg-green-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
                   title="Copiar prompt con variables"
                 >
-                  {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-                  Copiar
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  {copied ? 'Copiado' : 'Copiar'}
                 </button>
                 {hasVariables && (
-                  <button
-                    type="button"
-                    onClick={() => handleCopyPrompt(true)}
-                    className="px-2 py-1.5 text-xs rounded-lg inline-flex items-center gap-1 bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
-                    title="Copiar con valores reales"
-                  >
-                    <Copy size={14} />
-                    Con valores
-                  </button>
-                )}
-                {hasVariables && (
-                  <button
-                    type="button"
-                    onClick={() => setShowRealValues(!showRealValues)}
-                    className={`px-3 py-1.5 text-xs rounded-lg inline-flex items-center gap-1.5 transition-colors ${
-                      showRealValues
-                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {showRealValues ? (
-                      <>
-                        <Eye size={14} />
-                        Valores reales
-                      </>
-                    ) : (
-                      <>
-                        <Code size={14} />
-                        Variables genéricas
-                      </>
-                    )}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyPrompt(true)}
+                      className="px-3 py-1.5 text-xs rounded-lg inline-flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 transition-colors"
+                      title="Copiar con valores reales"
+                    >
+                      <Copy size={14} />
+                      Con valores
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowRealValues(!showRealValues)}
+                      className={`px-3 py-1.5 text-xs rounded-lg inline-flex items-center gap-1.5 transition-colors ${
+                        showRealValues
+                          ? 'bg-green-100 border border-green-200 text-green-700'
+                          : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {showRealValues ? (
+                        <>
+                          <Eye size={14} />
+                          Valores reales
+                        </>
+                      ) : (
+                        <>
+                          <Code size={14} />
+                          Variables
+                        </>
+                      )}
+                    </button>
+                  </>
                 )}
               </div>
             </div>
 
             {showRealValues ? (
               // Vista de solo lectura con valores reales
-              <div className="w-full px-3 py-2 border border-green-300 bg-green-50 rounded-lg font-mono text-sm text-gray-900 whitespace-pre-wrap max-h-96 overflow-y-auto">
+              <div className="w-full px-4 py-3 border border-green-200 bg-green-50 rounded-xl font-mono text-sm text-gray-900 whitespace-pre-wrap max-h-96 overflow-y-auto">
                 {displayPrompt}
               </div>
             ) : (
@@ -570,13 +587,13 @@ export default function StepEditor({
                   onChange={handlePromptChange}
                   onKeyDown={handlePromptKeyDown}
                   rows={12}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 transition-all"
                   placeholder="Escribe {{ para ver las variables disponibles..."
                 />
                 {/* Autocomplete dropdown */}
                 {showAutocomplete && filteredVariables.length > 0 && (
-                  <div className="absolute left-4 bottom-4 z-50 w-64 bg-white border border-gray-300 rounded-lg shadow-xl max-h-48 overflow-y-auto">
-                    <div className="p-2 border-b border-gray-200 bg-gray-50">
+                  <div className="absolute left-4 bottom-4 z-50 w-64 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                    <div className="p-2 border-b border-gray-100 bg-gray-50 rounded-t-xl">
                       <p className="text-xs text-gray-500">Variables disponibles (↑↓ navegar, Enter seleccionar)</p>
                     </div>
                     {filteredVariables.map((varName, index) => (
@@ -584,8 +601,8 @@ export default function StepEditor({
                         key={varName}
                         type="button"
                         onClick={() => insertVariable(varName)}
-                        className={`w-full text-left px-3 py-2 text-sm font-mono hover:bg-blue-50 ${
-                          index === autocompleteIndex ? 'bg-blue-100 text-blue-700' : 'text-gray-700'
+                        className={`w-full text-left px-3 py-2 text-sm font-mono hover:bg-indigo-50 transition-colors ${
+                          index === autocompleteIndex ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700'
                         }`}
                       >
                         {'{{ '}{varName}{' }}'}
@@ -603,7 +620,7 @@ export default function StepEditor({
             )}
 
             {/* Prompt Validation Panel */}
-            <div className="mt-3">
+            <div className="mt-4">
               <PromptValidationPanel
                 validation={validation}
                 onApplySuggestion={handleApplySuggestion}
@@ -611,73 +628,38 @@ export default function StepEditor({
             </div>
 
             {/* Available Variables Section */}
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-sm font-medium text-blue-800 mb-2">Variables disponibles ({
-                (() => {
-                  const allVarsSet = new Set<string>()
-                  // Base variables
-                  ;['ecp_name', 'problem_core', 'country', 'industry', 'client_name'].forEach(v => allVarsSet.add(v))
-                  // Project variables
-                  if (projectVariables) projectVariables.forEach(v => v?.name && allVarsSet.add(v.name))
-                  // Campaign variables
-                  if (campaignVariables) Object.keys(campaignVariables).forEach(k => allVarsSet.add(k))
-                  return allVarsSet.size
-                })()
-              }):</p>
+            <div className="mt-4 p-4 bg-white/70 rounded-xl border border-indigo-100">
+              <p className="text-sm font-medium text-indigo-800 mb-3 flex items-center gap-2">
+                <Sparkles size={16} />
+                Variables disponibles ({getAllVariables().length})
+              </p>
               <div className="flex flex-wrap gap-2">
-                {(() => {
-                  const allVarsSet = new Set<string>()
-
-                  // 1. Base/legacy variables
-                  ;['ecp_name', 'problem_core', 'country', 'industry', 'client_name'].forEach(v => allVarsSet.add(v))
-
-                  // 2. Project-defined variables
-                  if (projectVariables && Array.isArray(projectVariables)) {
-                    projectVariables.forEach(v => {
-                      if (v && v.name) allVarsSet.add(v.name)
-                    })
-                  }
-
-                  // 3. Campaign variables (includes all merged variables)
-                  if (campaignVariables && typeof campaignVariables === 'object') {
-                    Object.keys(campaignVariables).forEach(k => allVarsSet.add(k))
-                  }
-
-                  // 4. Variables from prompts
-                  allSteps.forEach(s => {
-                    if (s.prompt) {
-                      const matches = s.prompt.match(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g)
-                      if (matches) {
-                        matches.forEach(match => {
-                          const varName = match.replace(/\{\{\s*|\s*\}\}/g, '')
-                          allVarsSet.add(varName)
-                        })
+                {getAllVariables().map(varName => (
+                  <code
+                    key={varName}
+                    className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1.5 rounded-lg border border-indigo-200 cursor-pointer hover:bg-indigo-100 transition-colors"
+                    onClick={() => {
+                      const textarea = textareaRef.current
+                      if (textarea && !showRealValues) {
+                        const start = textarea.selectionStart
+                        const end = textarea.selectionEnd
+                        const text = editedStep.prompt
+                        const newText = text.substring(0, start) + `{{ ${varName} }}` + text.substring(end)
+                        setEditedStep(prev => ({ ...prev, prompt: newText }))
+                        setTimeout(() => {
+                          const newPos = start + `{{ ${varName} }}`.length
+                          textarea.focus()
+                          textarea.setSelectionRange(newPos, newPos)
+                        }, 0)
                       }
-                    }
-                  })
-
-                  return Array.from(allVarsSet).sort().map(varName => (
-                    <code
-                      key={varName}
-                      className="text-xs bg-white text-blue-700 px-2 py-1 rounded border border-blue-300 cursor-pointer hover:bg-blue-100"
-                      onClick={() => {
-                        const textarea = document.querySelector('textarea')
-                        if (textarea && !showRealValues) {
-                          const start = textarea.selectionStart
-                          const end = textarea.selectionEnd
-                          const text = editedStep.prompt
-                          const newText = text.substring(0, start) + `{{ ${varName} }}` + text.substring(end)
-                          setEditedStep(prev => ({ ...prev, prompt: newText }))
-                        }
-                      }}
-                      title="Click para insertar"
-                    >
-                      {`{{ ${varName} }}`}
-                    </code>
-                  ))
-                })()}
+                    }}
+                    title="Click para insertar"
+                  >
+                    {`{{ ${varName} }}`}
+                  </code>
+                ))}
               </div>
-              <p className="text-xs text-blue-600 mt-2">
+              <p className="text-xs text-indigo-600 mt-3">
                 Haz clic en una variable para insertarla en el prompt
               </p>
             </div>
@@ -685,23 +667,23 @@ export default function StepEditor({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-200">
-          <div className="flex gap-3 mb-2">
+        <div className="px-6 py-5 border-t border-gray-100 bg-gray-50">
+          <div className="flex gap-3 mb-3">
             <button
               onClick={() => onSave(editedStep)}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="flex-1 px-5 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 font-medium shadow-md hover:shadow-lg transition-all"
             >
-              Save Step
+              Guardar Paso
             </button>
             <button
               onClick={onCancel}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              className="px-5 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-white font-medium transition-colors"
             >
-              Cancel
+              Cancelar
             </button>
           </div>
           <p className="text-xs text-gray-400 text-center">
-            Atajos: <kbd className="px-1.5 py-0.5 bg-gray-100 rounded border border-gray-300">Ctrl+S</kbd> guardar · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded border border-gray-300">Esc</kbd> cancelar
+            Atajos: <kbd className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-gray-600">Ctrl+S</kbd> guardar · <kbd className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-gray-600">Esc</kbd> cancelar
           </p>
         </div>
       </div>
