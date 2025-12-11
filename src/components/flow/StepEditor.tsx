@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, Eye, Code, Copy, Check } from 'lucide-react'
 import { FlowStep, OutputFormat } from '@/types/flow.types'
 import { formatTokenCount } from '@/lib/supabase'
+import { usePromptValidator } from '@/hooks/usePromptValidator'
+import PromptValidationPanel, { ValidationBadge } from './PromptValidationPanel'
 
 interface StepEditorProps {
   step: FlowStep
@@ -52,6 +54,22 @@ export default function StepEditor({
     if (campaignVariables) Object.keys(campaignVariables).forEach(k => allVarsSet.add(k))
     return Array.from(allVarsSet).sort()
   }, [projectVariables, campaignVariables])
+
+  // Prompt validation
+  const validation = usePromptValidator({
+    prompt: editedStep.prompt,
+    declaredVariables: getAllVariables(),
+    availableSteps: allSteps.filter(s => s.order < step.order).map(s => ({ id: s.id, name: s.name }))
+  })
+
+  // Handle applying a suggestion from validation
+  const handleApplySuggestion = useCallback((originalVar: string, suggestion: string) => {
+    if (!originalVar) return
+    // Replace all occurrences of the original variable with the suggestion
+    const regex = new RegExp(`\\{\\{\\s*${originalVar}\\s*\\}\\}`, 'g')
+    const newPrompt = editedStep.prompt.replace(regex, `{{ ${suggestion} }}`)
+    setEditedStep(prev => ({ ...prev, prompt: newPrompt }))
+  }, [editedStep.prompt])
 
   // Filter variables for autocomplete
   const filteredVariables = getAllVariables().filter(v =>
@@ -484,9 +502,12 @@ export default function StepEditor({
           {/* Prompt */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="block font-medium text-gray-900">
-                📝 Prompt
-              </label>
+              <div className="flex items-center gap-3">
+                <label className="block font-medium text-gray-900">
+                  📝 Prompt
+                </label>
+                <ValidationBadge validation={validation} />
+              </div>
               <div className="flex items-center gap-2">
                 {/* Copy buttons */}
                 <button
@@ -580,6 +601,14 @@ export default function StepEditor({
                 Vista previa con los valores de las variables de esta campaña (solo lectura)
               </p>
             )}
+
+            {/* Prompt Validation Panel */}
+            <div className="mt-3">
+              <PromptValidationPanel
+                validation={validation}
+                onApplySuggestion={handleApplySuggestion}
+              />
+            </div>
 
             {/* Available Variables Section */}
             <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
