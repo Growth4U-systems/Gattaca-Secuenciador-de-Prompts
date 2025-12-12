@@ -1,0 +1,73 @@
+{
+  "name": "ECP Generator Dev Environment",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-20-bookworm",
+
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "ms-vscode.vscode-typescript-next",
+        "supabase.supabase-vscode",
+        "unifiedjs.vscode-mdx",
+        "eamodio.gitlens",
+        "Anthropic.claude-code"
+      ],
+      "settings": {
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "typescript.enablePromptUseWorkspaceTsdk": true,
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "tailwindCSS.experimental.classRegex": [
+          ["cn\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
+        ],
+        "files.exclude": {
+          "**/.git": true,
+          "**/.next": true,
+          "**/node_modules": true,
+          "**/.supabase": true
+        },
+        "search.exclude": {
+          "**/node_modules": true,
+          "**/.next": true,
+          "**/package-lock.json": true,
+          "**/.supabase": true
+        },
+        "files.watcherExclude": {
+          "**/.git/objects/**": true,
+          "**/.git/subtree-cache/**": true,
+          "**/node_modules/**": true,
+          "**/.next/**": true,
+          "**/.supabase/**": true
+        }
+      }
+    }
+  },
+
+  "forwardPorts": [3000, 54321],
+  "portsAttributes": {
+    "3000": {
+      "label": "Next.js Dev Server",
+      "onAutoForward": "notify"
+    },
+    "54321": {
+      "label": "Supabase Local",
+      "onAutoForward": "silent"
+    }
+  },
+
+  "postCreateCommand": "npm install && npx supabase -v || npm install -g supabase",
+
+  "postStartCommand": "npm run dev",
+
+  "remoteUser": "node"
+}

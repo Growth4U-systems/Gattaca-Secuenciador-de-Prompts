@@ -6,7 +6,6 @@ Este proyecto ahora usa **`gemini-2.5-pro-002`** (Gemini 2.5 Pro), el modelo de 
 
 **¿Por qué Gemini 2.5 Pro?**
 - ✅ Modelo de MÁXIMA CALIDAD de la familia Gemini (2025)
-- ✅ Razonamiento superior con Deep Think mode
 - ✅ #1 en benchmarks: GPQA, AIME 2025, USAMO
 - ✅ Mejor para análisis estratégicos complejos
 - ✅ Capacidades de thinking avanzadas
