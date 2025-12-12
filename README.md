@@ -43,7 +43,7 @@ Auditoría detallada de cada llamada a IA
 
 ## 🚀 Quick Start - Deploy en 15 Minutos
 
-> 📖 **Guía Completa de Deployment**: Lee **[DEPLOYMENT_CLOUD.md](./DEPLOYMENT_CLOUD.md)** para instrucciones paso a paso.
+> 📖 **Guía Completa de Deployment**: Lee **[cloud-deployment.md](./docs/deployment/cloud-deployment.md)** para instrucciones paso a paso.
 
 ### Resumen Rápido
 
