@@ -444,6 +444,17 @@ function DocumentsTab({
     tokens: doc.token_count || 0,
   }))
 
+  // Helper function to get Tailwind text color class
+  const getTextColorClass = (color: string): string => {
+    const colorMap: Record<string, string> = {
+      blue: 'text-blue-700',
+      purple: 'text-purple-700',
+      green: 'text-green-700',
+      orange: 'text-orange-700',
+    }
+    return colorMap[color] || 'text-gray-700'
+  }
+
   const categoryCards = [
     { key: 'product', icon: '📦', label: 'Producto', color: 'blue', description: 'Fichas técnicas, features, beneficios' },
     { key: 'competitor', icon: '🎯', label: 'Competidor', color: 'purple', description: 'Análisis competitivo, comparativas' },
@@ -478,7 +489,7 @@ function DocumentsTab({
                 {categoryCards.map((cat) => (
                   <div key={cat.key} className="bg-white/70 rounded-xl p-3 border border-blue-100">
                     <span className="text-lg">{cat.icon}</span>
-                    <p className={`font-medium text-${cat.color}-700 text-sm mt-1`}>{cat.label}</p>
+                    <p className={`font-medium ${getTextColorClass(cat.color)} text-sm mt-1`}>{cat.label}</p>
                     <p className="text-xs text-gray-600 mt-0.5">{cat.description}</p>
                   </div>
                 ))}

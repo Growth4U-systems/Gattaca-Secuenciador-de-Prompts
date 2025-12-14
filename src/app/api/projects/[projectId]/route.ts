@@ -34,7 +34,7 @@ export async function GET(
 
     const { data: project, error } = await supabase
       .from('projects')
-      .select('id, name, variable_definitions, flow_config, campaign_docs_guide')
+      .select('id, name, variable_definitions, flow_config')
       .eq('id', projectId)
       .single()
 
