@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database } from 'lucide-react'
 import Link from 'next/link'
 import { createProject } from '@/hooks/useProjects'
 
@@ -36,91 +36,152 @@ export default function NewProjectPage() {
     }
   }
 
+  const steps = [
+    { icon: Settings, title: 'Configurar variables', description: 'Define las variables que usarás en tus prompts' },
+    { icon: FileText, title: 'Subir documentos', description: 'Añade información de producto, competidores, research' },
+    { icon: Database, title: 'Crear flujo', description: 'Configura los pasos y prompts de tu estrategia' },
+    { icon: Rocket, title: 'Lanzar campañas', description: 'Genera contenido para diferentes nichos' },
+  ]
+
   return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
-        >
-          <ArrowLeft size={20} />
-          Volver a proyectos
-        </Link>
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-100">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors group"
+          >
+            <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+            Volver a proyectos
+          </Link>
+        </div>
+      </div>
 
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">
-            Nuevo Proyecto
-          </h1>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="grid lg:grid-cols-5 gap-8">
+          {/* Form Section */}
+          <div className="lg:col-span-3">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              {/* Form Header */}
+              <div className="px-8 py-6 bg-gradient-to-r from-blue-600 to-indigo-700">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-white/10 backdrop-blur rounded-xl">
+                    <FolderPlus className="w-6 h-6 text-white" />
+                  </div>
+                  <h1 className="text-2xl font-bold text-white">Nuevo Proyecto</h1>
+                </div>
+                <p className="text-blue-100">
+                  Crea un nuevo proyecto para organizar tus estrategias de marketing
+                </p>
+              </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label
-                htmlFor="name"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Nombre del Proyecto *
-              </label>
-              <input
-                type="text"
-                id="name"
-                required
-                maxLength={200}
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
-                placeholder="Ej: Producto XYZ - Campaña 2024"
-              />
+              {/* Form Content */}
+              <form onSubmit={handleSubmit} className="p-8 space-y-6">
+                <div>
+                  <label
+                    htmlFor="name"
+                    className="block text-sm font-semibold text-gray-700 mb-2"
+                  >
+                    Nombre del Proyecto
+                    <span className="text-red-500 ml-1">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="name"
+                    required
+                    maxLength={200}
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 transition-all"
+                    placeholder="Ej: Producto XYZ - Campaña 2024"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="description"
+                    className="block text-sm font-semibold text-gray-700 mb-2"
+                  >
+                    Descripción
+                    <span className="text-gray-400 font-normal ml-2">(opcional)</span>
+                  </label>
+                  <textarea
+                    id="description"
+                    rows={4}
+                    value={formData.description}
+                    onChange={(e) =>
+                      setFormData({ ...formData, description: e.target.value })
+                    }
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 transition-all resize-none"
+                    placeholder="Describe brevemente el objetivo del proyecto..."
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="submit"
+                    disabled={loading || !formData.name.trim()}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-600/25 hover:shadow-xl hover:shadow-blue-600/30 inline-flex items-center justify-center gap-2 group"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Creando...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={18} />
+                        Crear Proyecto
+                        <ArrowRight size={16} className="opacity-0 -ml-4 group-hover:opacity-100 group-hover:ml-0 transition-all" />
+                      </>
+                    )}
+                  </button>
+                  <Link
+                    href="/"
+                    className="px-6 py-3 border border-gray-200 text-gray-600 font-medium rounded-xl hover:bg-gray-50 transition-colors"
+                  >
+                    Cancelar
+                  </Link>
+                </div>
+              </form>
             </div>
+          </div>
 
-            <div>
-              <label
-                htmlFor="description"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Descripción
-              </label>
-              <textarea
-                id="description"
-                rows={4}
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
-                placeholder="Descripción opcional del proyecto..."
-              />
-            </div>
+          {/* Sidebar - Next Steps */}
+          <div className="lg:col-span-2">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 p-6 sticky top-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Lightbulb className="w-5 h-5 text-blue-600" />
+                <h3 className="font-semibold text-gray-900">Próximos pasos</h3>
+              </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h3 className="text-sm font-medium text-blue-900 mb-2">
-                📋 Próximos pasos
-              </h3>
-              <ul className="text-sm text-blue-800 space-y-1">
-                <li>1. Configurar prompts maestros para cada paso</li>
-                <li>2. Subir documentos (producto, competidores, research)</li>
-                <li>3. Configurar qué documentos usar en cada paso</li>
-                <li>4. Crear campañas por nicho</li>
-              </ul>
-            </div>
+              <div className="space-y-4">
+                {steps.map((step, index) => {
+                  const Icon = step.icon
+                  return (
+                    <div key={index} className="flex gap-3">
+                      <div className="flex-shrink-0 w-8 h-8 bg-white rounded-lg shadow-sm flex items-center justify-center">
+                        <span className="text-sm font-semibold text-blue-600">{index + 1}</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{step.title}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{step.description}</p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
 
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={loading || !formData.name.trim()}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              >
-                {loading ? 'Creando...' : 'Crear Proyecto'}
-              </button>
-              <Link
-                href="/"
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </Link>
+              <div className="mt-6 pt-4 border-t border-blue-200/50">
+                <p className="text-xs text-blue-700">
+                  <strong>Tip:</strong> Un buen nombre de proyecto incluye el producto y el período de la campaña.
+                </p>
+              </div>
             </div>
-          </form>
+          </div>
         </div>
       </div>
     </main>

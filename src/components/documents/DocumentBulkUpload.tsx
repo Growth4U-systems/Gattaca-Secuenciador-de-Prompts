@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Upload, File, AlertCircle, CheckCircle, X, Save } from 'lucide-react'
+import { FolderUp, X, FileText, AlertCircle, Loader2, Check, Upload, Save } from 'lucide-react'
 import { DocCategory } from '@/types/database.types'
 import { formatTokenCount } from '@/lib/supabase'
 
@@ -18,9 +18,15 @@ interface ExtractedFile {
   fileSize: number
   mimeType: string
   error?: string
-  // Added by user after extraction
   category?: DocCategory
 }
+
+const CATEGORIES = [
+  { value: 'product', label: 'Producto', icon: '📦' },
+  { value: 'competitor', label: 'Competidor', icon: '🎯' },
+  { value: 'research', label: 'Research', icon: '🔬' },
+  { value: 'output', label: 'Output', icon: '📝' },
+]
 
 export default function DocumentBulkUpload({
   projectId,
@@ -30,12 +36,36 @@ export default function DocumentBulkUpload({
   const [extracting, setExtracting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [extractedFiles, setExtractedFiles] = useState<ExtractedFile[]>([])
+  const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true)
+    } else if (e.type === 'dragleave') {
+      setDragActive(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+
+    if (e.dataTransfer.files) {
+      handleFilesProcess(Array.from(e.dataTransfer.files))
+    }
+  }
 
   const handleFilesSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
+    handleFilesProcess(files)
+  }
 
+  const handleFilesProcess = async (files: File[]) => {
     setExtracting(true)
     try {
       console.log(`Uploading ${files.length} files to Blob Storage...`)
@@ -52,7 +82,7 @@ export default function DocumentBulkUpload({
             handleUploadUrl: '/api/documents/upload-url',
           })
 
-          console.log(`✅ Uploaded ${file.name} to Blob: ${blob.url}`)
+          console.log(`Uploaded ${file.name} to Blob: ${blob.url}`)
 
           return {
             blobUrl: blob.url,
@@ -94,19 +124,18 @@ export default function DocumentBulkUpload({
         category: file.success ? ('product' as DocCategory) : undefined,
       }))
 
-      setExtractedFiles(filesWithDefaults)
+      setExtractedFiles(prev => [...prev, ...filesWithDefaults])
 
       if (result.summary.failed > 0) {
         alert(
-          `⚠️ ${result.summary.failed} de ${result.summary.total} archivos fallaron en la extracción. Revisa los errores abajo.`
+          `${result.summary.failed} de ${result.summary.total} archivos fallaron en la extracción.`
         )
       }
     } catch (error) {
       console.error('Error extracting files:', error)
       alert(
-        `❌ Error al procesar archivos: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Error al procesar archivos: ${error instanceof Error ? error.message : 'Unknown error'}`
       )
-      setExtractedFiles([])
     } finally {
       setExtracting(false)
     }
@@ -128,14 +157,12 @@ export default function DocumentBulkUpload({
     const missingCategory = successfulFiles.find((f) => !f.category)
 
     if (missingCategory) {
-      alert(
-        `⚠️ Por favor asigna una categoría a: ${missingCategory.filename}`
-      )
+      alert(`Por favor asigna una categoría a: ${missingCategory.filename}`)
       return
     }
 
     if (successfulFiles.length === 0) {
-      alert('⚠️ No hay archivos válidos para guardar')
+      alert('No hay archivos válidos para guardar')
       return
     }
 
@@ -167,23 +194,26 @@ export default function DocumentBulkUpload({
       }
 
       const result = await response.json()
-      alert(`✅ ${result.count} documentos guardados exitosamente`)
+      alert(`${result.count} documentos guardados exitosamente`)
 
       // Close modal and reset
-      setIsOpen(false)
-      setExtractedFiles([])
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-
+      handleClose()
       onUploadComplete()
     } catch (error) {
       console.error('Error saving files:', error)
       alert(
-        `❌ Error al guardar documentos: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Error al guardar documentos: ${error instanceof Error ? error.message : 'Unknown error'}`
       )
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleClose = () => {
+    setIsOpen(false)
+    setExtractedFiles([])
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
@@ -194,222 +224,243 @@ export default function DocumentBulkUpload({
   const successCount = extractedFiles.filter((f) => f.success).length
   const readyToSave = extractedFiles.filter((f) => f.success && f.category).length
 
-  if (!isOpen) {
-    return (
+  return (
+    <>
       <button
         onClick={() => setIsOpen(true)}
-        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 inline-flex items-center gap-2"
+        className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 bg-white text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors"
       >
-        <Upload size={18} />
-        Subir Múltiples Documentos
+        <FolderUp size={18} />
+        Subida Masiva
       </button>
-    )
-  }
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold">Subir Múltiples Documentos</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            Selecciona archivos, revisa el contenido extraído y asigna categorías antes de guardar
-          </p>
-        </div>
-
-        {/* Content - Scrollable */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* File Upload */}
-          {extractedFiles.length === 0 && (
-            <div>
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 transition-colors"
-              >
-                <Upload size={40} className="mx-auto mb-3 text-gray-400" />
-                <p className="text-gray-600">
-                  Click para seleccionar múltiples archivos
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  PDF, DOCX o TXT (archivos grandes usan Blob Storage)
-                </p>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.doc,.docx,.txt"
-                multiple
-                onChange={handleFilesSelect}
-                className="hidden"
-                disabled={extracting}
-              />
-            </div>
-          )}
-
-          {/* Extracting State */}
-          {extracting && (
-            <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
-              <p className="text-gray-600">Extrayendo contenido de archivos...</p>
-            </div>
-          )}
-
-          {/* Extracted Files List */}
-          {extractedFiles.length > 0 && !extracting && (
-            <>
-              {/* Summary */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <CheckCircle size={20} className="text-blue-600 mt-0.5" />
-                  <div className="flex-1">
-                    <h3 className="font-medium text-blue-900">
-                      {successCount} de {extractedFiles.length} archivos extraídos exitosamente
-                    </h3>
-                    <p className="text-sm text-blue-800 mt-1">
-                      Total: {formatTokenCount(totalTokens)} tokens • {readyToSave}/{successCount} categorizados
-                    </p>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-700 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white/10 backdrop-blur rounded-xl">
+                    <FolderUp className="w-5 h-5 text-white" />
                   </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">Subida Masiva</h2>
+                    <p className="text-sm text-blue-100">Sube varios documentos a la vez</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleClose}
+                  className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Drop Zone */}
+              <div
+                className={`
+                  border-2 border-dashed rounded-2xl p-6 text-center transition-all
+                  ${dragActive
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/50'
+                  }
+                `}
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.txt"
+                  multiple
+                  onChange={handleFilesSelect}
+                  className="hidden"
+                  disabled={extracting}
+                />
+
+                <div className="flex flex-col items-center">
+                  <div className={`p-3 rounded-xl mb-3 ${dragActive ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                    <Upload className={`w-6 h-6 ${dragActive ? 'text-blue-600' : 'text-gray-400'}`} />
+                  </div>
+                  <p className="text-gray-700 font-medium mb-1">
+                    {dragActive ? 'Suelta los archivos' : 'Arrastra archivos aquí'}
+                  </p>
+                  <p className="text-gray-500 text-sm mb-3">
+                    o haz click para seleccionar múltiples archivos
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={extracting}
+                    className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium disabled:opacity-50"
+                  >
+                    Seleccionar archivos
+                  </button>
                 </div>
               </div>
 
-              {/* Files */}
-              <div className="space-y-4">
-                {extractedFiles.map((file, index) => (
-                  <div
-                    key={index}
-                    className={`border rounded-lg p-4 ${
-                      file.success
-                        ? 'border-gray-300 bg-white'
-                        : 'border-red-300 bg-red-50'
-                    }`}
-                  >
-                    {/* File Header */}
-                    <div className="flex items-start gap-3 mb-3">
-                      {file.success ? (
-                        <File size={20} className="text-blue-600 mt-0.5" />
-                      ) : (
-                        <AlertCircle size={20} className="text-red-600 mt-0.5" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-gray-900 truncate">
-                          {file.filename}
-                        </h4>
-                        <p className="text-sm text-gray-600">
-                          {(file.fileSize / 1024).toFixed(2)} KB
-                          {file.tokenCount && ` • ${formatTokenCount(file.tokenCount)} tokens`}
+              {/* Extracting State */}
+              {extracting && (
+                <div className="text-center py-8">
+                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-3" />
+                  <p className="text-gray-600 font-medium">Extrayendo contenido...</p>
+                  <p className="text-gray-500 text-sm mt-1">Esto puede tomar unos segundos</p>
+                </div>
+              )}
+
+              {/* File List */}
+              {extractedFiles.length > 0 && !extracting && (
+                <>
+                  {/* Summary */}
+                  <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Check className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-medium text-blue-900">
+                          {successCount} de {extractedFiles.length} archivos extraídos
+                        </h3>
+                        <p className="text-sm text-blue-800 mt-1">
+                          Total: {formatTokenCount(totalTokens)} tokens • {readyToSave}/{successCount} categorizados
                         </p>
-                        {file.error && (
-                          <p className="text-sm text-red-600 mt-1">
-                            ❌ {file.error}
-                          </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Files */}
+                  <div className="space-y-3">
+                    {extractedFiles.map((file, index) => (
+                      <div
+                        key={index}
+                        className={`
+                          rounded-2xl p-4 border-2 transition-all
+                          ${file.success
+                            ? 'border-gray-100 bg-white'
+                            : 'border-red-100 bg-red-50'
+                          }
+                        `}
+                      >
+                        {/* File Header */}
+                        <div className="flex items-start gap-3 mb-3">
+                          {file.success ? (
+                            <div className="p-2 bg-blue-100 rounded-lg">
+                              <FileText className="w-4 h-4 text-blue-600" />
+                            </div>
+                          ) : (
+                            <div className="p-2 bg-red-100 rounded-lg">
+                              <AlertCircle className="w-4 h-4 text-red-600" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-gray-900 truncate">
+                              {file.filename}
+                            </h4>
+                            <p className="text-sm text-gray-500">
+                              {(file.fileSize / 1024).toFixed(2)} KB
+                              {file.tokenCount && ` • ${formatTokenCount(file.tokenCount)} tokens`}
+                            </p>
+                            {file.error && (
+                              <p className="text-sm text-red-600 mt-1">{file.error}</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => removeFile(index)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+
+                        {/* Category Selection */}
+                        {file.success && (
+                          <>
+                            <div className="grid grid-cols-4 gap-2 mb-3">
+                              {CATEGORIES.map((cat) => (
+                                <button
+                                  key={cat.value}
+                                  onClick={() => updateCategory(index, cat.value as DocCategory)}
+                                  className={`
+                                    flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-medium transition-all
+                                    ${file.category === cat.value
+                                      ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+                                      : 'bg-gray-50 text-gray-600 border-2 border-transparent hover:bg-gray-100'
+                                    }
+                                  `}
+                                >
+                                  <span>{cat.icon}</span>
+                                  <span className="hidden sm:inline">{cat.label}</span>
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Content Preview */}
+                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 max-h-24 overflow-y-auto">
+                              <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono">
+                                {file.extractedContent?.slice(0, 300)}
+                                {(file.extractedContent?.length || 0) > 300 && '...'}
+                              </pre>
+                            </div>
+                          </>
                         )}
                       </div>
-                      <button
-                        onClick={() => removeFile(index)}
-                        className="text-gray-400 hover:text-red-600"
-                      >
-                        <X size={20} />
-                      </button>
-                    </div>
-
-                    {/* Category Selection (only for successful extractions) */}
-                    {file.success && (
-                      <>
-                        <div className="mb-3">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Categoría *
-                          </label>
-                          <select
-                            value={file.category || ''}
-                            onChange={(e) =>
-                              updateCategory(index, e.target.value as DocCategory)
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                          >
-                            <option value="">-- Seleccionar categoría --</option>
-                            <option value="product">📦 Producto</option>
-                            <option value="competitor">🎯 Competidor</option>
-                            <option value="research">🔬 Research</option>
-                            <option value="output">📝 Output</option>
-                          </select>
-                        </div>
-
-                        {/* Content Preview */}
-                        <div className="bg-gray-50 border border-gray-200 rounded p-3 max-h-32 overflow-y-auto">
-                          <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono">
-                            {file.extractedContent?.slice(0, 300)}
-                            {(file.extractedContent?.length || 0) > 300 && '...'}
-                          </pre>
-                        </div>
-                      </>
-                    )}
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              {/* Add More Files Button */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
-              >
-                + Agregar más archivos
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.doc,.docx,.txt"
-                multiple
-                onChange={handleFilesSelect}
-                className="hidden"
-                disabled={extracting}
-              />
-            </>
-          )}
-
-          {/* Token Warning */}
-          {totalTokens > 500000 && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-3">
-              <AlertCircle size={20} className="text-yellow-600 mt-0.5" />
-              <div>
-                <h4 className="font-medium text-yellow-900">
-                  Documentos Grandes
-                </h4>
-                <p className="text-sm text-yellow-800">
-                  Total: {formatTokenCount(totalTokens)} tokens. Ten en cuenta el
-                  límite de 2M tokens al usar estos documentos.
-                </p>
-              </div>
+                  {/* Token Warning */}
+                  {totalTokens > 500000 && (
+                    <div className="flex items-start gap-3 p-4 bg-yellow-50 border border-yellow-100 rounded-xl">
+                      <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium text-yellow-900">Documentos Grandes</h4>
+                        <p className="text-sm text-yellow-800">
+                          Total: {formatTokenCount(totalTokens)} tokens. Ten en cuenta el límite de 2M tokens.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Footer */}
-        <div className="p-6 border-t border-gray-200 flex gap-3">
-          <button
-            onClick={handleSaveAll}
-            disabled={readyToSave === 0 || saving || extracting}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
-          >
-            <Save size={18} />
-            {saving
-              ? 'Guardando...'
-              : `Guardar ${readyToSave} documento${readyToSave !== 1 ? 's' : ''}`}
-          </button>
-          <button
-            onClick={() => {
-              setIsOpen(false)
-              setExtractedFiles([])
-              if (fileInputRef.current) {
-                fileInputRef.current.value = ''
-              }
-            }}
-            disabled={saving || extracting}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:cursor-not-allowed"
-          >
-            Cancelar
-          </button>
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex-shrink-0 flex gap-3">
+              <button
+                onClick={handleClose}
+                disabled={saving || extracting}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-600 font-medium rounded-xl hover:bg-gray-100 disabled:opacity-50 transition-colors"
+              >
+                {successCount > 0 ? 'Cerrar' : 'Cancelar'}
+              </button>
+              {readyToSave > 0 && (
+                <button
+                  onClick={handleSaveAll}
+                  disabled={saving || extracting}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed transition-all inline-flex items-center justify-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={18} />
+                      Guardar {readyToSave} archivo{readyToSave !== 1 ? 's' : ''}
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   )
 }
