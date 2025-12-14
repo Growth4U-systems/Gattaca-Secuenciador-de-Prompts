@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
-export const maxDuration = 10
+export const maxDuration = 10 // Fixed: removed deep_research_prompts from query
 
 /**
  * Get project by ID
@@ -34,7 +34,7 @@ export async function GET(
 
     const { data: project, error } = await supabase
       .from('projects')
-      .select('id, name, variable_definitions, flow_config, deep_research_prompts, campaign_docs_guide')
+      .select('id, name, variable_definitions, flow_config, campaign_docs_guide')
       .eq('id', projectId)
       .single()
 
