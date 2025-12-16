@@ -11,6 +11,33 @@
 
 export type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml'
 
+// AI Provider types
+export type AIProvider = 'gemini' | 'openai' | 'perplexity'
+
+export type GeminiModel = 'gemini-2.0-flash' | 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-3-pro'
+export type OpenAIModel = 'gpt-4o' | 'gpt-4o-mini' | 'gpt-4-turbo' | 'o1' | 'o1-mini'
+export type PerplexityModel = 'sonar' | 'sonar-pro' | 'sonar-reasoning' | 'sonar-reasoning-pro'
+
+export type AIModel = GeminiModel | OpenAIModel | PerplexityModel
+
+export interface AIModelOption {
+  provider: AIProvider
+  model: AIModel
+  label: string
+  description?: string
+}
+
+export const AI_MODELS: AIModelOption[] = [
+  // Gemini
+  { provider: 'gemini', model: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: 'Rápido y económico' },
+  { provider: 'gemini', model: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Alta calidad' },
+  // OpenAI
+  { provider: 'openai', model: 'gpt-4o', label: 'GPT-4o', description: 'Multimodal, rápido' },
+  { provider: 'openai', model: 'gpt-4o-mini', label: 'GPT-4o Mini', description: 'Económico' },
+  { provider: 'openai', model: 'o1', label: 'o1', description: 'Razonamiento avanzado' },
+  { provider: 'openai', model: 'o1-mini', label: 'o1 Mini', description: 'Razonamiento económico' },
+]
+
 export interface FlowStep {
   id: string
   name: string
@@ -30,7 +57,8 @@ export interface FlowStep {
   output_format?: OutputFormat
 
   // Configuración opcional del modelo
-  model?: 'gemini-2.0-flash-exp' | 'gemini-2.0-pro-exp' | 'gemini-2.5-flash' | 'gemini-2.5-pro'
+  model?: AIModel
+  provider?: AIProvider
   temperature?: number
   max_tokens?: number
 }

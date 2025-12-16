@@ -36,6 +36,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     campaignId = body.campaignId as string
+    const model = body.model as string | undefined
+    const provider = body.provider as string | undefined
 
     if (!campaignId) {
       return NextResponse.json(
@@ -110,6 +112,8 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           campaign_id: campaignId,
           step_config: step,
+          model,
+          provider,
         }),
       })
 

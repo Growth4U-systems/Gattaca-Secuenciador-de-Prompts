@@ -1,5 +1,5 @@
-// Supabase Edge Function: Execute Flow Step (Generic)
-// Executes a single step from a dynamic flow configuration
+// Supabase Edge Function: Execute Flow Step (Multi-Provider)
+// Supports Gemini, OpenAI, and Perplexity
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
@@ -12,6 +12,7 @@ If the information is not in the provided documents, explicitly state: "Informat
 const TOKEN_LIMIT = 2_000_000
 
 type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml'
+type AIProvider = 'gemini' | 'openai' | 'perplexity'
 
 interface FlowStep {
   id: string
@@ -21,6 +22,7 @@ interface FlowStep {
   auto_receive_from: string[]
   output_format?: OutputFormat
   model?: string
+  provider?: AIProvider
   temperature?: number
   max_tokens?: number
 }
@@ -28,6 +30,8 @@ interface FlowStep {
 interface RequestPayload {
   campaign_id: string
   step_config: FlowStep
+  model?: string
+  provider?: AIProvider
 }
 
 function getFormatInstructions(format: OutputFormat): string {
@@ -57,6 +61,148 @@ Requirements:
   }
 }
 
+// Gemini API call
+async function callGemini(
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  temperature: number,
+  maxTokens: number
+): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
+  const apiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY')!
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: systemPrompt }],
+        },
+        contents: [
+          {
+            parts: [{ text: userPrompt }],
+          },
+        ],
+        generationConfig: {
+          temperature,
+          maxOutputTokens: maxTokens,
+        },
+      }),
+    }
+  )
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Gemini API error: ${errorText}`)
+  }
+
+  const data = await response.json()
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+  const usage = data.usageMetadata || {}
+
+  return {
+    text,
+    inputTokens: usage.promptTokenCount || 0,
+    outputTokens: usage.candidatesTokenCount || Math.ceil(text.length / 4),
+  }
+}
+
+// OpenAI API call
+async function callOpenAI(
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  temperature: number,
+  maxTokens: number
+): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
+  const apiKey = Deno.env.get('OPENAI_API_KEY')!
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`OpenAI API error: ${errorText}`)
+  }
+
+  const data = await response.json()
+  const text = data.choices?.[0]?.message?.content || ''
+  const usage = data.usage || {}
+
+  return {
+    text,
+    inputTokens: usage.prompt_tokens || 0,
+    outputTokens: usage.completion_tokens || Math.ceil(text.length / 4),
+  }
+}
+
+// Perplexity API call
+async function callPerplexity(
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  temperature: number,
+  maxTokens: number
+): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
+  const apiKey = Deno.env.get('PERPLEXITY_API_KEY')!
+
+  const response = await fetch('https://api.perplexity.ai/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Perplexity API error: ${errorText}`)
+  }
+
+  const data = await response.json()
+  const text = data.choices?.[0]?.message?.content || ''
+  const usage = data.usage || {}
+
+  return {
+    text,
+    inputTokens: usage.prompt_tokens || 0,
+    outputTokens: usage.completion_tokens || Math.ceil(text.length / 4),
+  }
+}
+
+// Determine provider from model name
+function getProviderFromModel(model: string): AIProvider {
+  if (model.startsWith('gemini')) return 'gemini'
+  if (model.startsWith('gpt') || model.startsWith('o1')) return 'openai'
+  if (model.startsWith('sonar')) return 'perplexity'
+  return 'gemini' // default
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
@@ -69,7 +215,8 @@ serve(async (req) => {
   }
 
   try {
-    const { campaign_id, step_config } = await req.json() as RequestPayload
+    const payload = await req.json() as RequestPayload
+    const { campaign_id, step_config, model: overrideModel, provider: overrideProvider } = payload
 
     if (!campaign_id || !step_config) {
       return new Response(
@@ -98,6 +245,10 @@ serve(async (req) => {
 
     const project = campaign.projects
     const startTime = Date.now()
+
+    // Determine model and provider (override > step_config > defaults)
+    const modelName = overrideModel || step_config.model || 'gemini-2.5-flash'
+    const provider = overrideProvider || step_config.provider || getProviderFromModel(modelName)
 
     // Log execution start
     const { data: logEntry } = await supabase
@@ -187,55 +338,41 @@ serve(async (req) => {
     // Add output format instructions if specified
     const outputFormat = step_config.output_format || 'text'
     const formatInstructions = getFormatInstructions(outputFormat)
-    const promptWithFormat = finalPrompt + '\n\n' + formatInstructions
 
-    // Call Gemini
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY')!
-    const modelName = step_config.model || 'gemini-2.5-pro' // Gemini 2.5 Pro - Maximum quality (2025)
+    // Combine context and prompt
+    const userPrompt = contextString + '\n\n--- TASK ---\n\n' + finalPrompt + '\n\n' + formatInstructions
 
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: SYSTEM_INSTRUCTION }],
-          },
-          contents: [
-            {
-              parts: [
-                { text: contextString },
-                { text: '\n\n--- TASK ---\n\n' + promptWithFormat },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: step_config.temperature || 0.7,
-            maxOutputTokens: step_config.max_tokens || 8192,
-          },
-        }),
-      }
-    )
+    // Call the appropriate provider
+    const temperature = step_config.temperature || 0.7
+    const maxTokens = step_config.max_tokens || 8192
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text()
-      throw new Error(`Gemini API error: ${errorText}`)
+    let result: { text: string; inputTokens: number; outputTokens: number }
+
+    console.log(`Executing with provider: ${provider}, model: ${modelName}`)
+
+    switch (provider) {
+      case 'openai':
+        result = await callOpenAI(modelName, SYSTEM_INSTRUCTION, userPrompt, temperature, maxTokens)
+        break
+      case 'perplexity':
+        result = await callPerplexity(modelName, SYSTEM_INSTRUCTION, userPrompt, temperature, maxTokens)
+        break
+      case 'gemini':
+      default:
+        result = await callGemini(modelName, SYSTEM_INSTRUCTION, userPrompt, temperature, maxTokens)
+        break
     }
-
-    const geminiData = await geminiResponse.json()
-    const outputText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    const usage = geminiData.usageMetadata || {}
-    const outputTokens = Math.ceil(outputText.length / 4)
 
     // Save output to campaign.step_outputs
     const currentStepOutputs = campaign.step_outputs || {}
     currentStepOutputs[step_config.id] = {
       step_name: step_config.name,
-      output: outputText,
-      tokens: outputTokens,
+      output: result.text,
+      tokens: result.outputTokens,
       status: 'completed',
       completed_at: new Date().toISOString(),
+      model: modelName,
+      provider: provider,
     }
 
     await supabase
@@ -251,23 +388,25 @@ serve(async (req) => {
       .from('execution_logs')
       .update({
         status: 'completed',
-        input_tokens: usage.promptTokenCount || totalTokens,
-        output_tokens: usage.candidatesTokenCount || outputTokens,
+        input_tokens: result.inputTokens || totalTokens,
+        output_tokens: result.outputTokens,
         duration_ms: duration,
-        model_used: modelName,
+        model_used: `${provider}/${modelName}`,
       })
       .eq('id', logEntry.id)
 
     return new Response(
       JSON.stringify({
         success: true,
-        output: outputText,
+        output: result.text,
         tokens: {
-          input: usage.promptTokenCount || totalTokens,
-          output: usage.candidatesTokenCount || outputTokens,
-          total: (usage.promptTokenCount || totalTokens) + (usage.candidatesTokenCount || outputTokens),
+          input: result.inputTokens || totalTokens,
+          output: result.outputTokens,
+          total: (result.inputTokens || totalTokens) + result.outputTokens,
         },
         duration_ms: duration,
+        model: modelName,
+        provider: provider,
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     )

@@ -22,7 +22,12 @@ interface FlowStep {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { campaignId, stepId } = body as { campaignId: string; stepId: string }
+    const { campaignId, stepId, model, provider } = body as {
+      campaignId: string
+      stepId: string
+      model?: string
+      provider?: string
+    }
 
     if (!campaignId || !stepId) {
       return NextResponse.json(
@@ -112,6 +117,8 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         campaign_id: campaignId,
         step_config: step,
+        model,
+        provider,
       }),
     })
 

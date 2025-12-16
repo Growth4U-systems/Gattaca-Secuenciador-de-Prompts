@@ -6,7 +6,7 @@ import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
 import CampaignBulkUpload from './CampaignBulkUpload'
 import CampaignComparison from './CampaignComparison'
-import { FlowConfig, FlowStep } from '@/types/flow.types'
+import { FlowConfig, FlowStep, AI_MODELS, AIModel, AIProvider } from '@/types/flow.types'
 
 interface CampaignRunnerProps {
   projectId: string
@@ -89,6 +89,10 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   const [downloadFormatMenu, setDownloadFormatMenu] = useState<string | null>(null)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
+
+  // AI Model selection
+  const [selectedModel, setSelectedModel] = useState<AIModel>('gemini-2.5-flash')
+  const [selectedProvider, setSelectedProvider] = useState<AIProvider>('gemini')
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('')
@@ -550,7 +554,11 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ campaignId }),
+        body: JSON.stringify({
+          campaignId,
+          model: selectedModel,
+          provider: selectedProvider,
+        }),
       })
 
       const data = await response.json()
@@ -615,7 +623,12 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ campaignId, stepId }),
+        body: JSON.stringify({
+          campaignId,
+          stepId,
+          model: selectedModel,
+          provider: selectedProvider,
+        }),
       })
 
       const data = await response.json()
@@ -966,6 +979,42 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* AI Model Selector */}
+            <div className="flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-purple-50 px-3 py-2 rounded-xl border border-indigo-100">
+              <Sparkles size={16} className="text-indigo-500" />
+              <select
+                value={`${selectedProvider}:${selectedModel}`}
+                onChange={(e) => {
+                  const [provider, model] = e.target.value.split(':') as [AIProvider, AIModel]
+                  setSelectedProvider(provider)
+                  setSelectedModel(model)
+                }}
+                className="bg-transparent text-sm font-medium text-indigo-700 border-none focus:ring-0 cursor-pointer pr-6"
+              >
+                <optgroup label="Gemini">
+                  {AI_MODELS.filter(m => m.provider === 'gemini').map(m => (
+                    <option key={m.model} value={`${m.provider}:${m.model}`}>
+                      {m.label}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="OpenAI">
+                  {AI_MODELS.filter(m => m.provider === 'openai').map(m => (
+                    <option key={m.model} value={`${m.provider}:${m.model}`}>
+                      {m.label}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Perplexity">
+                  {AI_MODELS.filter(m => m.provider === 'perplexity').map(m => (
+                    <option key={m.model} value={`${m.provider}:${m.model}`}>
+                      {m.label}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
+
             {campaigns.length >= 2 && (
               <button
                 onClick={() => setShowComparison(true)}
