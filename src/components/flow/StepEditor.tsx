@@ -26,19 +26,23 @@ const OUTPUT_FORMATS: { value: OutputFormat; label: string; description: string 
   { value: 'xml', label: 'XML', description: 'XML structured data' },
 ]
 
-// Modelos LLM disponibles organizados por proveedor
+// Modelos LLM disponibles organizados por proveedor (actualizados Dic 2025)
 const LLM_MODELS: { value: string; label: string; provider: string; context: string }[] = [
-  // Gemini
+  // Gemini (Google)
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google', context: '1M tokens' },
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google', context: '2M tokens' },
-  // OpenAI
+  { value: 'gemini-exp-1206', label: 'Gemini Experimental', provider: 'Google', context: '2M tokens' },
+  // OpenAI (GPT-4.1 series + reasoning)
+  { value: 'gpt-4.1', label: 'GPT-4.1', provider: 'OpenAI', context: '1M tokens' },
+  { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', provider: 'OpenAI', context: '1M tokens' },
+  { value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano', provider: 'OpenAI', context: '1M tokens' },
   { value: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', context: '128K tokens' },
   { value: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'OpenAI', context: '128K tokens' },
+  { value: 'o3', label: 'o3 (Reasoning)', provider: 'OpenAI', context: '200K tokens' },
   { value: 'o1', label: 'o1 (Reasoning)', provider: 'OpenAI', context: '200K tokens' },
-  // Anthropic
+  // Anthropic (Claude 4.5 series)
+  { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5', provider: 'Anthropic', context: '200K tokens' },
   { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', provider: 'Anthropic', context: '200K tokens' },
-  { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet', provider: 'Anthropic', context: '200K tokens' },
-  { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus', provider: 'Anthropic', context: '200K tokens' },
 ]
 
 export default function StepEditor({

@@ -13,12 +13,14 @@ const TOKEN_LIMIT = 2_000_000
 
 type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml'
 
-// Modelos de fallback (orden de prioridad)
+// Modelos de fallback (orden de prioridad) - Dic 2025
 const FALLBACK_MODELS = [
-  { provider: 'gemini', model: 'gemini-2.5-flash' },  // 1M context - menos sobrecargado
+  { provider: 'gemini', model: 'gemini-2.5-flash' },  // 1M context - rápido
   { provider: 'gemini', model: 'gemini-2.5-pro' },    // 2M context - backup
-  { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },  // 200K context
-  { provider: 'openai', model: 'gpt-4o' },  // 128K context
+  { provider: 'anthropic', model: 'claude-opus-4-5-20251101' },  // 200K context - Opus 4.5
+  { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },  // 200K context - Sonnet 4
+  { provider: 'openai', model: 'gpt-4.1' },  // 1M context - nuevo
+  { provider: 'openai', model: 'gpt-4o' },  // 128K context - fallback
 ]
 
 interface LLMResponse {
@@ -242,7 +244,7 @@ async function executeWithFallback(
 
 function getProvider(model: string): string {
   if (model.startsWith('gemini')) return 'gemini'
-  if (model.startsWith('gpt') || model.startsWith('o1') || model.startsWith('o3')) return 'openai'
+  if (model.startsWith('gpt') || model.startsWith('o1') || model.startsWith('o3') || model.startsWith('o4')) return 'openai'
   if (model.startsWith('claude')) return 'anthropic'
   if (model.startsWith('llama') || model.startsWith('mixtral')) return 'groq'
   return 'gemini' // default
