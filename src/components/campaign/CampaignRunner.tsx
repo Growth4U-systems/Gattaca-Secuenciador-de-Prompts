@@ -1005,13 +1005,6 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="Perplexity">
-                  {AI_MODELS.filter(m => m.provider === 'perplexity').map(m => (
-                    <option key={m.model} value={`${m.provider}:${m.model}`}>
-                      {m.label}
-                    </option>
-                  ))}
-                </optgroup>
               </select>
             </div>
 
