@@ -48,22 +48,7 @@ export async function POST(request: NextRequest) {
 
     // Create campaign with copied flow_config
     // Use provided flow_config if present (for duplicates), otherwise use project's
-    let campaignFlowConfig = flow_config || project.flow_config || null
-
-    // AUTO-FIX: Update any old Gemini models to the new gemini-2.5-pro
-    if (campaignFlowConfig?.steps) {
-      campaignFlowConfig = {
-        ...campaignFlowConfig,
-        steps: campaignFlowConfig.steps.map((step: any) => ({
-          ...step,
-          model: (step.model === 'gemini-2.0-flash-exp' ||
-                  step.model === 'gemini-2.0-pro-exp' ||
-                  step.model === 'gemini-2.5-pro-002')
-            ? 'gemini-2.5-pro'
-            : step.model
-        }))
-      }
-    }
+    const campaignFlowConfig = flow_config || project.flow_config || null
 
     let insertData: any = {
       project_id: projectId,

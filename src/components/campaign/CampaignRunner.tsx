@@ -493,18 +493,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     try {
       const newName = `${campaign.ecp_name} (Copia)`
 
-      let updatedFlowConfig = campaign.flow_config
-      if (updatedFlowConfig?.steps) {
-        updatedFlowConfig = {
-          ...updatedFlowConfig,
-          steps: updatedFlowConfig.steps.map(step => ({
-            ...step,
-            model: step.model === 'gemini-2.0-flash-exp' || step.model === 'gemini-2.0-pro-exp'
-              ? 'gemini-2.5-pro'
-              : step.model
-          }))
-        }
-      }
+      const updatedFlowConfig = campaign.flow_config
 
       const duplicateData = {
         projectId,

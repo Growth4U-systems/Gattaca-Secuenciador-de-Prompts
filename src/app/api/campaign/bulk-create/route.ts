@@ -80,21 +80,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Prepare flow_config with updated models
-    let campaignFlowConfig = project.flow_config || null
-    if (campaignFlowConfig?.steps) {
-      campaignFlowConfig = {
-        ...campaignFlowConfig,
-        steps: campaignFlowConfig.steps.map((step: any) => ({
-          ...step,
-          model: (step.model === 'gemini-2.0-flash-exp' ||
-                  step.model === 'gemini-2.0-pro-exp' ||
-                  step.model === 'gemini-2.5-pro-002')
-            ? 'gemini-2.5-pro'
-            : step.model
-        }))
-      }
-    }
+    // Get flow_config from project
+    const campaignFlowConfig = project.flow_config || null
 
     // Reserved fields that go into dedicated columns
     const reservedFields = ['ecp_name', 'problem_core', 'country', 'industry', 'prompt_research']
