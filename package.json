@@ -7,6 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "supabase:studio": "echo 'Studio is available at http://localhost:54323'",
+    "supabase:reset": "supabase db reset",
+    "supabase:migration:new": "supabase migration new",
     "supabase:deploy": "supabase functions deploy",
     "supabase:deploy:execute": "supabase functions deploy execute-flow-step",
     "supabase:deploy:generate": "supabase functions deploy generate-ecp-step",
@@ -14,23 +20,23 @@
     "supabase:logs:execute": "supabase functions logs execute-flow-step"
   },
   "dependencies": {
-    "next": "14.2.0",
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0",
     "@supabase/supabase-js": "^2.45.0",
     "@vercel/blob": "^0.23.0",
-    "pdf-parse": "^1.1.1",
+    "lucide-react": "^0.390.0",
     "mammoth": "^1.8.0",
-    "lucide-react": "^0.390.0"
+    "next": "14.2.0",
+    "pdf-parse": "^1.1.1",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
   },
   "devDependencies": {
-    "typescript": "^5",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",
+    "supabase": "^2.67.0",
     "tailwindcss": "^3.4.3",
-    "supabase": "^1.200.0"
+    "typescript": "^5"
   }
 }

@@ -4,7 +4,11 @@
 
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "dockerDashComposeVersion": "v2"
+    }
   },
 
   "customizations": {
@@ -53,14 +57,22 @@
     }
   },
 
-  "forwardPorts": [3000, 54321],
+  "forwardPorts": [3000, 54321, 54323, 54324],
   "portsAttributes": {
     "3000": {
       "label": "Next.js Dev Server",
       "onAutoForward": "notify"
     },
     "54321": {
-      "label": "Supabase Local",
+      "label": "Supabase API",
+      "onAutoForward": "silent"
+    },
+    "54323": {
+      "label": "Supabase Studio",
+      "onAutoForward": "notify"
+    },
+    "54324": {
+      "label": "Supabase Inbucket (Email)",
       "onAutoForward": "silent"
     }
   },
