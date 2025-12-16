@@ -1,12 +1,28 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight, Sparkles, Zap } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight, Sparkles, Zap, Cpu } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
 import CampaignBulkUpload from './CampaignBulkUpload'
 import CampaignComparison from './CampaignComparison'
-import { FlowConfig, FlowStep } from '@/types/flow.types'
+import { FlowConfig, FlowStep, LLMModel } from '@/types/flow.types'
+
+// Modelos LLM disponibles para retry
+const LLM_MODELS = [
+  { value: 'gemini-3-pro', label: 'Gemini 3 Pro', provider: 'Google' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google' },
+  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google' },
+  { value: 'gpt-5', label: 'GPT-5', provider: 'OpenAI' },
+  { value: 'gpt-5.2', label: 'GPT-5.2', provider: 'OpenAI' },
+  { value: 'gpt-4.1', label: 'GPT-4.1', provider: 'OpenAI' },
+  { value: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI' },
+  { value: 'o3', label: 'o3 (Reasoning)', provider: 'OpenAI' },
+  { value: 'o1', label: 'o1 (Reasoning)', provider: 'OpenAI' },
+  { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5', provider: 'Anthropic' },
+  { value: 'claude-sonnet-4-5-20251101', label: 'Claude Sonnet 4.5', provider: 'Anthropic' },
+  { value: 'claude-haiku-4-5-20251101', label: 'Claude Haiku 4.5', provider: 'Anthropic' },
+]
 
 interface CampaignRunnerProps {
   projectId: string
@@ -89,6 +105,17 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   const [downloadFormatMenu, setDownloadFormatMenu] = useState<string | null>(null)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
+
+  // Retry dialog state
+  const [retryDialog, setRetryDialog] = useState<{
+    show: boolean
+    campaignId: string
+    stepId: string
+    stepName: string
+    error: string
+    failedModel: string
+    selectedModel: string
+  } | null>(null)
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('')
@@ -592,31 +619,51 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     }
   }
 
-  const handleRunStep = async (campaignId: string, stepId: string, stepName: string) => {
-    if (!confirm(`¿Ejecutar "${stepName}"? Puede tomar algunos minutos.`)) {
+  const handleRunStep = async (campaignId: string, stepId: string, stepName: string, overrideModel?: string) => {
+    // Solo confirmar si no es un retry
+    if (!overrideModel && !confirm(`¿Ejecutar "${stepName}"? Puede tomar algunos minutos.`)) {
       return
     }
 
     setRunningStep({ campaignId, stepId })
+    setRetryDialog(null) // Cerrar diálogo de retry si estaba abierto
+
     try {
       const response = await fetch('/api/campaign/run-step', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ campaignId, stepId }),
+        body: JSON.stringify({ campaignId, stepId, overrideModel }),
       })
 
       const data = await response.json()
 
       if (data.success) {
-        alert(`"${stepName}" completado en ${(data.duration_ms / 1000).toFixed(1)}s`)
+        alert(`"${stepName}" completado en ${(data.duration_ms / 1000).toFixed(1)}s\nModelo: ${data.model_used || 'N/A'}`)
       } else {
-        let errorMsg = data.error || 'Execution failed'
-        if (data.details) {
-          errorMsg += `\n\nDetalles: ${data.details}`
+        // Si el error permite retry, mostrar diálogo
+        if (data.can_retry && data.failed_model) {
+          const failedModel = data.failed_model
+          // Sugerir un modelo diferente al que falló
+          const suggestedModel = LLM_MODELS.find(m => m.value !== failedModel)?.value || 'gemini-2.5-flash'
+
+          setRetryDialog({
+            show: true,
+            campaignId,
+            stepId,
+            stepName,
+            error: data.error || 'Error desconocido',
+            failedModel,
+            selectedModel: suggestedModel,
+          })
+        } else {
+          let errorMsg = data.error || 'Execution failed'
+          if (data.details) {
+            errorMsg += `\n\nDetalles: ${data.details}`
+          }
+          alert(`Error: ${errorMsg}`)
         }
-        alert(`Error: ${errorMsg}`)
       }
     } catch (error) {
       console.error('Error running step:', error)
@@ -624,6 +671,13 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     } finally {
       setRunningStep(null)
       loadCampaigns()
+    }
+  }
+
+  // Handler para reintentar con modelo diferente
+  const handleRetryWithModel = () => {
+    if (retryDialog) {
+      handleRunStep(retryDialog.campaignId, retryDialog.stepId, retryDialog.stepName, retryDialog.selectedModel)
     }
   }
 
@@ -1893,6 +1947,116 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
               <p className="text-xs text-gray-500">
                 Sube documentos desde la pestaña "Documentos" y asígnalos a esta campaña.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Retry Model Dialog */}
+      {retryDialog && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-red-50 to-orange-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
+                  <AlertCircle className="text-red-500" size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Error en ejecución</h2>
+                  <p className="text-sm text-gray-600">Paso: {retryDialog.stepName}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-5">
+              {/* Error message */}
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <p className="text-sm text-red-700 font-mono break-all">
+                  {retryDialog.error.substring(0, 300)}
+                  {retryDialog.error.length > 300 && '...'}
+                </p>
+              </div>
+
+              {/* Failed model info */}
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Cpu size={16} />
+                <span>Modelo que falló: <strong className="text-gray-900">{retryDialog.failedModel}</strong></span>
+              </div>
+
+              {/* Model selector */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Selecciona otro modelo para reintentar:
+                </label>
+                <select
+                  value={retryDialog.selectedModel}
+                  onChange={(e) => setRetryDialog({ ...retryDialog, selectedModel: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
+                >
+                  <optgroup label="Google (Gemini)">
+                    {LLM_MODELS.filter(m => m.provider === 'Google').map((model) => (
+                      <option
+                        key={model.value}
+                        value={model.value}
+                        disabled={model.value === retryDialog.failedModel}
+                      >
+                        {model.label} {model.value === retryDialog.failedModel ? '(falló)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="OpenAI">
+                    {LLM_MODELS.filter(m => m.provider === 'OpenAI').map((model) => (
+                      <option
+                        key={model.value}
+                        value={model.value}
+                        disabled={model.value === retryDialog.failedModel}
+                      >
+                        {model.label} {model.value === retryDialog.failedModel ? '(falló)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Anthropic (Claude)">
+                    {LLM_MODELS.filter(m => m.provider === 'Anthropic').map((model) => (
+                      <option
+                        key={model.value}
+                        value={model.value}
+                        disabled={model.value === retryDialog.failedModel}
+                      >
+                        {model.label} {model.value === retryDialog.failedModel ? '(falló)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+              <button
+                onClick={handleRetryWithModel}
+                disabled={runningStep !== null}
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {runningStep ? (
+                  <>
+                    <RefreshCw size={16} className="animate-spin" />
+                    Ejecutando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={16} />
+                    Reintentar con {LLM_MODELS.find(m => m.value === retryDialog.selectedModel)?.label}
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setRetryDialog(null)}
+                className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-white font-medium transition-colors"
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>

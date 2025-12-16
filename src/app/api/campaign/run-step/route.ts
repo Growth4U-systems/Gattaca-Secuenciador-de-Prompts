@@ -22,7 +22,11 @@ interface FlowStep {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { campaignId, stepId } = body as { campaignId: string; stepId: string }
+    const { campaignId, stepId, overrideModel } = body as {
+      campaignId: string
+      stepId: string
+      overrideModel?: string  // Modelo alternativo para retry
+    }
 
     if (!campaignId || !stepId) {
       return NextResponse.json(
@@ -103,6 +107,11 @@ export async function POST(request: NextRequest) {
     // Call edge function to execute step
     const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/execute-flow-step`
 
+    // Si hay overrideModel, usarlo en lugar del modelo del step
+    const stepConfig = overrideModel
+      ? { ...step, model: overrideModel }
+      : step
+
     const response = await fetch(edgeFunctionUrl, {
       method: 'POST',
       headers: {
@@ -111,18 +120,27 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         campaign_id: campaignId,
-        step_config: step,
+        step_config: stepConfig,
       }),
     })
 
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`Step ${step.name} failed:`, errorText)
+      let errorData: any = {}
+      try {
+        errorData = await response.json()
+      } catch {
+        errorData = { error: await response.text() }
+      }
 
+      console.error(`Step ${step.name} failed:`, errorData)
+
+      // Retornar info para retry si está disponible
       return NextResponse.json(
         {
-          error: `Step "${step.name}" failed`,
-          details: errorText,
+          error: errorData.error || `Step "${step.name}" failed`,
+          details: errorData.details,
+          can_retry: errorData.can_retry || false,
+          failed_model: errorData.failed_model || stepConfig.model,
         },
         { status: 500 }
       )
@@ -145,6 +163,7 @@ export async function POST(request: NextRequest) {
       duration_ms: duration,
       step_id: step.id,
       step_name: step.name,
+      model_used: result.model_used,
       result,
     })
   } catch (error) {
