@@ -105,7 +105,10 @@ export function usePromptValidator({
   return useMemo(() => {
     const issues: ValidationIssue[] = []
     const usedVariables = new Set<string>()
-    const declaredSet = new Set(declaredVariables)
+
+    // Normalize declared variables (trim whitespace)
+    const normalizedDeclared = declaredVariables.map(v => v.trim()).filter(v => v.length > 0)
+    const declaredSet = new Set(normalizedDeclared)
 
     // ==========================================
     // 1. Extract all properly formatted variables {{ variable }}
@@ -120,7 +123,7 @@ export function usePromptValidator({
       // Check if variable is declared
       if (!declaredSet.has(varName)) {
         // Check for possible typo
-        const similarVar = findSimilarVariable(varName, declaredVariables)
+        const similarVar = findSimilarVariable(varName, normalizedDeclared)
 
         if (similarVar) {
           issues.push({
@@ -225,10 +228,10 @@ export function usePromptValidator({
     // ==========================================
     // 7. Check for unused declared variables
     // ==========================================
-    const unusedVariables = declaredVariables.filter(v => !usedVariables.has(v))
+    const unusedVariables = normalizedDeclared.filter(v => !usedVariables.has(v))
     for (const unused of unusedVariables) {
       // Skip base variables as they might be used in other steps
-      const baseVariables = ['ecp_name', 'problem_core', 'country', 'industry', 'client_name']
+      const baseVariables = ['ecp_name', 'problem_core', 'country', 'industry']
       if (!baseVariables.includes(unused)) {
         issues.push({
           type: 'unused_variable',
@@ -257,10 +260,10 @@ export function usePromptValidator({
         return severityOrder[a.severity] - severityOrder[b.severity]
       }),
       usedVariables: Array.from(usedVariables),
-      declaredVariables,
+      declaredVariables: normalizedDeclared,
       stats: {
         totalVariablesUsed: usedVariables.size,
-        totalVariablesDeclared: declaredVariables.length,
+        totalVariablesDeclared: normalizedDeclared.length,
         undeclaredCount,
         unusedCount,
         errorCount,

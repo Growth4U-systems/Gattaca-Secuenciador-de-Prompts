@@ -1,6 +1,7 @@
 'use client'
 
-import { AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react'
+import { useState } from 'react'
+import { AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Zap } from 'lucide-react'
 import { formatTokenCount, checkTokenLimits, TOKEN_LIMITS } from '@/lib/supabase'
 
 interface TokenMonitorProps {
@@ -15,102 +16,137 @@ export default function TokenMonitor({
   totalTokens,
   breakdown,
 }: TokenMonitorProps) {
+  const [showBreakdown, setShowBreakdown] = useState(false)
   const limits = checkTokenLimits(totalTokens)
 
-  const getStatusIcon = () => {
+  const getStatusConfig = () => {
     if (limits.isOverLimit) {
-      return <AlertCircle className="text-red-600" size={24} />
+      return {
+        icon: AlertCircle,
+        iconColor: 'text-red-500',
+        bgColor: 'bg-gradient-to-r from-red-50 to-orange-50',
+        borderColor: 'border-red-200',
+        barColor: 'bg-red-500',
+        textColor: 'text-red-700',
+        label: 'Límite excedido',
+      }
     }
     if (limits.shouldWarn) {
-      return <AlertTriangle className="text-yellow-600" size={24} />
+      return {
+        icon: AlertTriangle,
+        iconColor: 'text-yellow-500',
+        bgColor: 'bg-gradient-to-r from-yellow-50 to-amber-50',
+        borderColor: 'border-yellow-200',
+        barColor: 'bg-yellow-500',
+        textColor: 'text-yellow-700',
+        label: 'Cerca del límite',
+      }
     }
-    return <CheckCircle className="text-green-600" size={24} />
+    return {
+      icon: CheckCircle,
+      iconColor: 'text-green-500',
+      bgColor: 'bg-gradient-to-r from-green-50 to-emerald-50',
+      borderColor: 'border-green-200',
+      barColor: 'bg-green-500',
+      textColor: 'text-green-700',
+      label: 'Dentro del límite',
+    }
   }
 
-  const getStatusColor = () => {
-    if (limits.isOverLimit) return 'red'
-    if (limits.shouldWarn) return 'yellow'
-    return 'green'
-  }
+  const config = getStatusConfig()
+  const Icon = config.icon
 
-  const color = getStatusColor()
+  // Sort breakdown by tokens descending
+  const sortedBreakdown = breakdown?.slice().sort((a, b) => b.tokens - a.tokens) || []
+  const maxTokens = sortedBreakdown[0]?.tokens || 1
 
   return (
-    <div
-      className={`border-2 rounded-lg p-4 ${
-        color === 'red'
-          ? 'border-red-300 bg-red-50'
-          : color === 'yellow'
-          ? 'border-yellow-300 bg-yellow-50'
-          : 'border-green-300 bg-green-50'
-      }`}
-    >
-      <div className="flex items-start gap-3">
-        {getStatusIcon()}
-        <div className="flex-1">
-          <h3 className="font-semibold text-gray-900 mb-1">
-            Monitor de Tokens
-          </h3>
-          <p className="text-sm text-gray-700 mb-3">
-            Total: <strong>{formatTokenCount(totalTokens)}</strong> /{' '}
-            {formatTokenCount(TOKEN_LIMITS.MAX_LIMIT)} ({limits.percentage}%)
-          </p>
+    <div className={`${config.bgColor} border ${config.borderColor} rounded-2xl p-4 transition-all`}>
+      <div className="flex items-start gap-4">
+        <div className={`p-2.5 rounded-xl ${config.bgColor}`}>
+          <Zap className={`w-5 h-5 ${config.iconColor}`} />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                Monitor de Tokens
+                <span className={`text-xs px-2 py-0.5 rounded-full ${config.bgColor} ${config.textColor} font-medium`}>
+                  {config.label}
+                </span>
+              </h3>
+              <p className="text-sm text-gray-600 mt-0.5">
+                <span className="font-semibold">{formatTokenCount(totalTokens)}</span>
+                <span className="text-gray-400 mx-1">/</span>
+                <span>{formatTokenCount(TOKEN_LIMITS.MAX_LIMIT)}</span>
+                <span className="text-gray-400 ml-2">({limits.percentage}%)</span>
+              </p>
+            </div>
+            <Icon className={`w-5 h-5 ${config.iconColor}`} />
+          </div>
 
           {/* Progress Bar */}
-          <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+          <div className="relative h-2.5 bg-gray-200 rounded-full overflow-hidden">
+            {/* Warning threshold marker */}
             <div
-              className={`h-2 rounded-full transition-all ${
-                color === 'red'
-                  ? 'bg-red-600'
-                  : color === 'yellow'
-                  ? 'bg-yellow-600'
-                  : 'bg-green-600'
-              }`}
+              className="absolute top-0 bottom-0 w-0.5 bg-yellow-400 z-10"
+              style={{ left: '80%' }}
+            />
+            <div
+              className={`h-full ${config.barColor} rounded-full transition-all duration-500`}
               style={{ width: `${Math.min(limits.percentage, 100)}%` }}
             />
           </div>
 
           {/* Warning Messages */}
           {limits.isOverLimit && (
-            <div className="text-sm text-red-800 font-medium">
-              ⚠️ El contexto excede el límite de 2M tokens. Reduce la cantidad
-              de documentos o el tamaño de los mismos.
+            <div className="mt-3 flex items-start gap-2 text-sm text-red-700">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>El contexto excede el límite de 2M tokens. Reduce documentos.</span>
             </div>
           )}
 
           {limits.shouldWarn && !limits.isOverLimit && (
-            <div className="text-sm text-yellow-800 font-medium">
-              ⚠️ Te estás acercando al límite. Actualmente: {limits.percentage}
-              % del máximo permitido.
+            <div className="mt-3 flex items-start gap-2 text-sm text-yellow-700">
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>Te acercas al límite ({limits.percentage}% usado).</span>
             </div>
           )}
 
-          {!limits.shouldWarn && (
-            <div className="text-sm text-green-800">
-              ✓ El tamaño del contexto está dentro de los límites seguros.
-            </div>
+          {/* Breakdown Toggle */}
+          {sortedBreakdown.length > 0 && (
+            <button
+              onClick={() => setShowBreakdown(!showBreakdown)}
+              className="mt-3 flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              {showBreakdown ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              {showBreakdown ? 'Ocultar desglose' : 'Ver desglose por documento'}
+            </button>
           )}
 
-          {/* Breakdown */}
-          {breakdown && breakdown.length > 0 && (
-            <details className="mt-3">
-              <summary className="text-sm font-medium text-gray-700 cursor-pointer hover:text-gray-900">
-                Ver desglose por documento
-              </summary>
-              <div className="mt-2 space-y-1">
-                {breakdown.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="flex justify-between text-sm text-gray-600"
-                  >
-                    <span className="truncate">{item.label}</span>
-                    <span className="font-mono">
-                      {formatTokenCount(item.tokens)}
-                    </span>
+          {/* Breakdown List */}
+          {showBreakdown && sortedBreakdown.length > 0 && (
+            <div className="mt-3 space-y-2 bg-white/50 rounded-xl p-3">
+              {sortedBreakdown.map((item, idx) => {
+                const percentage = (item.tokens / maxTokens) * 100
+                return (
+                  <div key={idx} className="group">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-gray-700 truncate flex-1 mr-2">{item.label}</span>
+                      <span className="font-mono text-gray-500">{formatTokenCount(item.tokens)}</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-blue-400 rounded-full transition-all group-hover:bg-blue-500"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
                   </div>
-                ))}
-              </div>
-            </details>
+                )
+              })}
+            </div>
           )}
         </div>
       </div>

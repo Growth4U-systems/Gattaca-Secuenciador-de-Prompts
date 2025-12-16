@@ -13,6 +13,188 @@ const TOKEN_LIMIT = 2_000_000
 
 type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml'
 
+// Modelos de fallback
+const FALLBACK_MODELS = [
+  { provider: 'gemini', model: 'gemini-2.5-pro' },
+  { provider: 'openai', model: 'o1' },  // OpenAI reasoning model
+  { provider: 'openai', model: 'gpt-4o' },  // Fallback si o1 falla
+]
+
+interface LLMResponse {
+  text: string
+  usage: {
+    promptTokens: number
+    completionTokens: number
+  }
+  model: string
+}
+
+// Llamar a Gemini API
+async function callGemini(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  context: string,
+  userPrompt: string,
+  temperature: number,
+  maxTokens: number
+): Promise<LLMResponse> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: systemPrompt }],
+        },
+        contents: [
+          {
+            parts: [
+              { text: context },
+              { text: '\n\n--- TASK ---\n\n' + userPrompt },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature,
+          maxOutputTokens: maxTokens,
+        },
+      }),
+    }
+  )
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Gemini API error: ${errorText}`)
+  }
+
+  const data = await response.json()
+  return {
+    text: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+    usage: {
+      promptTokens: data.usageMetadata?.promptTokenCount || 0,
+      completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
+    },
+    model,
+  }
+}
+
+// Llamar a OpenAI API
+async function callOpenAI(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  context: string,
+  userPrompt: string,
+  temperature: number,
+  maxTokens: number
+): Promise<LLMResponse> {
+  const isReasoningModel = model.startsWith('o1') || model.startsWith('o3')
+
+  const messages = isReasoningModel
+    ? [
+        // o1 no soporta system messages, lo incluimos en user
+        {
+          role: 'user',
+          content: `${systemPrompt}\n\n${context}\n\n--- TASK ---\n\n${userPrompt}`,
+        },
+      ]
+    : [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `${context}\n\n--- TASK ---\n\n${userPrompt}` },
+      ]
+
+  const body: any = {
+    model,
+    messages,
+  }
+
+  // o1 no soporta temperature ni max_tokens de la misma forma
+  if (!isReasoningModel) {
+    body.temperature = temperature
+    body.max_tokens = maxTokens
+  } else {
+    body.max_completion_tokens = maxTokens
+  }
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`OpenAI API error: ${errorText}`)
+  }
+
+  const data = await response.json()
+  return {
+    text: data.choices?.[0]?.message?.content || '',
+    usage: {
+      promptTokens: data.usage?.prompt_tokens || 0,
+      completionTokens: data.usage?.completion_tokens || 0,
+    },
+    model,
+  }
+}
+
+// Ejecutar con fallback
+async function executeWithFallback(
+  systemPrompt: string,
+  context: string,
+  userPrompt: string,
+  temperature: number,
+  maxTokens: number,
+  preferredModel?: string
+): Promise<LLMResponse> {
+  const geminiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY')
+  const openaiKey = Deno.env.get('OPENAI_API_KEY')
+
+  const errors: string[] = []
+
+  // Construir lista de modelos a intentar
+  const modelsToTry = preferredModel
+    ? [{ provider: getProvider(preferredModel), model: preferredModel }, ...FALLBACK_MODELS]
+    : FALLBACK_MODELS
+
+  for (const { provider, model } of modelsToTry) {
+    try {
+      console.log(`Trying ${provider}/${model}...`)
+
+      if (provider === 'gemini' && geminiKey) {
+        return await callGemini(geminiKey, model, systemPrompt, context, userPrompt, temperature, maxTokens)
+      } else if (provider === 'openai' && openaiKey) {
+        return await callOpenAI(openaiKey, model, systemPrompt, context, userPrompt, temperature, maxTokens)
+      } else {
+        console.log(`Skipping ${provider}/${model} - no API key`)
+        continue
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      console.error(`${provider}/${model} failed:`, errorMsg)
+      errors.push(`${provider}/${model}: ${errorMsg}`)
+
+      // Continuar al siguiente modelo
+      continue
+    }
+  }
+
+  throw new Error(`All models failed:\n${errors.join('\n')}`)
+}
+
+function getProvider(model: string): string {
+  if (model.startsWith('gemini')) return 'gemini'
+  if (model.startsWith('gpt') || model.startsWith('o1') || model.startsWith('o3')) return 'openai'
+  if (model.startsWith('claude')) return 'anthropic'
+  if (model.startsWith('llama') || model.startsWith('mixtral')) return 'groq'
+  return 'gemini' // default
+}
+
 interface FlowStep {
   id: string
   name: string
@@ -189,44 +371,28 @@ serve(async (req) => {
     const formatInstructions = getFormatInstructions(outputFormat)
     const promptWithFormat = finalPrompt + '\n\n' + formatInstructions
 
-    // Call Gemini
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY')!
-    const modelName = step_config.model || 'gemini-2.5-pro' // Gemini 2.5 Pro - Maximum quality (2025)
+    // Call LLM with fallback support
+    const preferredModel = step_config.model || 'gemini-2.5-pro'
+    const temperature = step_config.temperature || 0.7
+    const maxTokens = step_config.max_tokens || 8192
 
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: SYSTEM_INSTRUCTION }],
-          },
-          contents: [
-            {
-              parts: [
-                { text: contextString },
-                { text: '\n\n--- TASK ---\n\n' + promptWithFormat },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: step_config.temperature || 0.7,
-            maxOutputTokens: step_config.max_tokens || 8192,
-          },
-        }),
-      }
+    console.log(`Executing step "${step_config.name}" with preferred model: ${preferredModel}`)
+
+    const llmResponse = await executeWithFallback(
+      SYSTEM_INSTRUCTION,
+      contextString,
+      promptWithFormat,
+      temperature,
+      maxTokens,
+      preferredModel
     )
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text()
-      throw new Error(`Gemini API error: ${errorText}`)
-    }
+    const outputText = llmResponse.text
+    const modelUsed = llmResponse.model
+    const usage = llmResponse.usage
+    const outputTokens = usage.completionTokens || Math.ceil(outputText.length / 4)
 
-    const geminiData = await geminiResponse.json()
-    const outputText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    const usage = geminiData.usageMetadata || {}
-    const outputTokens = Math.ceil(outputText.length / 4)
+    console.log(`Step completed using model: ${modelUsed}`)
 
     // Save output to campaign.step_outputs
     const currentStepOutputs = campaign.step_outputs || {}
@@ -251,10 +417,10 @@ serve(async (req) => {
       .from('execution_logs')
       .update({
         status: 'completed',
-        input_tokens: usage.promptTokenCount || totalTokens,
-        output_tokens: usage.candidatesTokenCount || outputTokens,
+        input_tokens: usage.promptTokens || totalTokens,
+        output_tokens: usage.completionTokens || outputTokens,
         duration_ms: duration,
-        model_used: modelName,
+        model_used: modelUsed,
       })
       .eq('id', logEntry.id)
 
@@ -262,10 +428,11 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         output: outputText,
+        model_used: modelUsed,
         tokens: {
-          input: usage.promptTokenCount || totalTokens,
-          output: usage.candidatesTokenCount || outputTokens,
-          total: (usage.promptTokenCount || totalTokens) + (usage.candidatesTokenCount || outputTokens),
+          input: usage.promptTokens || totalTokens,
+          output: usage.completionTokens || outputTokens,
+          total: (usage.promptTokens || totalTokens) + (usage.completionTokens || outputTokens),
         },
         duration_ms: duration,
       }),
