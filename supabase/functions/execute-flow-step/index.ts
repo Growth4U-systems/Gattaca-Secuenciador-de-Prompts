@@ -20,6 +20,7 @@ const FALLBACK_MODELS = [
   { provider: 'gemini', model: 'gemini-2.5-pro' },    // 2M context - backup
   { provider: 'anthropic', model: 'claude-opus-4-5-20251101' },  // 200K context - Opus 4.5
   { provider: 'anthropic', model: 'claude-sonnet-4-5-20251101' },  // 200K context - Sonnet 4.5
+  { provider: 'anthropic', model: 'claude-haiku-4-5-20251101' },  // 200K context - Haiku 4.5 (rápido)
   { provider: 'openai', model: 'gpt-5' },  // 1M context - más potente
   { provider: 'openai', model: 'gpt-4.1' },  // 1M context - backup
   { provider: 'openai', model: 'gpt-4o' },  // 128K context - fallback

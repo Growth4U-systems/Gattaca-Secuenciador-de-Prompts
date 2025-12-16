@@ -27,24 +27,25 @@ const OUTPUT_FORMATS: { value: OutputFormat; label: string; description: string 
 ]
 
 // Modelos LLM disponibles organizados por proveedor (actualizados Dic 2025)
-const LLM_MODELS: { value: string; label: string; provider: string; context: string }[] = [
+const LLM_MODELS: { value: string; label: string; provider: string; context: string; desc: string }[] = [
   // Gemini (Google)
-  { value: 'gemini-3-pro', label: 'Gemini 3 Pro', provider: 'Google', context: '2M tokens' },
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google', context: '1M tokens' },
-  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google', context: '2M tokens' },
+  { value: 'gemini-3-pro', label: 'Gemini 3 Pro', provider: 'Google', context: '2M tokens', desc: 'Máxima capacidad, multimodal avanzado' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google', context: '1M tokens', desc: 'Rápido y económico' },
+  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google', context: '2M tokens', desc: 'Balance calidad/velocidad' },
   // OpenAI (GPT-5 + GPT-4.1 series + reasoning)
-  { value: 'gpt-5', label: 'GPT-5', provider: 'OpenAI', context: '1M tokens' },
-  { value: 'gpt-5.2', label: 'GPT-5.2', provider: 'OpenAI', context: '1M tokens' },
-  { value: 'gpt-4.1', label: 'GPT-4.1', provider: 'OpenAI', context: '1M tokens' },
-  { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', provider: 'OpenAI', context: '1M tokens' },
-  { value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano', provider: 'OpenAI', context: '1M tokens' },
-  { value: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', context: '128K tokens' },
-  { value: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'OpenAI', context: '128K tokens' },
-  { value: 'o3', label: 'o3 (Reasoning)', provider: 'OpenAI', context: '200K tokens' },
-  { value: 'o1', label: 'o1 (Reasoning)', provider: 'OpenAI', context: '200K tokens' },
+  { value: 'gpt-5', label: 'GPT-5', provider: 'OpenAI', context: '1M tokens', desc: 'Máxima inteligencia, razonamiento superior' },
+  { value: 'gpt-5.2', label: 'GPT-5.2', provider: 'OpenAI', context: '1M tokens', desc: 'Versión mejorada de GPT-5' },
+  { value: 'gpt-4.1', label: 'GPT-4.1', provider: 'OpenAI', context: '1M tokens', desc: 'Excelente para código y análisis' },
+  { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', provider: 'OpenAI', context: '1M tokens', desc: 'Rápido, buena relación calidad/precio' },
+  { value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano', provider: 'OpenAI', context: '1M tokens', desc: 'Ultra rápido, tareas simples' },
+  { value: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', context: '128K tokens', desc: 'Multimodal, respuestas rápidas' },
+  { value: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'OpenAI', context: '128K tokens', desc: 'Económico, tareas ligeras' },
+  { value: 'o3', label: 'o3 (Reasoning)', provider: 'OpenAI', context: '200K tokens', desc: 'Razonamiento profundo, matemáticas' },
+  { value: 'o1', label: 'o1 (Reasoning)', provider: 'OpenAI', context: '200K tokens', desc: 'Pensamiento paso a paso' },
   // Anthropic (Claude 4.5 series)
-  { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5', provider: 'Anthropic', context: '200K tokens' },
-  { value: 'claude-sonnet-4-5-20251101', label: 'Claude Sonnet 4.5', provider: 'Anthropic', context: '200K tokens' },
+  { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5', provider: 'Anthropic', context: '200K tokens', desc: 'Máxima calidad, análisis complejo' },
+  { value: 'claude-sonnet-4-5-20251101', label: 'Claude Sonnet 4.5', provider: 'Anthropic', context: '200K tokens', desc: 'Balance inteligencia/velocidad' },
+  { value: 'claude-haiku-4-5-20251101', label: 'Claude Haiku 4.5', provider: 'Anthropic', context: '200K tokens', desc: 'Ultra rápido y económico' },
 ]
 
 export default function StepEditor({
@@ -590,21 +591,21 @@ export default function StepEditor({
                   <optgroup label="Google (Gemini)">
                     {LLM_MODELS.filter(m => m.provider === 'Google').map((model) => (
                       <option key={model.value} value={model.value}>
-                        {model.label} ({model.context})
+                        {model.label} - {model.desc} ({model.context})
                       </option>
                     ))}
                   </optgroup>
                   <optgroup label="OpenAI">
                     {LLM_MODELS.filter(m => m.provider === 'OpenAI').map((model) => (
                       <option key={model.value} value={model.value}>
-                        {model.label} ({model.context})
+                        {model.label} - {model.desc} ({model.context})
                       </option>
                     ))}
                   </optgroup>
                   <optgroup label="Anthropic (Claude)">
                     {LLM_MODELS.filter(m => m.provider === 'Anthropic').map((model) => (
                       <option key={model.value} value={model.value}>
-                        {model.label} ({model.context})
+                        {model.label} - {model.desc} ({model.context})
                       </option>
                     ))}
                   </optgroup>
