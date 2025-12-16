@@ -198,7 +198,7 @@ async function executeModel(
 ): Promise<LLMResponse> {
   const geminiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY')
   const openaiKey = Deno.env.get('OPENAI_API_KEY')
-  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
+  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY') || Deno.env.get('ANTHROPIC_KEY')
 
   const provider = getProvider(preferredModel)
   console.log(`Executing with ${provider}/${preferredModel}...`)
