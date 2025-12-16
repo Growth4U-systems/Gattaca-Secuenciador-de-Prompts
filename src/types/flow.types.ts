@@ -16,8 +16,8 @@ export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'groq'
 
 // Modelos disponibles por proveedor
 export type GeminiModel = 'gemini-2.0-flash-exp' | 'gemini-2.0-pro-exp' | 'gemini-2.5-flash' | 'gemini-2.5-pro'
-export type OpenAIModel = 'gpt-4o' | 'gpt-4o-mini' | 'gpt-4-turbo' | 'gpt-3.5-turbo'
-export type AnthropicModel = 'claude-3-5-sonnet-20241022' | 'claude-3-5-haiku-20241022' | 'claude-3-opus-20240229'
+export type OpenAIModel = 'gpt-4o' | 'gpt-4o-mini' | 'gpt-4-turbo' | 'gpt-3.5-turbo' | 'o1' | 'o1-mini'
+export type AnthropicModel = 'claude-sonnet-4-20250514' | 'claude-3-5-sonnet-20241022' | 'claude-3-5-haiku-20241022' | 'claude-3-opus-20240229'
 export type GroqModel = 'llama-3.3-70b-versatile' | 'llama-3.1-8b-instant' | 'mixtral-8x7b-32768'
 
 export type LLMModel = GeminiModel | OpenAIModel | AnthropicModel | GroqModel

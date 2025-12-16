@@ -13,11 +13,12 @@ const TOKEN_LIMIT = 2_000_000
 
 type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml'
 
-// Modelos de fallback
+// Modelos de fallback (orden de prioridad)
 const FALLBACK_MODELS = [
-  { provider: 'gemini', model: 'gemini-2.5-pro' },
-  { provider: 'openai', model: 'o1' },  // OpenAI reasoning model
-  { provider: 'openai', model: 'gpt-4o' },  // Fallback si o1 falla
+  { provider: 'gemini', model: 'gemini-2.5-flash' },  // 1M context - menos sobrecargado
+  { provider: 'gemini', model: 'gemini-2.5-pro' },    // 2M context - backup
+  { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },  // 200K context
+  { provider: 'openai', model: 'gpt-4o' },  // 128K context
 ]
 
 interface LLMResponse {
@@ -143,6 +144,55 @@ async function callOpenAI(
   }
 }
 
+// Llamar a Anthropic API (Claude)
+async function callAnthropic(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  context: string,
+  userPrompt: string,
+  temperature: number,
+  maxTokens: number
+): Promise<LLMResponse> {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: `${context}\n\n--- TASK ---\n\n${userPrompt}`,
+        },
+      ],
+      temperature,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Anthropic API error: ${errorText}`)
+  }
+
+  const data = await response.json()
+  const text = data.content?.[0]?.text || ''
+
+  return {
+    text,
+    usage: {
+      promptTokens: data.usage?.input_tokens || 0,
+      completionTokens: data.usage?.output_tokens || Math.ceil(text.length / 4),
+    },
+    model,
+  }
+}
+
 // Ejecutar con fallback
 async function executeWithFallback(
   systemPrompt: string,
@@ -154,6 +204,7 @@ async function executeWithFallback(
 ): Promise<LLMResponse> {
   const geminiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY')
   const openaiKey = Deno.env.get('OPENAI_API_KEY')
+  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
 
   const errors: string[] = []
 
@@ -170,6 +221,8 @@ async function executeWithFallback(
         return await callGemini(geminiKey, model, systemPrompt, context, userPrompt, temperature, maxTokens)
       } else if (provider === 'openai' && openaiKey) {
         return await callOpenAI(openaiKey, model, systemPrompt, context, userPrompt, temperature, maxTokens)
+      } else if (provider === 'anthropic' && anthropicKey) {
+        return await callAnthropic(anthropicKey, model, systemPrompt, context, userPrompt, temperature, maxTokens)
       } else {
         console.log(`Skipping ${provider}/${model} - no API key`)
         continue
@@ -372,7 +425,7 @@ serve(async (req) => {
     const promptWithFormat = finalPrompt + '\n\n' + formatInstructions
 
     // Call LLM with fallback support
-    const preferredModel = step_config.model || 'gemini-2.5-pro'
+    const preferredModel = step_config.model || 'gemini-2.5-flash'
     const temperature = step_config.temperature || 0.7
     const maxTokens = step_config.max_tokens || 8192
 

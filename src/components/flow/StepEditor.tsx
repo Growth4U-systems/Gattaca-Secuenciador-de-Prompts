@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { X, Eye, Code, Copy, Check, FileText, ArrowRight, Hash, MessageSquare, Sparkles, Info } from 'lucide-react'
-import { FlowStep, OutputFormat } from '@/types/flow.types'
+import { X, Eye, Code, Copy, Check, FileText, ArrowRight, Hash, MessageSquare, Sparkles, Info, Cpu } from 'lucide-react'
+import { FlowStep, OutputFormat, LLMModel } from '@/types/flow.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { usePromptValidator } from '@/hooks/usePromptValidator'
 import PromptValidationPanel, { ValidationBadge } from './PromptValidationPanel'
@@ -24,6 +24,21 @@ const OUTPUT_FORMATS: { value: OutputFormat; label: string; description: string 
   { value: 'csv', label: 'CSV', description: 'Comma-separated values for spreadsheets' },
   { value: 'html', label: 'HTML (Google Docs)', description: 'HTML format - import to Google Docs via File > Open' },
   { value: 'xml', label: 'XML', description: 'XML structured data' },
+]
+
+// Modelos LLM disponibles organizados por proveedor
+const LLM_MODELS: { value: string; label: string; provider: string; context: string }[] = [
+  // Gemini
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google', context: '1M tokens' },
+  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google', context: '2M tokens' },
+  // OpenAI
+  { value: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', context: '128K tokens' },
+  { value: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'OpenAI', context: '128K tokens' },
+  { value: 'o1', label: 'o1 (Reasoning)', provider: 'OpenAI', context: '200K tokens' },
+  // Anthropic
+  { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', provider: 'Anthropic', context: '200K tokens' },
+  { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet', provider: 'Anthropic', context: '200K tokens' },
+  { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus', provider: 'Anthropic', context: '200K tokens' },
 ]
 
 export default function StepEditor({
@@ -544,6 +559,96 @@ export default function StepEditor({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* LLM Model Configuration */}
+          <div className="bg-gradient-to-br from-emerald-50 to-white border border-emerald-200 rounded-xl p-5">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Cpu size={18} className="text-emerald-500" />
+              Modelo de IA
+            </h3>
+
+            <div className="space-y-4">
+              {/* Model Selector */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Modelo LLM
+                </label>
+                <select
+                  value={editedStep.model || 'gemini-2.5-flash'}
+                  onChange={(e) =>
+                    setEditedStep((prev) => ({ ...prev, model: e.target.value as LLMModel }))
+                  }
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-900 bg-white"
+                >
+                  <optgroup label="Google (Gemini)">
+                    {LLM_MODELS.filter(m => m.provider === 'Google').map((model) => (
+                      <option key={model.value} value={model.value}>
+                        {model.label} ({model.context})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="OpenAI">
+                    {LLM_MODELS.filter(m => m.provider === 'OpenAI').map((model) => (
+                      <option key={model.value} value={model.value}>
+                        {model.label} ({model.context})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Anthropic (Claude)">
+                    {LLM_MODELS.filter(m => m.provider === 'Anthropic').map((model) => (
+                      <option key={model.value} value={model.value}>
+                        {model.label} ({model.context})
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+                <p className="text-xs text-gray-500 mt-1.5">
+                  Si el modelo seleccionado falla, se usará automáticamente otro disponible (fallback)
+                </p>
+              </div>
+
+              {/* Temperature and Max Tokens */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                    Temperature: {editedStep.temperature ?? 0.7}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={editedStep.temperature ?? 0.7}
+                    onChange={(e) =>
+                      setEditedStep((prev) => ({ ...prev, temperature: parseFloat(e.target.value) }))
+                    }
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>Preciso</span>
+                    <span>Creativo</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                    Max Tokens
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    max="32000"
+                    step="1000"
+                    value={editedStep.max_tokens ?? 8192}
+                    onChange={(e) =>
+                      setEditedStep((prev) => ({ ...prev, max_tokens: parseInt(e.target.value) || 8192 }))
+                    }
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-900"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Prompt Section */}
