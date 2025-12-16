@@ -28,10 +28,10 @@ const OUTPUT_FORMATS: { value: OutputFormat; label: string; description: string 
 
 // Modelos LLM disponibles organizados por proveedor (actualizados Dic 2025)
 const LLM_MODELS: { value: string; label: string; provider: string; context: string; desc: string }[] = [
-  // Gemini (Google)
-  { value: 'gemini-3-pro', label: 'Gemini 3 Pro', provider: 'Google', context: '2M tokens', desc: 'Máxima capacidad, multimodal avanzado' },
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google', context: '1M tokens', desc: 'Rápido y económico' },
-  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google', context: '2M tokens', desc: 'Balance calidad/velocidad' },
+  // Gemini (Google) - IDs reales de la API
+  { value: 'gemini-2.5-pro-preview-06-05', label: 'Gemini 2.5 Pro', provider: 'Google', context: '1M tokens', desc: 'Último modelo, máxima calidad' },
+  { value: 'gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash', provider: 'Google', context: '1M tokens', desc: 'Rápido y económico' },
+  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', provider: 'Google', context: '1M tokens', desc: 'Estable, buen rendimiento' },
   // OpenAI (GPT-5 + GPT-4.1 series + reasoning)
   { value: 'gpt-5', label: 'GPT-5', provider: 'OpenAI', context: '1M tokens', desc: 'Máxima inteligencia, razonamiento superior' },
   { value: 'gpt-5.2', label: 'GPT-5.2', provider: 'OpenAI', context: '1M tokens', desc: 'Versión mejorada de GPT-5' },

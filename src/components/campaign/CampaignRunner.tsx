@@ -8,11 +8,11 @@ import CampaignBulkUpload from './CampaignBulkUpload'
 import CampaignComparison from './CampaignComparison'
 import { FlowConfig, FlowStep, LLMModel } from '@/types/flow.types'
 
-// Modelos LLM disponibles para retry
+// Modelos LLM disponibles para retry (IDs reales de las APIs)
 const LLM_MODELS = [
-  { value: 'gemini-3-pro', label: 'Gemini 3 Pro', provider: 'Google' },
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google' },
-  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google' },
+  { value: 'gemini-2.5-pro-preview-06-05', label: 'Gemini 2.5 Pro', provider: 'Google' },
+  { value: 'gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash', provider: 'Google' },
+  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', provider: 'Google' },
   { value: 'gpt-5', label: 'GPT-5', provider: 'OpenAI' },
   { value: 'gpt-5.2', label: 'GPT-5.2', provider: 'OpenAI' },
   { value: 'gpt-4.1', label: 'GPT-4.1', provider: 'OpenAI' },
