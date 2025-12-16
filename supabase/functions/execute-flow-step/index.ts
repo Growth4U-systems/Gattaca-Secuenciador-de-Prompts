@@ -289,8 +289,20 @@ serve(async (req) => {
     })
   }
 
+  // Parsear body una sola vez al inicio
+  let requestBody: RequestPayload
   try {
-    const { campaign_id, step_config } = await req.json() as RequestPayload
+    requestBody = await req.json() as RequestPayload
+  } catch (parseError) {
+    return new Response(
+      JSON.stringify({ error: 'Invalid JSON body' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  const { campaign_id, step_config } = requestBody
+
+  try {
 
     if (!campaign_id || !step_config) {
       return new Response(
@@ -480,8 +492,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Edge function error:', error)
 
-    // Extraer información del modelo que falló para permitir retry manual
-    const { step_config } = await req.clone().json().catch(() => ({})) as { step_config?: FlowStep }
+    // Usar step_config del body ya parseado
     const failedModel = step_config?.model || 'gemini-2.5-flash'
 
     return new Response(
