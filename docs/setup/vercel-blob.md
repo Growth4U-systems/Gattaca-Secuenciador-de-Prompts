@@ -47,10 +47,10 @@ npm install @vercel/blob
 
 2. Pull las variables de entorno:
 ```bash
-vercel env pull .env.local
+vercel env pull .env
 ```
 
-Esto creará `.env.local` con:
+Esto creará `.env` con:
 ```env
 BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
 ```
@@ -173,7 +173,7 @@ const { data, error } = await supabase.storage
 
 ### Error: "BLOB_READ_WRITE_TOKEN is not defined"
 - Asegúrate de haber creado el Blob store
-- Ejecuta `vercel env pull .env.local`
+- Ejecuta `vercel env pull .env`
 - Reinicia el servidor de desarrollo
 
 ### Error: "Blob upload failed"

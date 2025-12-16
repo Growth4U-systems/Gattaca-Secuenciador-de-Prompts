@@ -56,12 +56,12 @@ Una vez que tu proyecto esté listo:
 
 ## ⚙️ Paso 3: Configurar Variables de Entorno
 
-1. En la raíz del proyecto, **crea** un archivo `.env.local`:
+1. En la raíz del proyecto, **crea** un archivo `.env`:
    ```bash
-   cp .env.example .env.local
+   cp .env.example .env
    ```
 
-2. Edita `.env.local` y reemplaza con tus valores reales:
+2. Edita `.env` y reemplaza con tus valores reales:
 
    ```env
    # Supabase Cloud Configuration
@@ -76,7 +76,7 @@ Una vez que tu proyecto esté listo:
    ```
 
 3. **IMPORTANTE**:
-   - ✅ `.env.local` ya está en `.gitignore`
+   - ✅ `.env` ya está en `.gitignore`
    - ❌ **NUNCA** comitees este archivo a git
    - ❌ **NUNCA** compartas el `service_role` key públicamente
 
@@ -256,7 +256,7 @@ ALTER TABLE execution_logs DISABLE ROW LEVEL SECURITY;
 ### Error: "Database connection failed"
 
 Verifica que:
-- Las URLs en `.env.local` sean correctas
+- Las URLs en `.env` sean correctas
 - El proyecto de Supabase esté activo
 - Las API keys sean válidas
 

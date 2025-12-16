@@ -19,7 +19,7 @@ Para poner el proyecto en funcionamiento, **sigue las instrucciones detalladas e
 1. **Crear proyecto en Supabase Cloud** (gratis)
 2. **Aplicar migraciones** (copiar/pegar SQL en Supabase)
 3. **Obtener API keys** (Supabase + Gemini)
-4. **Configurar `.env.local`** con tus credenciales
+4. **Configurar `.env`** con tus credenciales
 5. **Deploy Edge Functions** con Supabase CLI
 6. **Correr el proyecto**: `npm install && npm run dev`
 

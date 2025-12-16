@@ -61,8 +61,8 @@ Auditoría detallada de cada llamada a IA
 
 4. **Configurar variables de entorno**
    ```bash
-   cp .env.example .env.local
-   # Editar .env.local con tus credenciales
+   cp .env.example .env
+   # Editar .env con tus credenciales
    ```
 
 5. **Deploy Edge Function**
@@ -80,6 +80,129 @@ Auditoría detallada de cada llamada a IA
    ```
 
 🎉 Abre http://localhost:3000
+
+## 🐳 Desarrollo Local con Supabase
+
+Si prefieres trabajar con Supabase localmente usando Docker en lugar de la nube:
+
+### Prerrequisitos
+
+- **Docker Desktop** instalado y ejecutándose ([docker.com](https://www.docker.com/products/docker-desktop))
+- Node.js 18+ y npm
+
+### Pasos para Desarrollo Local
+
+#### 1. Iniciar Supabase Local
+
+```bash
+npm run supabase:start
+```
+
+Esto iniciará todos los servicios de Supabase en contenedores Docker:
+- PostgreSQL en puerto `54322`
+- API REST en puerto `54321`
+- Studio (UI web) en puerto `54323`
+- Inbucket (emails) en puerto `54324`
+
+**Importante**: La primera vez descargará las imágenes Docker (~2-3 GB).
+
+#### 2. Obtener Credenciales Locales
+
+El comando anterior mostrará en la terminal:
+```
+API URL: http://localhost:54321
+anon key: eyJhbGc...
+service_role key: eyJhbGc...
+```
+
+#### 3. Configurar Variables de Entorno Locales
+
+Actualiza tu archivo `.env`:
+
+```env
+# Supabase Local
+NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<copia-del-terminal>
+SUPABASE_SERVICE_ROLE_KEY=<copia-del-terminal>
+
+# API Keys (mismas que producción)
+GEMINI_API_KEY=tu-gemini-api-key
+OPENAI_API_KEY=tu-openai-api-key
+```
+
+#### 4. Acceder a Supabase Studio
+
+Abre [http://localhost:54323](http://localhost:54323) para:
+- Ver tablas y datos
+- Ejecutar queries SQL
+- Monitorear logs
+- Gestionar autenticación
+
+#### 5. Aplicar Migraciones (Automático)
+
+Las migraciones en `supabase/migrations/` se aplican automáticamente al iniciar.
+
+Para reaplicar desde cero:
+```bash
+npm run supabase:reset
+```
+
+#### 6. Iniciar la Aplicación
+
+```bash
+npm install
+npm run dev
+```
+
+Abre [http://localhost:3000](http://localhost:3000)
+
+### Comandos Útiles
+
+```bash
+# Ver estado y credenciales
+npm run supabase:status
+
+# Detener Supabase
+npm run supabase:stop
+
+# Reiniciar base de datos (borra todos los datos)
+npm run supabase:reset
+
+# Crear nueva migración
+npm run supabase:migration:new nombre_migracion
+
+# Ver logs de Edge Functions
+npm run supabase:logs
+npm run supabase:logs:execute
+```
+
+### Desarrollo Local vs Cloud
+
+| Aspecto | Local (Docker) | Cloud (Supabase) |
+|---------|---------------|------------------|
+| **Setup** | Requiere Docker Desktop | Solo credenciales |
+| **Latencia** | ~0ms (localhost) | ~50-200ms |
+| **Datos** | Volátiles (puedes resetear) | Persistentes |
+| **Colaboración** | Solo tu máquina | Compartido con equipo |
+| **Edge Functions** | Emuladas localmente | Deno runtime en producción |
+| **Ports** | 54321-54326 | HTTPS estándar |
+
+**Recomendación**: Usa local para desarrollo rápido e iteración. Usa cloud para testing final y producción.
+
+### Troubleshooting Local
+
+**Error: Cannot connect to Docker daemon**
+- Solución: Inicia Docker Desktop y espera a que esté completamente cargado
+
+**Error: port 54321 already allocated**
+- Solución: `npm run supabase:stop` o cambiar puertos en `supabase/config.toml`
+
+**Las migraciones no se aplican**
+- Solución: `npm run supabase:reset` para reaplicar todas
+
+**Edge Function no responde**
+- Verifica que el servicio esté corriendo: `npm run supabase:status`
+- Revisa logs: `npm run supabase:logs`
 
 ## 📋 Flujo de Uso
 

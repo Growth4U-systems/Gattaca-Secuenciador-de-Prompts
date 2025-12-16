@@ -2,11 +2,11 @@ import { createClient } from '@supabase/supabase-js'
 
 /**
  * Supabase client - automatically uses the correct environment:
- * - Development: Uses .env.local (local Supabase instance at http://localhost:54321)
+ * - Development: Uses .env (local Supabase instance at http://localhost:54321)
  * - Production: Uses .env or Vercel environment variables (cloud Supabase)
  *
- * To start local Supabase: npx supabase start
- * To stop local Supabase: npx supabase stop
+ * To start local Supabase: npm run supabase:start
+ * To stop local Supabase: npm run supabase:stop
  */
 export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,

@@ -44,7 +44,7 @@ Copia las claves que necesitas:
 
 ### 5. Configurar Variables de Entorno
 
-Crea `.env.local`:
+Crea `.env`:
 
 ```bash
 # Supabase (obtenido de `supabase status`)
@@ -166,7 +166,7 @@ supabase status
 # Si no está corriendo
 supabase start
 
-# Verifica las variables de entorno en .env.local
+# Verifica las variables de entorno en .env
 ```
 
 ### Error: "User not found" al crear proyecto

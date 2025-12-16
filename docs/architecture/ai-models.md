@@ -105,7 +105,7 @@ Tu API key de Gemini se configura en las variables de entorno:
 
 ### Dónde Configurar:
 
-#### En Desarrollo Local (.env.local):
+#### En Desarrollo Local (.env):
 ```bash
 GEMINI_API_KEY=tu-api-key-aquí
 ```

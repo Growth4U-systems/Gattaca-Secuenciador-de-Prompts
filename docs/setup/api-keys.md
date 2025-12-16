@@ -60,22 +60,22 @@ supabase secrets list
 
 ---
 
-## Paso 4: Configurar en Local (.env.local)
+## Paso 4: Configurar en Local (.env)
 
 Para desarrollo local:
 
-1. Crea el archivo `.env.local` en la raíz del proyecto (si no existe)
+1. Crea el archivo `.env` en la raíz del proyecto (si no existe)
 2. Agrega la siguiente línea:
 
 ```bash
 GEMINI_API_KEY=AIzaSy...tu-api-key-aqui...
 ```
 
-3. **IMPORTANTE**: Verifica que `.env.local` está en `.gitignore`
+3. **IMPORTANTE**: Verifica que `.env` está en `.gitignore`
 
 ```bash
-# Verifica que .env.local NO se subirá a Git
-cat .gitignore | grep .env.local
+# Verifica que .env NO se subirá a Git
+cat .gitignore | grep .env
 ```
 
 ---
@@ -116,8 +116,8 @@ Puedes usar cualquiera de las dos.
 
 - [ ] API key configurada en Supabase Secrets
 - [ ] API key configurada en Vercel Environment Variables
-- [ ] API key en `.env.local` para desarrollo local
-- [ ] `.env.local` está en `.gitignore`
+- [ ] API key en `.env` para desarrollo local
+- [ ] `.env` está en `.gitignore`
 - [ ] NO hay API keys en archivos de código
 - [ ] Edge functions redesplegadas
 - [ ] Proyecto redesplegado en Vercel

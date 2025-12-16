@@ -111,7 +111,7 @@ supabase secrets set KEY=value       # Set Edge Function secrets
 - `supabase/migrations/` - Database migrations
 
 ### Configuration
-- `.env.local` - Local environment variables
+- `.env` - Local environment variables
 - `next.config.js` - Next.js configuration
 - `tailwind.config.js` - Tailwind CSS configuration
 - `tsconfig.json` - TypeScript configuration

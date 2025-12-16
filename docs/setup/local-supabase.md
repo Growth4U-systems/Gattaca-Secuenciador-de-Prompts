@@ -22,7 +22,7 @@ Alternatively, if you're not using a devcontainer, make sure Docker Desktop is i
 
 ### 2. Configure Your Environment
 
-Your `.env.local` file has been created with the default local Supabase credentials:
+Your `.env` file has been created with the default local Supabase credentials:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
@@ -122,7 +122,7 @@ npm run supabase:logs:execute
 
 Following Supabase best practices, we use:
 
-### Local Development (`.env.local`)
+### Local Development (`.env`)
 - Uses local Supabase instance
 - Local PostgreSQL database
 - No API rate limits
@@ -197,14 +197,14 @@ If migrations fail to apply:
 
 ### Environment Variables Not Loading
 
-Ensure you're using `.env.local` (not `.env`) for local development:
-- Next.js automatically loads `.env.local` in development
-- `.env.local` is gitignored and won't be committed
+Ensure you're using `.env` (not `.env`) for local development:
+- Next.js automatically loads `.env` in development
+- `.env` is gitignored and won't be committed
 
 ## Next Steps
 
 1. ✅ Rebuild devcontainer to enable Docker
-2. ✅ Set your `GEMINI_API_KEY` in `.env.local`
+2. ✅ Set your `GEMINI_API_KEY` in `.env`
 3. ✅ Run `npx supabase start`
 4. ✅ Run `npm run dev`
 5. ✅ Access Studio at http://localhost:54323

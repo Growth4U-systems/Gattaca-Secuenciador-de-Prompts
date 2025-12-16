@@ -44,8 +44,8 @@ When you open this project in a dev container for the first time:
 
 2. **Configure environment**:
    ```bash
-   cp .env.example .env.local
-   # Edit .env.local with your credentials
+   cp .env.example .env
+   # Edit .env with your credentials
    ```
 
 3. **Link to Supabase** (if using Supabase Cloud):
@@ -168,6 +168,6 @@ PORT=3001 npm run dev
 
 - The container runs as the `node` user (non-root)
 - All tools are installed globally during container creation
-- Environment variables must be set in `.env.local` (not tracked in git)
+- Environment variables must be set in `.env` (not tracked in git)
 - Claude Code settings are stored in `.claude/settings.local.json`
 - You'll need to run `supabase login` inside the container the first time
