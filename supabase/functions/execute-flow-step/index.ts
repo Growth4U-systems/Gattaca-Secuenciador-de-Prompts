@@ -15,11 +15,13 @@ type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml'
 
 // Modelos de fallback (orden de prioridad) - Dic 2025
 const FALLBACK_MODELS = [
+  { provider: 'gemini', model: 'gemini-3-pro' },      // 2M context - más potente
   { provider: 'gemini', model: 'gemini-2.5-flash' },  // 1M context - rápido
   { provider: 'gemini', model: 'gemini-2.5-pro' },    // 2M context - backup
   { provider: 'anthropic', model: 'claude-opus-4-5-20251101' },  // 200K context - Opus 4.5
-  { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },  // 200K context - Sonnet 4
-  { provider: 'openai', model: 'gpt-4.1' },  // 1M context - nuevo
+  { provider: 'anthropic', model: 'claude-sonnet-4-5-20251101' },  // 200K context - Sonnet 4.5
+  { provider: 'openai', model: 'gpt-5' },  // 1M context - más potente
+  { provider: 'openai', model: 'gpt-4.1' },  // 1M context - backup
   { provider: 'openai', model: 'gpt-4o' },  // 128K context - fallback
 ]
 
