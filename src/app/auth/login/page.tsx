@@ -167,7 +167,6 @@ function LoginContent() {
               },
             }}
             providers={['google']}
-            onlyThirdPartyProviders={true}
             redirectTo={redirectUrl}
             localization={{
               variables: {
