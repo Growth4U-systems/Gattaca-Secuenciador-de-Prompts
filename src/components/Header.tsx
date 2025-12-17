@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { LogOut, Sparkles, Loader2, ChevronDown, Dna } from 'lucide-react'
 import { useState } from 'react'
 import Link from 'next/link'
+import NotificationBell from '@/components/notifications/NotificationBell'
 
 export default function Header() {
   const { user, signOut, loading } = useAuth()
@@ -78,9 +79,14 @@ export default function Header() {
 
             {/* User Menu */}
             {user && (
-              <div className="relative group">
-                {/* Profile Button */}
-                <button className="flex items-center gap-2 px-3 py-2 bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-100 rounded-xl transition-all group-hover:shadow-md">
+              <div className="flex items-center gap-3">
+                {/* Notification Bell */}
+                <NotificationBell />
+
+                {/* User Menu Dropdown */}
+                <div className="relative group">
+                  {/* Profile Button */}
+                  <button className="flex items-center gap-2 px-3 py-2 bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-100 rounded-xl transition-all group-hover:shadow-md">
                   <div className="w-7 h-7 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center">
                     <span className="text-xs font-semibold text-white">
                       {user.email?.[0]?.toUpperCase()}
@@ -114,6 +120,7 @@ export default function Header() {
                     <span>Cerrar sesión</span>
                   </button>
                 </div>
+              </div>
               </div>
             )}
           </div>

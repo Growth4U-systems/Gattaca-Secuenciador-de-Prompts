@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-server'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
 /**
  * Update campaign
+ * SECURITY FIX: Now uses user session instead of service role key
  */
 export async function PATCH(
   request: NextRequest,
@@ -23,16 +24,14 @@ export async function PATCH(
       )
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    )
+    // SECURITY FIX: Use user session instead of service role
+    const supabase = await createClient()
+
+    // Check authentication
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     // Update campaign
     const updateData: any = {}

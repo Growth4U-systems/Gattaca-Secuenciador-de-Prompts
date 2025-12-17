@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical } from 'lucide-react'
+import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2 } from 'lucide-react'
 import { useProject } from '@/hooks/useProjects'
 import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
 import DocumentUpload from '@/components/documents/DocumentUpload'
@@ -14,6 +14,7 @@ import FlowSetup from '@/components/flow/FlowSetup'
 import CampaignRunner from '@/components/campaign/CampaignRunner'
 import ProjectVariables from '@/components/project/ProjectVariables'
 import ResearchPromptsEditor from '@/components/project/ResearchPromptsEditor'
+import ShareProjectModal from '@/components/project/ShareProjectModal'
 
 type TabType = 'documents' | 'flow' | 'config' | 'campaigns' | 'context' | 'variables'
 
@@ -59,12 +60,13 @@ export default function ProjectPage({
 }) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<TabType>('documents')
-  const { project, loading: projectLoading, error: projectError } = useProject(params.projectId)
+  const { project, userRole, loading: projectLoading, error: projectError } = useProject(params.projectId)
   const { documents, loading: docsLoading, reload: reloadDocs } = useDocuments(params.projectId)
   const [editingProjectName, setEditingProjectName] = useState(false)
   const [projectName, setProjectName] = useState('')
   const [savingProjectName, setSavingProjectName] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
 
   const tabs = [
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
@@ -238,7 +240,16 @@ export default function ProjectPage({
                       )}
                     </div>
                   </div>
-                  <div className="relative">
+                  <div className="relative" ref={(el) => {
+                    if (el && showMenu) {
+                      const rect = el.getBoundingClientRect()
+                      const menu = el.querySelector('.dropdown-menu') as HTMLElement
+                      if (menu) {
+                        menu.style.top = `${rect.bottom + 8}px`
+                        menu.style.right = `${window.innerWidth - rect.right}px`
+                      }
+                    }
+                  }}>
                     <button
                       onClick={() => setShowMenu(!showMenu)}
                       className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors"
@@ -247,8 +258,20 @@ export default function ProjectPage({
                     </button>
                     {showMenu && (
                       <>
-                        <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-                        <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-20">
+                        <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                        <div className="dropdown-menu fixed w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-visible z-50">
+                          {userRole === 'owner' && (
+                            <button
+                              onClick={() => {
+                                setShowMenu(false)
+                                setShowShareModal(true)
+                              }}
+                              className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+                            >
+                              <Share2 size={16} />
+                              Compartir proyecto
+                            </button>
+                          )}
                           <button
                             onClick={() => {
                               setShowMenu(false)
@@ -259,16 +282,18 @@ export default function ProjectPage({
                             <Edit2 size={16} />
                             Editar nombre
                           </button>
-                          <button
-                            onClick={() => {
-                              setShowMenu(false)
-                              handleDeleteProject()
-                            }}
-                            className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
-                          >
-                            <Trash2 size={16} />
-                            Eliminar proyecto
-                          </button>
+                          {userRole === 'owner' && (
+                            <button
+                              onClick={() => {
+                                setShowMenu(false)
+                                handleDeleteProject()
+                              }}
+                              className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
+                            >
+                              <Trash2 size={16} />
+                              Eliminar proyecto
+                            </button>
+                          )}
                         </div>
                       </>
                     )}
@@ -368,6 +393,15 @@ export default function ProjectPage({
           </div>
         </div>
       </div>
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <ShareProjectModal
+          projectId={params.projectId}
+          projectName={project.name}
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
     </main>
   )
 }

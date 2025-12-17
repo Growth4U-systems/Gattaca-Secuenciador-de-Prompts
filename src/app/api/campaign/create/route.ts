@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-server'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
 /**
  * Create a new campaign
+ * SECURITY FIX: Now uses user session instead of service role key
  */
 export async function POST(request: NextRequest) {
   try {
@@ -21,16 +22,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    )
+    // SECURITY FIX: Use user session instead of service role
+    const supabase = await createClient()
+
+    // Check authentication
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     // Load project to copy flow_config
     const { data: project, error: projectError } = await supabase
@@ -107,6 +106,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * List campaigns for a project
+ * SECURITY FIX: Now uses user session instead of service role key
  */
 export async function GET(request: NextRequest) {
   try {
@@ -120,17 +120,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    )
+    // SECURITY FIX: Use user session instead of service role
+    const supabase = await createClient()
 
+    // Check authentication
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // RLS will automatically filter campaigns based on user's project access
     const { data, error } = await supabase
       .from('ecp_campaigns')
       .select('*')

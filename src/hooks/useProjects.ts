@@ -37,12 +37,21 @@ export function useProjects() {
 
 export function useProject(projectId: string) {
   const [project, setProject] = useState<Project | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const loadProject = async () => {
     try {
       setLoading(true)
+
+      // Get current user
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user) {
+        throw new Error('No authenticated user')
+      }
+
+      // Load project data
       const { data, error } = await supabase
         .from('projects')
         .select('*')
@@ -52,6 +61,17 @@ export function useProject(projectId: string) {
       if (error) throw error
 
       setProject(data)
+
+      // Get user's role in the project
+      const { data: role, error: roleError } = await supabase
+        .rpc('get_user_project_role', {
+          p_project_id: projectId,
+          p_user_id: session.user.id
+        })
+
+      if (!roleError) {
+        setUserRole(role)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -65,7 +85,7 @@ export function useProject(projectId: string) {
     }
   }, [projectId])
 
-  return { project, loading, error, reload: loadProject }
+  return { project, userRole, loading, error, reload: loadProject }
 }
 
 export async function createProject(data: {

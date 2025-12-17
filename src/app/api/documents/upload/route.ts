@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-server'
 
 // PDF and DOCX parsing libraries
 // Note: These need to be installed and may require additional config
@@ -10,9 +11,21 @@ export const runtime = 'nodejs'
 export const maxDuration = 60 // 60 seconds timeout
 export const dynamic = 'force-dynamic'
 
+/**
+ * Upload document
+ * SECURITY FIX: Now uses user session for authentication
+ */
 export async function POST(request: NextRequest) {
   try {
     console.log('=== Upload Started ===')
+
+    // SECURITY FIX: Check authentication first
+    const supabaseAuth = await createClient()
+    const { data: { session } } = await supabaseAuth.auth.getSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
     const projectId = formData.get('projectId') as string
@@ -113,12 +126,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
+    // Use the authenticated client (supabaseAuth already has session)
+    // RLS policies will enforce that user can only upload to their projects
+    const supabase = supabaseAuth
 
     // Insert document into database
     console.log('Saving to database...')

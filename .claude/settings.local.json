@@ -16,7 +16,9 @@
       "Bash(fuser:*)",
       "Bash(PORT=3000 npm run dev:*)",
       "Bash(supabase gen:*)",
-      "Bash(supabase --version:*)"
+      "Bash(supabase --version:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)"
     ]
   }
 }

@@ -20,8 +20,6 @@ function LoginContent() {
   // Uses environment variable to support any port configuration
   const redirectUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`
 
-  console.log('Redirect URL for auth:', redirectUrl)
-
 
   useEffect(() => {
     // Check for error in URL params

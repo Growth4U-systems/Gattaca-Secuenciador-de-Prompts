@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-server'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes for large files
@@ -74,36 +74,11 @@ export async function POST(request: NextRequest) {
 
     // Save to Supabase
     console.log('Saving to Supabase...')
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    console.log('Environment check:', {
-      hasUrl: !!supabaseUrl,
-      hasKey: !!supabaseKey,
-      urlValue: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'undefined'
-    })
-
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json(
-        {
-          error: 'Server configuration error',
-          details: 'Missing Supabase environment variables',
-          missing: {
-            NEXT_PUBLIC_SUPABASE_URL: !supabaseUrl,
-            SUPABASE_SERVICE_ROLE_KEY: !supabaseKey
-          },
-          hint: 'Configure these variables in Vercel Dashboard → Settings → Environment Variables'
-        },
-        { status: 500 }
-      )
+    const supabase = await createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
 
     const { data, error } = await supabase
       .from('knowledge_base_docs')
