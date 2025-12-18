@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase-browser'
 
 type Document = any
 
@@ -13,6 +13,7 @@ export function useDocuments(projectId: string) {
 
     try {
       setLoading(true)
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('knowledge_base_docs')
         .select('*')
@@ -37,6 +38,7 @@ export function useDocuments(projectId: string) {
 }
 
 export async function deleteDocument(docId: string) {
+  const supabase = createClient()
   const { error } = await supabase
     .from('knowledge_base_docs')
     .delete()
@@ -51,6 +53,7 @@ export async function createDocumentFromText(data: {
   category: string
   content: string
 }) {
+  const supabase = createClient()
   const { data: newDoc, error } = await supabase
     .from('knowledge_base_docs')
     .insert({
