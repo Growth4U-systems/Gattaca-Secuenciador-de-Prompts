@@ -159,7 +159,8 @@ export async function POST(request: NextRequest) {
 
       if (!campaignError && campaign) {
         // Find step name from flow config
-        const flowConfig = campaign.flow_config || campaign.projects?.flow_config
+        // Note: projects is an array from the relation, access first element
+        const flowConfig = campaign.flow_config || (campaign.projects as any)?.[0]?.flow_config
         const step = flowConfig?.steps?.find((s: any) => s.id === step_id)
         const stepName = step?.name || step_id
 
