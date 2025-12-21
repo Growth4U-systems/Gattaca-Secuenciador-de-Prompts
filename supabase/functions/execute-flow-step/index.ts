@@ -212,7 +212,8 @@ async function callAnthropic(
 // Llamar a Google Deep Research API (Interactions API con polling)
 // IMPORTANTE: Deep Research es un agente autónomo que usa un flujo diferente:
 // 1. Crear interacción → 2. Polling hasta completar → 3. Recuperar resultado
-// NOTA: Este modelo SOLO soporta Interactions API, NO generateContent
+// NOTA: Este modelo SOLO soporta Interactions API v1alpha, NO generateContent
+// SDK: google-genai>=0.1.0 con api_version='v1alpha'
 async function callDeepResearch(
   apiKey: string,
   model: string,
@@ -223,87 +224,108 @@ async function callDeepResearch(
   const POLLING_INTERVAL_MS = 20_000  // 20 segundos entre cada poll
   const MAX_TIMEOUT_MS = 15 * 60 * 1000  // 15 minutos máximo
 
-  // Construir el prompt completo para Deep Research
+  // Construir el prompt completo para Deep Research (input debe ser string directo)
   const fullPrompt = `${systemPrompt}\n\n${context}\n\n--- TASK ---\n\n${userPrompt}`
 
   console.log(`[Deep Research] Iniciando investigación con modelo: ${model}`)
   console.log(`[Deep Research] Prompt length: ${fullPrompt.length} caracteres`)
 
-  // Configuración del agente Deep Research
-  // IMPORTANTE: thinking_summaries: "auto" permite ver el plan durante el polling
-  const agentConfig = {
-    type: 'deep-research',
-    thinking_summaries: 'auto'  // Clave para ver el progreso
+  // Configuración para Deep Research
+  // IMPORTANTE: El campo es 'config' (no 'agentConfig'), con thinking_summaries para ver el plan
+  const config = {
+    thinking_summaries: 'auto'  // Clave para ver el progreso durante polling
   }
 
-  // 1. CREAR INTERACCIÓN usando la Interactions API
-  // Endpoint principal: POST /v1beta/interactions
-  const interactionsUrl = `https://generativelanguage.googleapis.com/v1beta/interactions?key=${apiKey}`
+  // 1. CREAR INTERACCIÓN usando la Interactions API v1alpha
+  // Formato correcto basado en SDK google-genai:
+  // client.interactions.create(agent='...', background=True, config={...}, input='...')
+  const interactionsUrl = `https://generativelanguage.googleapis.com/v1alpha/interactions?key=${apiKey}`
 
-  console.log(`[Deep Research] Creando interacción con agent_config:`, JSON.stringify(agentConfig))
+  const requestBody = {
+    agent: model,  // Modelo como string directo (ej: 'deep-research-pro-preview-12-2025')
+    background: true,  // Ejecución asíncrona en background
+    config,  // Configuración con thinking_summaries
+    input: fullPrompt  // Input como string directo (no Content object)
+  }
+
+  console.log(`[Deep Research] Creando interacción v1alpha con config:`, JSON.stringify(config))
+  console.log(`[Deep Research] Request body keys:`, Object.keys(requestBody))
 
   const createResponse = await fetch(interactionsUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: `models/${model}`,
-      userContent: {
-        parts: [{ text: fullPrompt }]
-      },
-      agentConfig
-    })
+    body: JSON.stringify(requestBody)
   })
 
   if (!createResponse.ok) {
     const errorText = await createResponse.text()
-    console.log(`[Deep Research] Error en /interactions: ${errorText}`)
+    console.log(`[Deep Research] Error en v1alpha/interactions: ${errorText}`)
 
-    // Segundo intento: endpoint alternativo con contents
-    console.log(`[Deep Research] Intentando endpoint alternativo...`)
-    const altUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:startInteraction?key=${apiKey}`
+    // Segundo intento: usar models/{model}:createInteraction en v1alpha
+    console.log(`[Deep Research] Intentando endpoint models/createInteraction...`)
+    const altUrl = `https://generativelanguage.googleapis.com/v1alpha/models/${model}:createInteraction?key=${apiKey}`
 
     const altResponse = await fetch(altUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{
-          role: 'user',
-          parts: [{ text: fullPrompt }]
-        }],
-        agentConfig
+        background: true,
+        config,
+        input: fullPrompt
       })
     })
 
     if (!altResponse.ok) {
       const altError = await altResponse.text()
-      console.log(`[Deep Research] Error en startInteraction: ${altError}`)
+      console.log(`[Deep Research] Error en createInteraction: ${altError}`)
 
-      // Tercer intento: usar v1alpha agentic endpoint
-      console.log(`[Deep Research] Intentando v1alpha agentic endpoint...`)
-      const agenticUrl = `https://generativelanguage.googleapis.com/v1alpha/models/${model}:runAgent?key=${apiKey}`
+      // Tercer intento: formato alternativo con userInput
+      console.log(`[Deep Research] Intentando formato con userInput...`)
+      const thirdUrl = `https://generativelanguage.googleapis.com/v1alpha/interactions?key=${apiKey}`
 
-      const agenticResponse = await fetch(agenticUrl, {
+      const thirdResponse = await fetch(thirdUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{
-            role: 'user',
-            parts: [{ text: fullPrompt }]
-          }],
-          agentConfig: {
-            ...agentConfig,
-            background: true  // Ejecución en background para tareas largas
-          }
+          agent: `models/${model}`,  // Con prefijo models/
+          background: true,
+          config,
+          userInput: fullPrompt  // Campo alternativo
         })
       })
 
-      if (!agenticResponse.ok) {
-        const agenticError = await agenticResponse.text()
-        throw new Error(`Deep Research API error: No se pudo crear la interacción.\n- /interactions: ${errorText}\n- startInteraction: ${altError}\n- runAgent: ${agenticError}`)
+      if (!thirdResponse.ok) {
+        const thirdError = await thirdResponse.text()
+
+        // Cuarto intento: formato con contents (v1alpha)
+        console.log(`[Deep Research] Intentando formato con contents...`)
+        const fourthUrl = `https://generativelanguage.googleapis.com/v1alpha/interactions?key=${apiKey}`
+
+        const fourthResponse = await fetch(fourthUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agent: model,
+            background: true,
+            config,
+            contents: [{
+              role: 'user',
+              parts: [{ text: fullPrompt }]
+            }]
+          })
+        })
+
+        if (!fourthResponse.ok) {
+          const fourthError = await fourthResponse.text()
+          throw new Error(`Deep Research API error: No se pudo crear la interacción.\n- v1alpha/interactions (input): ${errorText}\n- models/createInteraction: ${altError}\n- v1alpha (userInput): ${thirdError}\n- v1alpha (contents): ${fourthError}`)
+        }
+
+        const fourthData = await fourthResponse.json()
+        return handleInteractionResponse(fourthData, apiKey, fullPrompt, model)
       }
 
-      const agenticData = await agenticResponse.json()
-      return handleInteractionResponse(agenticData, apiKey, fullPrompt, model)
+      const thirdData = await thirdResponse.json()
+      return handleInteractionResponse(thirdData, apiKey, fullPrompt, model)
     }
 
     const altData = await altResponse.json()
@@ -370,12 +392,12 @@ async function handleInteractionResponse(
       throw new Error(`Deep Research: Timeout después de ${MAX_TIMEOUT_MS / 60000} minutos. Interaction ID: ${interactionName}`)
     }
 
-    // Consultar estado - probar diferentes formatos de URL
+    // Consultar estado - usar v1alpha (requerido para Deep Research)
     let statusUrl = interactionName.startsWith('http')
       ? `${interactionName}?key=${apiKey}`
       : interactionName.includes('/')
-        ? `https://generativelanguage.googleapis.com/v1beta/${interactionName}?key=${apiKey}`
-        : `https://generativelanguage.googleapis.com/v1beta/interactions/${interactionName}?key=${apiKey}`
+        ? `https://generativelanguage.googleapis.com/v1alpha/${interactionName}?key=${apiKey}`
+        : `https://generativelanguage.googleapis.com/v1alpha/interactions/${interactionName}?key=${apiKey}`
 
     const statusResponse = await fetch(statusUrl, {
       method: 'GET',
