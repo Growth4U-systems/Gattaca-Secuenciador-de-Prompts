@@ -27,6 +27,67 @@ interface LLMResponse {
   interactionId?: string
 }
 
+// Respuesta asíncrona para Deep Research (cuando no podemos hacer polling en Edge Function)
+interface AsyncDeepResearchResponse {
+  async_polling_required: true
+  interaction_id: string
+  model: string
+  prompt_tokens: number
+}
+
+// Crear interacción de Deep Research SIN hacer polling (retorna inmediatamente)
+// Esto permite que la Edge Function termine rápido y el polling se haga desde otro lugar
+async function createDeepResearchInteraction(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  context: string,
+  userPrompt: string
+): Promise<AsyncDeepResearchResponse> {
+  const fullPrompt = `${systemPrompt}\n\n${context}\n\n--- TASK ---\n\n${userPrompt}`
+  const promptTokens = Math.ceil(fullPrompt.length / 4)
+
+  console.log(`[Deep Research Async] Creando interacción para modelo: ${model}`)
+  console.log(`[Deep Research Async] Prompt length: ${fullPrompt.length} caracteres`)
+
+  const interactionsUrl = `https://generativelanguage.googleapis.com/v1alpha/interactions?key=${apiKey}`
+
+  const requestBody = {
+    agent: model,
+    background: true,
+    input: fullPrompt
+  }
+
+  const createResponse = await fetch(interactionsUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody)
+  })
+
+  if (!createResponse.ok) {
+    const errorText = await createResponse.text()
+    console.log(`[Deep Research Async] Error: ${errorText}`)
+    throw new Error(`Deep Research API error: ${errorText}`)
+  }
+
+  const data = await createResponse.json()
+  const interactionId = data.name || data.interactionName || data.id
+
+  if (!interactionId) {
+    console.log(`[Deep Research Async] Respuesta sin ID:`, JSON.stringify(data))
+    throw new Error('Deep Research: No se recibió ID de interacción')
+  }
+
+  console.log(`[Deep Research Async] Interacción creada: ${interactionId}`)
+
+  return {
+    async_polling_required: true,
+    interaction_id: interactionId,
+    model,
+    prompt_tokens: promptTokens
+  }
+}
+
 // Interfaz para estado de interacción Deep Research
 interface DeepResearchInteraction {
   name: string
@@ -773,25 +834,56 @@ serve(async (req) => {
 
     console.log(`Executing step "${step_config.name}" with model: ${preferredModel}`)
 
-    // Callback para Deep Research progress
+    // Deep Research requiere manejo especial: crear interacción y retornar inmediatamente
+    // El polling se hace desde el frontend/API route separado
     const isDeepResearch = preferredModel.startsWith('deep-research')
-    const onProgress: ProgressCallback | undefined = isDeepResearch ? async (progress) => {
-      // Guardar progreso en execution_logs
+
+    if (isDeepResearch) {
+      console.log(`[Deep Research] Modo asíncrono - creando interacción y retornando inmediatamente`)
+
+      const geminiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY')
+      if (!geminiKey) {
+        throw new Error('No API key configured for Deep Research. Please add GOOGLE_API_KEY or GEMINI_API_KEY.')
+      }
+
+      const asyncResult = await createDeepResearchInteraction(
+        geminiKey,
+        preferredModel,
+        SYSTEM_INSTRUCTION,
+        contextString,
+        promptWithFormat
+      )
+
+      // Guardar interaction_id en execution_logs para que el frontend pueda hacer polling
       await supabase
         .from('execution_logs')
         .update({
-          status: 'running',
+          status: 'polling',
           error_details: JSON.stringify({
-            type: 'deep_research_progress',
-            state: progress.state,
-            elapsedSeconds: progress.elapsedSeconds,
-            thinkingSummaries: progress.thinkingSummaries.slice(-5), // Últimos 5
-            currentAction: progress.currentAction
+            type: 'deep_research_async',
+            interaction_id: asyncResult.interaction_id,
+            model: asyncResult.model,
+            prompt_tokens: asyncResult.prompt_tokens,
+            started_at: new Date().toISOString()
           })
         })
         .eq('id', logEntry.id)
-    } : undefined
 
+      // Retornar inmediatamente indicando que se requiere polling
+      return new Response(
+        JSON.stringify({
+          success: true,
+          async_polling_required: true,
+          interaction_id: asyncResult.interaction_id,
+          model_used: asyncResult.model,
+          log_id: logEntry.id,
+          message: 'Deep Research iniciado. El resultado se obtendrá mediante polling.',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Para otros modelos, ejecutar normalmente
     const llmResponse = await executeModel(
       SYSTEM_INSTRUCTION,
       contextString,
@@ -799,7 +891,7 @@ serve(async (req) => {
       temperature,
       maxTokens,
       preferredModel,
-      onProgress
+      undefined // No progress callback para modelos normales
     )
 
     const outputText = llmResponse.text

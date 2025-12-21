@@ -1,93 +1,98 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Brain, Clock, Search, FileText, Loader2, CheckCircle } from 'lucide-react'
-import { createClient } from '@/lib/supabase-browser'
+import { useState, useEffect, useCallback } from 'react'
+import { Brain, Clock, Search, FileText, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
 
 interface DeepResearchProgressProps {
   campaignId: string
+  stepId: string
   stepName: string
+  interactionId: string
+  logId: string
+  onComplete: (result: string) => void
+  onError: (error: string) => void
 }
 
-interface ProgressData {
-  type: 'deep_research_progress'
-  state: string
-  elapsedSeconds: number
-  thinkingSummaries: string[]
-  currentAction?: string
+interface PollResponse {
+  status: 'PROCESSING' | 'COMPLETED' | 'FAILED' | string
+  result?: string
+  error?: string
+  thinking_summaries?: string[]
 }
 
-export default function DeepResearchProgress({ campaignId, stepName }: DeepResearchProgressProps) {
-  const [progress, setProgress] = useState<ProgressData | null>(null)
+export default function DeepResearchProgress({
+  campaignId,
+  stepId,
+  stepName,
+  interactionId,
+  logId,
+  onComplete,
+  onError
+}: DeepResearchProgressProps) {
+  const [status, setStatus] = useState<string>('PROCESSING')
+  const [thinkingSummaries, setThinkingSummaries] = useState<string[]>([])
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [isPolling, setIsPolling] = useState(true)
-  const supabase = createClient()
 
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null
-    let mounted = true
+  const pollStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/campaign/poll-deep-research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          interaction_id: interactionId,
+          campaign_id: campaignId,
+          step_id: stepId,
+          log_id: logId,
+        }),
+      })
 
-    const pollProgress = async () => {
-      try {
-        // Fetch latest execution log for this campaign/step
-        // Note: We search by step_name since that's what's stored in execution_logs
-        const { data, error } = await supabase
-          .from('execution_logs')
-          .select('error_details, status, step_name')
-          .eq('campaign_id', campaignId)
-          .eq('step_name', stepName)
-          .in('status', ['started', 'running'])
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single()
-
-        if (error) {
-          // No running log found, maybe completed or not started
-          if (error.code === 'PGRST116') {
-            // No rows found - check if completed
-            const { data: completedData } = await supabase
-              .from('execution_logs')
-              .select('status')
-              .eq('campaign_id', campaignId)
-              .eq('step_name', stepName)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .single()
-
-            if (completedData?.status === 'completed') {
-              setIsPolling(false)
-            }
-          }
-          return
-        }
-
-        if (data?.error_details && mounted) {
-          try {
-            const progressData = typeof data.error_details === 'string'
-              ? JSON.parse(data.error_details)
-              : data.error_details
-
-            if (progressData?.type === 'deep_research_progress') {
-              setProgress(progressData)
-            }
-          } catch (e) {
-            // Not valid JSON or not progress data
-          }
-        }
-      } catch (err) {
-        console.error('Error polling progress:', err)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Polling failed')
       }
-    }
 
-    // Poll immediately and then every 3 seconds
-    pollProgress()
-    intervalId = setInterval(pollProgress, 3000)
+      const data: PollResponse = await response.json()
 
-    return () => {
-      mounted = false
-      if (intervalId) clearInterval(intervalId)
+      setStatus(data.status)
+      if (data.thinking_summaries && data.thinking_summaries.length > 0) {
+        setThinkingSummaries(data.thinking_summaries)
+      }
+
+      if (data.status === 'COMPLETED') {
+        setIsPolling(false)
+        onComplete(data.result || '')
+      } else if (data.status === 'FAILED') {
+        setIsPolling(false)
+        onError(data.error || 'Deep Research failed')
+      }
+    } catch (error) {
+      console.error('Poll error:', error)
+      // Don't stop polling on transient errors
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, stepName])
+  }, [campaignId, stepId, interactionId, logId, onComplete, onError])
+
+  // Timer for elapsed time
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1)
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [])
+
+  // Polling loop - every 20 seconds
+  useEffect(() => {
+    if (!isPolling) return
+
+    // Poll immediately
+    pollStatus()
+
+    // Then poll every 20 seconds
+    const pollInterval = setInterval(pollStatus, 20000)
+
+    return () => clearInterval(pollInterval)
+  }, [isPolling, pollStatus])
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -99,10 +104,10 @@ export default function DeepResearchProgress({ campaignId, stepName }: DeepResea
     switch (state) {
       case 'PROCESSING':
         return <Search className="w-4 h-4 animate-pulse" />
-      case 'THINKING':
-        return <Brain className="w-4 h-4 animate-pulse" />
       case 'COMPLETED':
-        return <CheckCircle className="w-4 h-4" />
+        return <CheckCircle className="w-4 h-4 text-green-500" />
+      case 'FAILED':
+        return <AlertCircle className="w-4 h-4 text-red-500" />
       default:
         return <Loader2 className="w-4 h-4 animate-spin" />
     }
@@ -112,10 +117,10 @@ export default function DeepResearchProgress({ campaignId, stepName }: DeepResea
     switch (state) {
       case 'PROCESSING':
         return 'Investigando...'
-      case 'THINKING':
-        return 'Analizando...'
       case 'COMPLETED':
         return 'Completado'
+      case 'FAILED':
+        return 'Error'
       default:
         return 'Procesando...'
     }
@@ -132,38 +137,31 @@ export default function DeepResearchProgress({ campaignId, stepName }: DeepResea
           <h4 className="font-medium text-purple-900">Deep Research en progreso</h4>
           <p className="text-sm text-purple-600">{stepName}</p>
         </div>
-        {progress && (
-          <div className="flex items-center gap-2 text-sm text-purple-700 bg-purple-100 px-3 py-1 rounded-full">
-            <Clock className="w-4 h-4" />
-            <span>{formatTime(progress.elapsedSeconds)}</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2 text-sm text-purple-700 bg-purple-100 px-3 py-1 rounded-full">
+          <Clock className="w-4 h-4" />
+          <span>{formatTime(elapsedSeconds)}</span>
+        </div>
       </div>
 
       {/* Status indicator */}
-      {progress && (
-        <div className="flex items-center gap-2 mb-3 text-sm text-indigo-700">
-          {getStateIcon(progress.state)}
-          <span>{getStateLabel(progress.state)}</span>
-          {progress.currentAction && (
-            <span className="text-indigo-500">- {progress.currentAction}</span>
-          )}
-        </div>
-      )}
+      <div className="flex items-center gap-2 mb-3 text-sm text-indigo-700">
+        {getStateIcon(status)}
+        <span>{getStateLabel(status)}</span>
+      </div>
 
       {/* Thinking summaries */}
-      {progress?.thinkingSummaries && progress.thinkingSummaries.length > 0 && (
+      {thinkingSummaries.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs font-medium text-gray-600 uppercase tracking-wide">
             <FileText className="w-3 h-3" />
             Proceso de investigación
           </div>
           <div className="space-y-2 max-h-48 overflow-y-auto">
-            {progress.thinkingSummaries.map((summary, index) => (
+            {thinkingSummaries.map((summary, index) => (
               <div
                 key={index}
                 className={`p-3 rounded-lg text-sm ${
-                  index === progress.thinkingSummaries.length - 1
+                  index === thinkingSummaries.length - 1
                     ? 'bg-white border border-indigo-200 text-indigo-800 shadow-sm'
                     : 'bg-gray-50 text-gray-600'
                 }`}
@@ -181,7 +179,7 @@ export default function DeepResearchProgress({ campaignId, stepName }: DeepResea
       )}
 
       {/* Loading state when no progress yet */}
-      {!progress && isPolling && (
+      {thinkingSummaries.length === 0 && isPolling && (
         <div className="flex items-center justify-center gap-3 py-4 text-purple-600">
           <Loader2 className="w-5 h-5 animate-spin" />
           <span className="text-sm">Iniciando Deep Research...</span>
@@ -193,7 +191,7 @@ export default function DeepResearchProgress({ campaignId, stepName }: DeepResea
         <div
           className="h-full bg-gradient-to-r from-purple-500 via-indigo-500 to-blue-500 rounded-full animate-pulse"
           style={{
-            width: progress ? `${Math.min((progress.elapsedSeconds / 600) * 100, 95)}%` : '5%',
+            width: status === 'COMPLETED' ? '100%' : `${Math.min((elapsedSeconds / 600) * 100, 95)}%`,
             transition: 'width 1s ease-out'
           }}
         />

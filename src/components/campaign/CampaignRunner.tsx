@@ -137,6 +137,15 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     selectedModel: string
   } | null>(null)
 
+  // Deep Research async polling state
+  const [deepResearchPolling, setDeepResearchPolling] = useState<{
+    campaignId: string
+    stepId: string
+    stepName: string
+    interactionId: string
+    logId: string
+  } | null>(null)
+
   // Filter states
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -684,6 +693,20 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
       const data = await response.json()
 
       if (data.success) {
+        // Check if Deep Research requires async polling
+        if (data.async_polling_required) {
+          console.log('[Deep Research] Starting async polling for:', data.interaction_id)
+          setDeepResearchPolling({
+            campaignId,
+            stepId,
+            stepName,
+            interactionId: data.interaction_id,
+            logId: data.log_id,
+          })
+          toast.info('Deep Research iniciado', 'El proceso de investigación puede tardar 5-10 minutos')
+          return // Don't clear runningStep yet - polling will handle it
+        }
+
         toast.success('Paso completado', `"${stepName}" en ${(data.duration_ms / 1000).toFixed(1)}s - Modelo: ${data.model_used || 'N/A'}`)
       } else {
         // Si el error permite retry, mostrar diálogo
@@ -723,6 +746,22 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     if (retryDialog) {
       handleRunStep(retryDialog.campaignId, retryDialog.stepId, retryDialog.stepName, retryDialog.selectedModel)
     }
+  }
+
+  // Handlers para Deep Research async polling
+  const handleDeepResearchComplete = (result: string) => {
+    console.log('[Deep Research] Completed with result length:', result.length)
+    toast.success('Deep Research completado', 'La investigación ha finalizado exitosamente')
+    setDeepResearchPolling(null)
+    setRunningStep(null)
+    loadCampaigns() // Refresh to show the result
+  }
+
+  const handleDeepResearchError = (error: string) => {
+    console.error('[Deep Research] Failed:', error)
+    toast.error('Deep Research falló', error)
+    setDeepResearchPolling(null)
+    setRunningStep(null)
   }
 
   const toggleCampaignExpanded = (campaignId: string) => {
@@ -1684,10 +1723,17 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                                       </div>
 
                                       {/* Deep Research Progress Visualizer */}
-                                      {stepRunning && isDeepResearchStep && (
+                                      {deepResearchPolling &&
+                                       deepResearchPolling.campaignId === campaign.id &&
+                                       deepResearchPolling.stepId === step.id && (
                                         <DeepResearchProgress
                                           campaignId={campaign.id}
+                                          stepId={step.id}
                                           stepName={step.name}
+                                          interactionId={deepResearchPolling.interactionId}
+                                          logId={deepResearchPolling.logId}
+                                          onComplete={handleDeepResearchComplete}
+                                          onError={handleDeepResearchError}
                                         />
                                       )}
                                     </div>

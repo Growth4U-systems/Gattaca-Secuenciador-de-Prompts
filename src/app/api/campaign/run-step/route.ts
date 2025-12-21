@@ -107,18 +107,28 @@ export async function POST(request: NextRequest) {
       ? { ...step, model: overrideModel }
       : step
 
-    const response = await fetch(edgeFunctionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-      },
-      body: JSON.stringify({
-        campaign_id: campaignId,
-        step_config: stepConfig,
-      }),
-    })
+    // Timeout largo para Deep Research (puede tardar 10+ minutos)
+    const isDeepResearch = stepConfig.model?.includes('deep-research')
+    const controller = new AbortController()
+    const timeoutMs = isDeepResearch ? 14 * 60 * 1000 : 5 * 60 * 1000 // 14 min para Deep Research, 5 min para otros
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+      const response = await fetch(edgeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+        },
+        body: JSON.stringify({
+          campaign_id: campaignId,
+          step_config: stepConfig,
+        }),
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeoutId)
 
     if (!response.ok) {
       // Leer el body una sola vez como texto
@@ -147,7 +157,23 @@ export async function POST(request: NextRequest) {
     const result = await response.json()
     const duration = Date.now() - startTime
 
-    // Clear current_step_id after completion
+    // Check if Deep Research returned async polling required
+    if (result.async_polling_required) {
+      console.log(`[Deep Research] Async mode - interaction created: ${result.interaction_id}`)
+      // Don't clear current_step_id - the step is still running
+      return NextResponse.json({
+        success: true,
+        async_polling_required: true,
+        interaction_id: result.interaction_id,
+        log_id: result.log_id,
+        step_id: step.id,
+        step_name: step.name,
+        model_used: result.model_used,
+        message: result.message,
+      })
+    }
+
+    // Clear current_step_id after completion (for non-async steps)
     await supabase
       .from('ecp_campaigns')
       .update({
@@ -164,6 +190,22 @@ export async function POST(request: NextRequest) {
       model_used: result.model_used,
       result,
     })
+    } catch (fetchError) {
+      clearTimeout(timeoutId)
+      // Handle abort/timeout specifically
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        console.error(`Step ${step.name} timed out after ${timeoutMs / 1000}s`)
+        return NextResponse.json(
+          {
+            error: `Step "${step.name}" timed out. Deep Research puede tardar hasta 10 minutos.`,
+            can_retry: true,
+            failed_model: stepConfig.model,
+          },
+          { status: 504 }
+        )
+      }
+      throw fetchError // Re-throw for outer catch
+    }
   } catch (error) {
     console.error('Run single step error:', error)
     return NextResponse.json(
