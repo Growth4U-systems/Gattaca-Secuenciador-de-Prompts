@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Brain, Clock, Search, FileText, Loader2, CheckCircle } from 'lucide-react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@/lib/supabase-browser'
 
 interface DeepResearchProgressProps {
   campaignId: string
@@ -21,7 +21,7 @@ interface ProgressData {
 export default function DeepResearchProgress({ campaignId, stepId, stepName }: DeepResearchProgressProps) {
   const [progress, setProgress] = useState<ProgressData | null>(null)
   const [isPolling, setIsPolling] = useState(true)
-  const supabase = createClientComponentClient()
+  const supabase = createClient()
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null
@@ -86,7 +86,8 @@ export default function DeepResearchProgress({ campaignId, stepId, stepName }: D
       mounted = false
       if (intervalId) clearInterval(intervalId)
     }
-  }, [campaignId, stepId, supabase])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId, stepId])
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
