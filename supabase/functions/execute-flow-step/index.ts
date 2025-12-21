@@ -461,19 +461,47 @@ async function handleInteractionResponse(
     if (statusData.state === 'COMPLETED') {
       let resultText = ''
 
+      // Debug: log response structure
+      console.log(`[Deep Research] COMPLETED - Response structure:`, JSON.stringify({
+        hasResponse: !!statusData.response,
+        responseText: statusData.response?.text?.substring(0, 200),
+        outputsCount: statusData.outputs?.length || 0,
+        lastOutputType: statusData.outputs?.[statusData.outputs.length - 1]?.type,
+        lastOutputHasText: !!statusData.outputs?.[statusData.outputs.length - 1]?.text
+      }))
+
+      // Try multiple extraction methods
       if (statusData.response?.text) {
         resultText = statusData.response.text
+        console.log(`[Deep Research] Result from response.text: ${resultText.length} chars`)
       } else if (statusData.outputs && statusData.outputs.length > 0) {
-        for (let i = statusData.outputs.length - 1; i >= 0; i--) {
-          if (statusData.outputs[i].text) {
-            resultText = statusData.outputs[i].text!
+        // Look for 'report' or 'response' type outputs first
+        for (const output of statusData.outputs) {
+          if ((output.type === 'report' || output.type === 'response') && output.text) {
+            resultText = output.text
+            console.log(`[Deep Research] Result from output type=${output.type}: ${resultText.length} chars`)
             break
+          }
+        }
+        // Fallback to last output with text
+        if (!resultText) {
+          for (let i = statusData.outputs.length - 1; i >= 0; i--) {
+            if (statusData.outputs[i].text && statusData.outputs[i].type !== 'thought' && statusData.outputs[i].type !== 'search') {
+              resultText = statusData.outputs[i].text!
+              console.log(`[Deep Research] Result from output[${i}] type=${statusData.outputs[i].type}: ${resultText.length} chars`)
+              break
+            }
           }
         }
       }
 
+      // If still no result, log full response for debugging
+      if (!resultText) {
+        console.log(`[Deep Research] WARNING: No result text found. Full response:`, JSON.stringify(statusData, null, 2))
+      }
+
       const duration = (Date.now() - startTime) / 1000
-      console.log(`[Deep Research] Completado en ${duration.toFixed(1)}s`)
+      console.log(`[Deep Research] Completado en ${duration.toFixed(1)}s - Result: ${resultText.length} chars`)
 
       return {
         text: resultText,
