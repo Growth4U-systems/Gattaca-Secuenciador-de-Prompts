@@ -33,6 +33,8 @@ const LLM_MODELS: { value: string; label: string; provider: string; context: str
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google', context: '1M tokens', desc: 'Excelente calidad, estable' },
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google', context: '1M tokens', desc: 'Rápido y económico' },
   { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', provider: 'Google', context: '1M tokens', desc: 'Ultra ligero' },
+  // Deep Research (Google) - Agente de investigación autónomo
+  { value: 'deep-research-pro-preview-12-2025', label: 'Deep Research Pro', provider: 'Deep Research', context: 'Sin límite', desc: 'Agente autónomo de investigación profunda (5-10 min)' },
   // OpenAI - GPT-5 Series
   { value: 'gpt-5.2', label: 'GPT-5.2', provider: 'OpenAI', context: '256K tokens', desc: 'Última iteración, más avanzado' },
   { value: 'gpt-5', label: 'GPT-5', provider: 'OpenAI', context: '256K tokens', desc: 'Modelo principal, alta calidad' },
@@ -597,6 +599,13 @@ export default function StepEditor({
                 >
                   <optgroup label="Google (Gemini)">
                     {LLM_MODELS.filter(m => m.provider === 'Google').map((model) => (
+                      <option key={model.value} value={model.value}>
+                        {model.label} - {model.desc} ({model.context})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Google Deep Research (Agente Autónomo)">
+                    {LLM_MODELS.filter(m => m.provider === 'Deep Research').map((model) => (
                       <option key={model.value} value={model.value}>
                         {model.label} - {model.desc} ({model.context})
                       </option>

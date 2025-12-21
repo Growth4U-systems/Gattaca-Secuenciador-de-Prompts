@@ -12,7 +12,7 @@
 export type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml'
 
 // Proveedores LLM soportados
-export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'groq'
+export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'groq' | 'deep-research'
 
 // Modelos disponibles por proveedor (IDs reales de API)
 export type GeminiModel = 'gemini-3.0-pro-preview' | 'gemini-2.5-pro' | 'gemini-2.5-flash' | 'gemini-2.5-flash-lite'
@@ -20,7 +20,10 @@ export type OpenAIModel = 'gpt-5.2' | 'gpt-5' | 'gpt-5-mini' | 'gpt-4.1' | 'gpt-
 export type AnthropicModel = 'claude-4.5-opus' | 'claude-4.5-sonnet' | 'claude-4.5-haiku'
 export type GroqModel = 'llama-3.3-70b-versatile' | 'llama-3.1-8b-instant' | 'mixtral-8x7b-32768'
 
-export type LLMModel = GeminiModel | OpenAIModel | AnthropicModel | GroqModel
+// Google Deep Research - Agente autónomo de investigación (usa Interactions API, no generateContent)
+export type DeepResearchModel = 'deep-research-pro-preview-12-2025'
+
+export type LLMModel = GeminiModel | OpenAIModel | AnthropicModel | GroqModel | DeepResearchModel
 
 // Configuración de fallback
 export interface FallbackConfig {

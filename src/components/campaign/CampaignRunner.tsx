@@ -16,6 +16,8 @@ const LLM_MODELS = [
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google' },
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google' },
   { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', provider: 'Google' },
+  // Deep Research (Google) - Agente autónomo de investigación
+  { value: 'deep-research-pro-preview-12-2025', label: 'Deep Research Pro', provider: 'Deep Research' },
   // OpenAI GPT-5 Series
   { value: 'gpt-5.2', label: 'GPT-5.2', provider: 'OpenAI' },
   { value: 'gpt-5', label: 'GPT-5', provider: 'OpenAI' },
@@ -2037,6 +2039,17 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                 >
                   <optgroup label="Google (Gemini)">
                     {LLM_MODELS.filter(m => m.provider === 'Google').map((model) => (
+                      <option
+                        key={model.value}
+                        value={model.value}
+                        disabled={model.value === retryDialog.failedModel}
+                      >
+                        {model.label} {model.value === retryDialog.failedModel ? '(falló)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Google Deep Research (Agente Autónomo)">
+                    {LLM_MODELS.filter(m => m.provider === 'Deep Research').map((model) => (
                       <option
                         key={model.value}
                         value={model.value}
