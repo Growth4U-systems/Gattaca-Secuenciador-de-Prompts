@@ -39,8 +39,10 @@ interface DeepResearchInteraction {
     code: string
   }
   outputs?: Array<{
+    type?: 'thought' | 'text' | 'plan' | 'search' | 'result'
     text?: string
     thinkingSummary?: string
+    content?: string
   }>
 }
 
@@ -227,53 +229,57 @@ async function callDeepResearch(
   console.log(`[Deep Research] Iniciando investigación con modelo: ${model}`)
   console.log(`[Deep Research] Prompt length: ${fullPrompt.length} caracteres`)
 
+  // Configuración del agente Deep Research
+  // IMPORTANTE: thinking_summaries: "auto" permite ver el plan durante el polling
+  const agentConfig = {
+    type: 'deep-research',
+    thinking_summaries: 'auto'  // Clave para ver el progreso
+  }
+
   // 1. CREAR INTERACCIÓN usando la Interactions API
-  // Endpoint correcto para Deep Research: POST /v1beta/models/{model}:generateContent con config especial
-  // O usar el endpoint de interactions directamente
-  const createUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:startInteraction?key=${apiKey}`
+  // Endpoint principal: POST /v1beta/interactions
+  const interactionsUrl = `https://generativelanguage.googleapis.com/v1beta/interactions?key=${apiKey}`
 
-  console.log(`[Deep Research] Creando interacción en: ${createUrl}`)
+  console.log(`[Deep Research] Creando interacción con agent_config:`, JSON.stringify(agentConfig))
 
-  const createResponse = await fetch(createUrl, {
+  const createResponse = await fetch(interactionsUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{
-        role: 'user',
+      model: `models/${model}`,
+      userContent: {
         parts: [{ text: fullPrompt }]
-      }],
-      // Configuración para ejecución en background
-      generationConfig: {
-        candidateCount: 1
-      }
+      },
+      agentConfig
     })
   })
 
   if (!createResponse.ok) {
     const errorText = await createResponse.text()
-    console.log(`[Deep Research] Error en startInteraction: ${errorText}`)
+    console.log(`[Deep Research] Error en /interactions: ${errorText}`)
 
-    // Intentar endpoint alternativo: interactions
+    // Segundo intento: endpoint alternativo con contents
     console.log(`[Deep Research] Intentando endpoint alternativo...`)
-    const altUrl = `https://generativelanguage.googleapis.com/v1beta/interactions?key=${apiKey}`
+    const altUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:startInteraction?key=${apiKey}`
 
     const altResponse = await fetch(altUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: `models/${model}`,
-        userContent: {
+        contents: [{
+          role: 'user',
           parts: [{ text: fullPrompt }]
-        }
+        }],
+        agentConfig
       })
     })
 
     if (!altResponse.ok) {
       const altError = await altResponse.text()
-      console.log(`[Deep Research] Error en endpoint alternativo: ${altError}`)
+      console.log(`[Deep Research] Error en startInteraction: ${altError}`)
 
-      // Tercer intento: usar agentic endpoint
-      console.log(`[Deep Research] Intentando agentic endpoint...`)
+      // Tercer intento: usar v1alpha agentic endpoint
+      console.log(`[Deep Research] Intentando v1alpha agentic endpoint...`)
       const agenticUrl = `https://generativelanguage.googleapis.com/v1alpha/models/${model}:runAgent?key=${apiKey}`
 
       const agenticResponse = await fetch(agenticUrl, {
@@ -285,14 +291,15 @@ async function callDeepResearch(
             parts: [{ text: fullPrompt }]
           }],
           agentConfig: {
-            background: true
+            ...agentConfig,
+            background: true  // Ejecución en background para tareas largas
           }
         })
       })
 
       if (!agenticResponse.ok) {
         const agenticError = await agenticResponse.text()
-        throw new Error(`Deep Research API error: No se pudo crear la interacción. Errores: startInteraction=${errorText}, interactions=${altError}, runAgent=${agenticError}`)
+        throw new Error(`Deep Research API error: No se pudo crear la interacción.\n- /interactions: ${errorText}\n- startInteraction: ${altError}\n- runAgent: ${agenticError}`)
       }
 
       const agenticData = await agenticResponse.json()
@@ -387,12 +394,30 @@ async function handleInteractionResponse(
       lastState = statusData.state
     }
 
-    // Capturar thinking summaries
+    // Capturar thinking summaries y outputs de tipo 'thought'
     if (statusData.outputs) {
       for (const output of statusData.outputs) {
+        // Capturar thinkingSummary si existe
         if (output.thinkingSummary && !thinkingSummaries.includes(output.thinkingSummary)) {
           thinkingSummaries.push(output.thinkingSummary)
-          console.log(`[Deep Research] Thinking: ${output.thinkingSummary.substring(0, 100)}...`)
+          console.log(`[Deep Research] 💭 Thinking: ${output.thinkingSummary.substring(0, 150)}...`)
+        }
+
+        // Capturar outputs de tipo 'thought' (plan de investigación)
+        if (output.type === 'thought' && output.text && !thinkingSummaries.includes(output.text)) {
+          thinkingSummaries.push(output.text)
+          console.log(`[Deep Research] 📋 Plan: ${output.text.substring(0, 150)}...`)
+        }
+
+        // Capturar outputs de tipo 'search' (búsquedas realizadas)
+        if (output.type === 'search' && output.text) {
+          console.log(`[Deep Research] 🔍 Búsqueda: ${output.text.substring(0, 100)}`)
+        }
+
+        // Capturar contenido directo si existe
+        if (output.content && !thinkingSummaries.includes(output.content)) {
+          thinkingSummaries.push(output.content)
+          console.log(`[Deep Research] 📝 Output: ${output.content.substring(0, 150)}...`)
         }
       }
     }
