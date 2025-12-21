@@ -14,12 +14,24 @@ interface DeepResearchInteraction {
     message: string
     code: string
   }
+  // Google may use different field names for intermediate outputs
   outputs?: Array<{
-    type?: 'thought' | 'text' | 'plan' | 'search' | 'result' | 'report' | 'response'
+    type?: string
     text?: string
     thinkingSummary?: string
     content?: string
+    summary?: string
+    message?: string
   }>
+  // Alternative field names Google might use
+  intermediateOutputs?: Array<any>
+  steps?: Array<any>
+  actions?: Array<any>
+  progress?: {
+    message?: string
+    steps?: Array<any>
+  }
+  metadata?: any
 }
 
 /**
@@ -84,19 +96,61 @@ export async function POST(request: NextRequest) {
     const statusData = await statusResponse.json() as DeepResearchInteraction
 
     console.log(`[Deep Research Poll] State: ${statusData.state}`)
+    console.log(`[Deep Research Poll] Full response keys:`, Object.keys(statusData))
+    console.log(`[Deep Research Poll] Has outputs: ${!!statusData.outputs}, count: ${statusData.outputs?.length || 0}`)
+    // Log alternative fields
+    if (statusData.intermediateOutputs) console.log(`[Deep Research Poll] Has intermediateOutputs:`, statusData.intermediateOutputs.length)
+    if (statusData.steps) console.log(`[Deep Research Poll] Has steps:`, statusData.steps.length)
+    if (statusData.actions) console.log(`[Deep Research Poll] Has actions:`, statusData.actions.length)
+    if (statusData.progress) console.log(`[Deep Research Poll] Has progress:`, JSON.stringify(statusData.progress))
+    if (statusData.metadata) console.log(`[Deep Research Poll] Has metadata:`, JSON.stringify(statusData.metadata))
+    if (statusData.outputs && statusData.outputs.length > 0) {
+      console.log(`[Deep Research Poll] Output types:`, statusData.outputs.map(o => o.type || 'no-type').join(', '))
+      console.log(`[Deep Research Poll] First output:`, JSON.stringify(statusData.outputs[0], null, 2))
+    }
+    // Log the whole response if in processing state to understand structure
+    if (statusData.state === 'PROCESSING') {
+      console.log(`[Deep Research Poll] Full PROCESSING response:`, JSON.stringify(statusData, null, 2).substring(0, 2000))
+    }
 
     // Extract thinking summaries for progress display
     const thinkingSummaries: string[] = []
+
+    // Try standard outputs array
     if (statusData.outputs) {
       for (const output of statusData.outputs) {
-        if (output.thinkingSummary && !thinkingSummaries.includes(output.thinkingSummary)) {
-          thinkingSummaries.push(output.thinkingSummary)
-        }
-        if (output.type === 'thought' && output.text && !thinkingSummaries.includes(output.text)) {
-          thinkingSummaries.push(output.text)
+        // Try multiple field names
+        const text = output.thinkingSummary || output.summary || output.message ||
+                     (output.type === 'thought' ? output.text : null)
+        if (text && !thinkingSummaries.includes(text)) {
+          thinkingSummaries.push(text)
         }
       }
     }
+
+    // Try alternative field names
+    const altOutputs = statusData.intermediateOutputs || statusData.steps || statusData.actions || []
+    for (const item of altOutputs) {
+      const text = item.summary || item.message || item.text || item.thinkingSummary || item.description
+      if (text && typeof text === 'string' && !thinkingSummaries.includes(text)) {
+        thinkingSummaries.push(text)
+      }
+    }
+
+    // Try progress field
+    if (statusData.progress?.message && !thinkingSummaries.includes(statusData.progress.message)) {
+      thinkingSummaries.push(statusData.progress.message)
+    }
+    if (statusData.progress?.steps) {
+      for (const step of statusData.progress.steps) {
+        const text = step.summary || step.message || step.description
+        if (text && !thinkingSummaries.includes(text)) {
+          thinkingSummaries.push(text)
+        }
+      }
+    }
+
+    console.log(`[Deep Research Poll] Extracted ${thinkingSummaries.length} thinking summaries`)
 
     // Update execution_logs with progress
     if (log_id) {
