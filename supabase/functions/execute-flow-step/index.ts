@@ -230,26 +230,18 @@ async function callDeepResearch(
   console.log(`[Deep Research] Iniciando investigación con modelo: ${model}`)
   console.log(`[Deep Research] Prompt length: ${fullPrompt.length} caracteres`)
 
-  // Configuración para Deep Research
-  // IMPORTANTE: El campo es 'config' (no 'agentConfig'), con thinking_summaries para ver el plan
-  const config = {
-    thinking_summaries: 'auto'  // Clave para ver el progreso durante polling
-  }
-
   // 1. CREAR INTERACCIÓN usando la Interactions API v1alpha
-  // Formato correcto basado en SDK google-genai:
-  // client.interactions.create(agent='...', background=True, config={...}, input='...')
+  // Formato simplificado sin campo config (no soportado en REST API)
   const interactionsUrl = `https://generativelanguage.googleapis.com/v1alpha/interactions?key=${apiKey}`
 
   const requestBody = {
-    agent: model,  // Modelo como string directo (ej: 'deep-research-pro-preview-12-2025')
+    agent: model,  // Modelo como string directo
     background: true,  // Ejecución asíncrona en background
-    config,  // Configuración con thinking_summaries
-    input: fullPrompt  // Input como string directo (no Content object)
+    input: fullPrompt  // Input como string directo
   }
 
-  console.log(`[Deep Research] Creando interacción v1alpha con config:`, JSON.stringify(config))
-  console.log(`[Deep Research] Request body keys:`, Object.keys(requestBody))
+  console.log(`[Deep Research] Creando interacción v1alpha`)
+  console.log(`[Deep Research] Request body:`, JSON.stringify({ agent: model, background: true, input: '...' }))
 
   const createResponse = await fetch(interactionsUrl, {
     method: 'POST',
@@ -270,7 +262,6 @@ async function callDeepResearch(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         background: true,
-        config,
         input: fullPrompt
       })
     })
@@ -289,7 +280,6 @@ async function callDeepResearch(
         body: JSON.stringify({
           agent: `models/${model}`,  // Con prefijo models/
           background: true,
-          config,
           userInput: fullPrompt  // Campo alternativo
         })
       })
@@ -307,7 +297,6 @@ async function callDeepResearch(
           body: JSON.stringify({
             agent: model,
             background: true,
-            config,
             contents: [{
               role: 'user',
               parts: [{ text: fullPrompt }]
