@@ -146,6 +146,15 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     logId: string
   } | null>(null)
 
+  // Step execution config dialog
+  const [stepExecutionConfig, setStepExecutionConfig] = useState<{
+    campaignId: string
+    stepId: string
+    stepName: string
+    currentModel: string
+    selectedModel: string
+  } | null>(null)
+
   // Filter states
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -666,18 +675,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   }
 
   const handleRunStep = async (campaignId: string, stepId: string, stepName: string, overrideModel?: string) => {
-    // Solo confirmar si no es un retry
-    if (!overrideModel) {
-      const confirmed = await modal.confirm({
-        title: 'Ejecutar paso',
-        message: `¿Ejecutar "${stepName}"? Puede tomar algunos minutos.`,
-        confirmText: 'Ejecutar',
-        cancelText: 'Cancelar',
-        variant: 'info',
-      })
-      if (!confirmed) return
-    }
-
+    // Ya no necesitamos confirmación porque viene del dialog de configuración
     setRunningStep({ campaignId, stepId })
     setRetryDialog(null) // Cerrar diálogo de retry si estaba abierto
 
@@ -1713,7 +1711,13 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                                             </>
                                           )}
                                           <button
-                                            onClick={() => handleRunStep(campaign.id, step.id, step.name)}
+                                            onClick={() => setStepExecutionConfig({
+                                              campaignId: campaign.id,
+                                              stepId: step.id,
+                                              stepName: step.name,
+                                              currentModel: step.model || 'gemini-2.5-flash',
+                                              selectedModel: step.model || 'gemini-2.5-flash',
+                                            })}
                                             disabled={stepRunning || running === campaign.id}
                                             className="px-3 py-1.5 text-xs bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-lg hover:from-orange-700 hover:to-amber-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed font-medium transition-all"
                                           >
@@ -2052,6 +2056,133 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
               <p className="text-xs text-gray-500">
                 Sube documentos desde la pestaña "Documentos" y asígnalos a esta campaña.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step Execution Config Dialog */}
+      {stepExecutionConfig && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-orange-50 to-amber-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                  <Rocket className="text-orange-600" size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Ejecutar paso</h2>
+                  <p className="text-sm text-gray-600">{stepExecutionConfig.stepName}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-5">
+              {/* Current model info */}
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                  <Cpu size={16} />
+                  <span>Modelo configurado:</span>
+                </div>
+                <p className="font-medium text-gray-900">
+                  {LLM_MODELS.find(m => m.value === stepExecutionConfig.currentModel)?.label || stepExecutionConfig.currentModel}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {LLM_MODELS.find(m => m.value === stepExecutionConfig.currentModel)?.provider || 'Desconocido'}
+                </p>
+              </div>
+
+              {/* Model selector */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Cambiar modelo (opcional):
+                </label>
+                <select
+                  value={stepExecutionConfig.selectedModel}
+                  onChange={(e) => setStepExecutionConfig({ ...stepExecutionConfig, selectedModel: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 bg-white"
+                >
+                  <optgroup label="Google (Gemini)">
+                    {LLM_MODELS.filter(m => m.provider === 'Google').map((model) => (
+                      <option key={model.value} value={model.value}>
+                        {model.label} {model.value === stepExecutionConfig.currentModel ? '(actual)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Google Deep Research (Agente Autónomo)">
+                    {LLM_MODELS.filter(m => m.provider === 'Deep Research').map((model) => (
+                      <option key={model.value} value={model.value}>
+                        {model.label} {model.value === stepExecutionConfig.currentModel ? '(actual)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="OpenAI">
+                    {LLM_MODELS.filter(m => m.provider === 'OpenAI').map((model) => (
+                      <option key={model.value} value={model.value}>
+                        {model.label} {model.value === stepExecutionConfig.currentModel ? '(actual)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Anthropic (Claude)">
+                    {LLM_MODELS.filter(m => m.provider === 'Anthropic').map((model) => (
+                      <option key={model.value} value={model.value}>
+                        {model.label} {model.value === stepExecutionConfig.currentModel ? '(actual)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* Deep Research warning */}
+              {stepExecutionConfig.selectedModel.includes('deep-research') && (
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex items-start gap-3">
+                  <Info className="text-purple-600 flex-shrink-0 mt-0.5" size={18} />
+                  <div className="text-sm text-purple-700">
+                    <p className="font-medium">Deep Research</p>
+                    <p className="mt-1">Este modelo es un agente autónomo de investigación. Puede tardar entre 5-10 minutos en completar.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+              <button
+                onClick={() => {
+                  const overrideModel = stepExecutionConfig.selectedModel !== stepExecutionConfig.currentModel
+                    ? stepExecutionConfig.selectedModel
+                    : undefined
+                  setStepExecutionConfig(null)
+                  handleRunStep(
+                    stepExecutionConfig.campaignId,
+                    stepExecutionConfig.stepId,
+                    stepExecutionConfig.stepName,
+                    overrideModel
+                  )
+                }}
+                disabled={runningStep !== null}
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-xl hover:from-orange-700 hover:to-amber-700 font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {runningStep ? (
+                  <>
+                    <RefreshCw size={16} className="animate-spin" />
+                    Ejecutando...
+                  </>
+                ) : (
+                  <>
+                    <Play size={16} />
+                    Ejecutar con {LLM_MODELS.find(m => m.value === stepExecutionConfig.selectedModel)?.label}
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setStepExecutionConfig(null)}
+                className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-white font-medium transition-colors"
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>
