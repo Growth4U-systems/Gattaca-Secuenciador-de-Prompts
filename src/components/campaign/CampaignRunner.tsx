@@ -6,6 +6,7 @@ import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
 import CampaignBulkUpload from './CampaignBulkUpload'
 import CampaignComparison from './CampaignComparison'
+import DeepResearchProgress from './DeepResearchProgress'
 import { FlowConfig, FlowStep, LLMModel } from '@/types/flow.types'
 import { useToast, useModal } from '@/components/ui'
 
@@ -1601,78 +1602,95 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                                   const stepRunning = isStepRunning(campaign.id, step.id)
                                   const stepOutput = campaign.step_outputs?.[step.id]
 
+                                  const isDeepResearchStep = step.model?.includes('deep-research')
+
                                   return (
-                                    <div
-                                      key={step.id}
-                                      className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-                                        stepStatus === 'completed'
-                                          ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
-                                          : stepRunning
-                                          ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
-                                          : 'bg-white border-gray-200 hover:border-gray-300'
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-4">
-                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold ${
+                                    <div key={step.id} className="space-y-2">
+                                      <div
+                                        className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
                                           stepStatus === 'completed'
-                                            ? 'bg-green-600 text-white'
+                                            ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
                                             : stepRunning
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-gray-200 text-gray-600'
-                                        }`}>
-                                          {stepStatus === 'completed' ? (
-                                            <Check size={16} />
-                                          ) : stepRunning ? (
-                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                          ) : (
-                                            step.order
-                                          )}
+                                            ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
+                                            : 'bg-white border-gray-200 hover:border-gray-300'
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-4">
+                                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold ${
+                                            stepStatus === 'completed'
+                                              ? 'bg-green-600 text-white'
+                                              : stepRunning
+                                              ? 'bg-blue-600 text-white'
+                                              : 'bg-gray-200 text-gray-600'
+                                          }`}>
+                                            {stepStatus === 'completed' ? (
+                                              <Check size={16} />
+                                            ) : stepRunning ? (
+                                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            ) : (
+                                              step.order
+                                            )}
+                                          </div>
+                                          <div className="flex flex-col">
+                                            <span className={`text-sm font-medium ${stepStatus === 'completed' ? 'text-green-800' : 'text-gray-700'}`}>
+                                              {step.name}
+                                            </span>
+                                            {isDeepResearchStep && (
+                                              <span className="text-xs text-purple-600">Deep Research</span>
+                                            )}
+                                          </div>
                                         </div>
-                                        <span className={`text-sm font-medium ${stepStatus === 'completed' ? 'text-green-800' : 'text-gray-700'}`}>
-                                          {step.name}
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                          {stepOutput?.output && (
+                                            <>
+                                              <button
+                                                onClick={() => {
+                                                  const { extension, mimeType } = getFileExtensionAndMimeType(step.output_format)
+                                                  const blob = new Blob([stepOutput.output], { type: mimeType })
+                                                  const url = URL.createObjectURL(blob)
+                                                  const a = document.createElement('a')
+                                                  a.href = url
+                                                  a.download = `${campaign.ecp_name.replace(/\s+/g, '_')}_${step.name.replace(/\s+/g, '_')}.${extension}`
+                                                  a.click()
+                                                  URL.revokeObjectURL(url)
+                                                }}
+                                                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                                title="Descargar resultado"
+                                              >
+                                                <Download size={14} />
+                                              </button>
+                                              <button
+                                                onClick={() => setEditingStepOutput({
+                                                  campaignId: campaign.id,
+                                                  campaignName: campaign.ecp_name,
+                                                  stepId: step.id,
+                                                  stepName: step.name,
+                                                  stepOrder: step.order,
+                                                })}
+                                                className="px-3 py-1.5 text-xs bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                                              >
+                                                Ver resultado
+                                              </button>
+                                            </>
+                                          )}
+                                          <button
+                                            onClick={() => handleRunStep(campaign.id, step.id, step.name)}
+                                            disabled={stepRunning || running === campaign.id}
+                                            className="px-3 py-1.5 text-xs bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-lg hover:from-orange-700 hover:to-amber-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed font-medium transition-all"
+                                          >
+                                            {stepRunning ? 'Ejecutando...' : 'Ejecutar'}
+                                          </button>
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-2">
-                                        {stepOutput?.output && (
-                                          <>
-                                            <button
-                                              onClick={() => {
-                                                const { extension, mimeType } = getFileExtensionAndMimeType(step.output_format)
-                                                const blob = new Blob([stepOutput.output], { type: mimeType })
-                                                const url = URL.createObjectURL(blob)
-                                                const a = document.createElement('a')
-                                                a.href = url
-                                                a.download = `${campaign.ecp_name.replace(/\s+/g, '_')}_${step.name.replace(/\s+/g, '_')}.${extension}`
-                                                a.click()
-                                                URL.revokeObjectURL(url)
-                                              }}
-                                              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                                              title="Descargar resultado"
-                                            >
-                                              <Download size={14} />
-                                            </button>
-                                            <button
-                                              onClick={() => setEditingStepOutput({
-                                                campaignId: campaign.id,
-                                                campaignName: campaign.ecp_name,
-                                                stepId: step.id,
-                                                stepName: step.name,
-                                                stepOrder: step.order,
-                                              })}
-                                              className="px-3 py-1.5 text-xs bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 font-medium transition-colors"
-                                            >
-                                              Ver resultado
-                                            </button>
-                                          </>
-                                        )}
-                                        <button
-                                          onClick={() => handleRunStep(campaign.id, step.id, step.name)}
-                                          disabled={stepRunning || running === campaign.id}
-                                          className="px-3 py-1.5 text-xs bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-lg hover:from-orange-700 hover:to-amber-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed font-medium transition-all"
-                                        >
-                                          {stepRunning ? 'Ejecutando...' : 'Ejecutar'}
-                                        </button>
-                                      </div>
+
+                                      {/* Deep Research Progress Visualizer */}
+                                      {stepRunning && isDeepResearchStep && (
+                                        <DeepResearchProgress
+                                          campaignId={campaign.id}
+                                          stepId={step.id}
+                                          stepName={step.name}
+                                        />
+                                      )}
                                     </div>
                                   )
                                 })}

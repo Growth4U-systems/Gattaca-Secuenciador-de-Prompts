@@ -231,7 +231,7 @@ async function callDeepResearch(
   onProgress?: ProgressCallback
 ): Promise<LLMResponse> {
   const POLLING_INTERVAL_MS = 20_000  // 20 segundos entre cada poll
-  const MAX_TIMEOUT_MS = 15 * 60 * 1000  // 15 minutos máximo
+  const MAX_TIMEOUT_MS = 12 * 60 * 1000  // 12 minutos máximo (dentro del límite de Vercel Pro)
 
   // Construir el prompt completo para Deep Research (input debe ser string directo)
   const fullPrompt = `${systemPrompt}\n\n${context}\n\n--- TASK ---\n\n${userPrompt}`
@@ -343,7 +343,7 @@ async function handleInteractionResponse(
   onProgress?: ProgressCallback
 ): Promise<LLMResponse> {
   const POLLING_INTERVAL_MS = 20_000
-  const MAX_TIMEOUT_MS = 15 * 60 * 1000
+  const MAX_TIMEOUT_MS = 12 * 60 * 1000 // 12 minutos para respetar límite Vercel Pro
 
   // Si la respuesta ya tiene el texto completo (síncrono)
   if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
