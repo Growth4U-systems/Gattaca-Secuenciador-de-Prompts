@@ -41,6 +41,13 @@ const LLM_MODELS = [
   { value: 'claude-4.5-haiku', label: 'Claude 4.5 Haiku', provider: 'Anthropic' },
 ]
 
+// Token equivalence helper: 1 token ≈ 0.75 words, 500 words = 1 page
+const getTokenEquivalence = (tokens: number) => {
+  const words = Math.round(tokens * 0.75)
+  const pages = (words / 500).toFixed(1)
+  return { words, pages }
+}
+
 interface CampaignRunnerProps {
   projectId: string
   project?: Project | null
@@ -153,6 +160,10 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     stepName: string
     currentModel: string
     selectedModel: string
+    currentTemperature: number
+    selectedTemperature: number
+    currentMaxTokens: number
+    selectedMaxTokens: number
   } | null>(null)
 
   // Filter states
@@ -674,7 +685,14 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     }
   }
 
-  const handleRunStep = async (campaignId: string, stepId: string, stepName: string, overrideModel?: string) => {
+  const handleRunStep = async (
+    campaignId: string,
+    stepId: string,
+    stepName: string,
+    overrideModel?: string,
+    overrideTemperature?: number,
+    overrideMaxTokens?: number
+  ) => {
     // Ya no necesitamos confirmación porque viene del dialog de configuración
     setRunningStep({ campaignId, stepId })
     setRetryDialog(null) // Cerrar diálogo de retry si estaba abierto
@@ -685,7 +703,13 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ campaignId, stepId, overrideModel }),
+        body: JSON.stringify({
+          campaignId,
+          stepId,
+          overrideModel,
+          overrideTemperature,
+          overrideMaxTokens,
+        }),
       })
 
       const data = await response.json()
@@ -1717,6 +1741,10 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                                               stepName: step.name,
                                               currentModel: step.model || 'gemini-2.5-flash',
                                               selectedModel: step.model || 'gemini-2.5-flash',
+                                              currentTemperature: step.temperature ?? 0.7,
+                                              selectedTemperature: step.temperature ?? 0.7,
+                                              currentMaxTokens: step.max_tokens ?? 8192,
+                                              selectedMaxTokens: step.max_tokens ?? 8192,
                                             })}
                                             disabled={stepRunning || running === campaign.id}
                                             className="px-3 py-1.5 text-xs bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-lg hover:from-orange-700 hover:to-amber-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed font-medium transition-all"
@@ -2135,6 +2163,63 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                 </select>
               </div>
 
+              {/* Temperature and Max Tokens */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Temperature */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Temperature: {stepExecutionConfig.selectedTemperature}
+                    {stepExecutionConfig.selectedTemperature !== stepExecutionConfig.currentTemperature && (
+                      <span className="text-orange-600 ml-1">(modificado)</span>
+                    )}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={stepExecutionConfig.selectedTemperature}
+                    onChange={(e) => setStepExecutionConfig({
+                      ...stepExecutionConfig,
+                      selectedTemperature: parseFloat(e.target.value)
+                    })}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>Preciso</span>
+                    <span>Creativo</span>
+                  </div>
+                </div>
+
+                {/* Max Tokens */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Max Tokens
+                    {stepExecutionConfig.selectedMaxTokens !== stepExecutionConfig.currentMaxTokens && (
+                      <span className="text-orange-600 ml-1">(modificado)</span>
+                    )}
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    max="128000"
+                    step="1000"
+                    value={stepExecutionConfig.selectedMaxTokens}
+                    onChange={(e) => setStepExecutionConfig({
+                      ...stepExecutionConfig,
+                      selectedMaxTokens: parseInt(e.target.value) || 8192
+                    })}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900"
+                  />
+                  <div className="text-xs text-gray-500 mt-1">
+                    {(() => {
+                      const equiv = getTokenEquivalence(stepExecutionConfig.selectedMaxTokens)
+                      return `≈ ${equiv.words.toLocaleString()} palabras (${equiv.pages} páginas)`
+                    })()}
+                  </div>
+                </div>
+              </div>
+
               {/* Deep Research warning */}
               {stepExecutionConfig.selectedModel.includes('deep-research') && (
                 <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex items-start gap-3">
@@ -2154,12 +2239,20 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                   const overrideModel = stepExecutionConfig.selectedModel !== stepExecutionConfig.currentModel
                     ? stepExecutionConfig.selectedModel
                     : undefined
+                  const overrideTemperature = stepExecutionConfig.selectedTemperature !== stepExecutionConfig.currentTemperature
+                    ? stepExecutionConfig.selectedTemperature
+                    : undefined
+                  const overrideMaxTokens = stepExecutionConfig.selectedMaxTokens !== stepExecutionConfig.currentMaxTokens
+                    ? stepExecutionConfig.selectedMaxTokens
+                    : undefined
                   setStepExecutionConfig(null)
                   handleRunStep(
                     stepExecutionConfig.campaignId,
                     stepExecutionConfig.stepId,
                     stepExecutionConfig.stepName,
-                    overrideModel
+                    overrideModel,
+                    overrideTemperature,
+                    overrideMaxTokens
                   )
                 }}
                 disabled={runningStep !== null}

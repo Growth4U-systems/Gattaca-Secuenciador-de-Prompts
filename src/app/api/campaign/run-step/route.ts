@@ -22,10 +22,12 @@ interface FlowStep {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { campaignId, stepId, overrideModel } = body as {
+    const { campaignId, stepId, overrideModel, overrideTemperature, overrideMaxTokens } = body as {
       campaignId: string
       stepId: string
       overrideModel?: string  // Modelo alternativo para retry
+      overrideTemperature?: number  // Temperature override
+      overrideMaxTokens?: number  // Max tokens override
     }
 
     if (!campaignId || !stepId) {
@@ -102,10 +104,13 @@ export async function POST(request: NextRequest) {
     // Call edge function to execute step
     const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/execute-flow-step`
 
-    // Si hay overrideModel, usarlo en lugar del modelo del step
-    const stepConfig = overrideModel
-      ? { ...step, model: overrideModel }
-      : step
+    // Aplicar overrides si están definidos
+    const stepConfig = {
+      ...step,
+      ...(overrideModel && { model: overrideModel }),
+      ...(overrideTemperature !== undefined && { temperature: overrideTemperature }),
+      ...(overrideMaxTokens !== undefined && { max_tokens: overrideMaxTokens }),
+    }
 
     // Timeout largo para Deep Research (puede tardar 10+ minutos)
     const isDeepResearch = stepConfig.model?.includes('deep-research')
