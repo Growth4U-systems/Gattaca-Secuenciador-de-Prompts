@@ -27,6 +27,14 @@ const getTokenEquivalence = (tokens: number) => {
   return { words, pages }
 }
 
+interface StepDocument {
+  id: string
+  filename: string
+  category: string
+  extracted_content?: string
+  token_count?: number
+}
+
 interface StepOutputEditorProps {
   campaignId: string
   campaignName: string
@@ -43,6 +51,7 @@ interface StepOutputEditorProps {
     original_output?: string
   }
   allStepOutputs: Record<string, any>
+  stepDocuments?: StepDocument[]
   onSave: (updatedStepOutputs: Record<string, any>) => void
   onClose: () => void
 }
@@ -88,6 +97,7 @@ export default function StepOutputEditor({
   stepOrder,
   currentOutput,
   allStepOutputs,
+  stepDocuments = [],
   onSave,
   onClose,
 }: StepOutputEditorProps) {
@@ -110,6 +120,7 @@ export default function StepOutputEditor({
   const [aiModel, setAiModel] = useState('gemini-2.5-flash')
   const [aiTemperature, setAiTemperature] = useState(0.7)
   const [aiMaxTokens, setAiMaxTokens] = useState(8192)
+  const [includeDocsInAi, setIncludeDocsInAi] = useState(true)
 
   // View mode states
   const [isCompactHeader, setIsCompactHeader] = useState(false)
@@ -160,6 +171,15 @@ export default function StepOutputEditor({
 
     setIsGenerating(true)
     try {
+      // Prepare documents context if enabled and available
+      const documentsContext = includeDocsInAi && stepDocuments.length > 0
+        ? stepDocuments.map(doc => ({
+            filename: doc.filename,
+            category: doc.category,
+            content: doc.extracted_content || '',
+          }))
+        : undefined
+
       const response = await fetch('/api/campaign/suggest-edit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -172,6 +192,7 @@ export default function StepOutputEditor({
           model: aiModel,
           temperature: aiTemperature,
           maxTokens: aiMaxTokens,
+          documents: documentsContext,
         }),
       })
 
@@ -560,6 +581,32 @@ export default function StepOutputEditor({
                     })()}
                   </div>
                 </div>
+              </div>
+
+              {/* Documents Context Toggle */}
+              <div className="pt-3 border-t border-gray-100">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeDocsInAi}
+                    onChange={(e) => setIncludeDocsInAi(e.target.checked)}
+                    className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-700">
+                      Incluir documentos de contexto
+                    </span>
+                    {stepDocuments.length > 0 ? (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {stepDocuments.length} documento{stepDocuments.length !== 1 ? 's' : ''} disponible{stepDocuments.length !== 1 ? 's' : ''}: {stepDocuments.map(d => d.filename).join(', ')}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        No hay documentos asignados a este paso
+                      </p>
+                    )}
+                  </div>
+                </label>
               </div>
             </div>
           )}

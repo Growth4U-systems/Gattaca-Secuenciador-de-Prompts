@@ -10,7 +10,7 @@ export const maxDuration = 60
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { currentOutput, instruction, stepName, campaignName, selectedText, model, temperature, maxTokens } = body as {
+    const { currentOutput, instruction, stepName, campaignName, selectedText, model, temperature, maxTokens, documents } = body as {
       currentOutput: string
       instruction: string
       stepName: string
@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
       model?: string
       temperature?: number
       maxTokens?: number
+      documents?: Array<{ filename: string; category: string; content: string }>
     }
 
     if (!currentOutput || !instruction) {
@@ -37,9 +38,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Build documents context section if documents are provided
+    let documentsContext = ''
+    if (documents && documents.length > 0) {
+      documentsContext = `\n\nDOCUMENTOS DE REFERENCIA (usa esta información para mejorar y verificar el contenido):
+${documents.map((doc, i) => `
+--- DOCUMENTO ${i + 1}: ${doc.filename} (${doc.category}) ---
+${doc.content}
+--- FIN DOCUMENTO ${i + 1} ---`).join('\n')}`
+    }
+
     // Build system prompt based on whether there's a selection
     let systemPrompt: string
     let userPrompt: string
+
+    const hasDocsContext = documents && documents.length > 0
+    const docsInstructions = hasDocsContext
+      ? `\n10. Tienes acceso a DOCUMENTOS DE REFERENCIA - úsalos para verificar datos, agregar información relevante y asegurar precisión
+11. Puedes citar o referenciar información de los documentos si es pertinente
+12. Si el usuario pide agregar datos específicos, busca primero en los documentos de referencia`
+      : ''
 
     if (selectedText) {
       // Focused edit on selection
@@ -52,7 +70,7 @@ REGLAS CRÍTICAS:
 3. Preserva el formato markdown del documento original
 4. No cambies encabezados, listas, tablas o estructura que no estén en la selección
 5. Devuelve el documento COMPLETO con solo la sección seleccionada modificada
-6. El cambio debe integrarse naturalmente con el resto del texto`
+6. El cambio debe integrarse naturalmente con el resto del texto${docsInstructions}`
 
       userPrompt = `DOCUMENTO COMPLETO (${stepName} - ${campaignName}):
 ---
@@ -63,6 +81,7 @@ TEXTO SELECCIONADO POR EL USUARIO (solo modifica esta parte):
 ---
 ${selectedText}
 ---
+${documentsContext}
 
 INSTRUCCIÓN DEL USUARIO:
 ${instruction}
@@ -82,12 +101,13 @@ REGLAS IMPORTANTES:
 6. Si el usuario pide eliminar algo, hazlo sin dejar huecos extraños
 7. Devuelve el documento COMPLETO con los cambios aplicados
 8. NO cambies formato de encabezados (## debe seguir siendo ##)
-9. NO elimines secciones enteras a menos que se pida explícitamente`
+9. NO elimines secciones enteras a menos que se pida explícitamente${docsInstructions}`
 
       userPrompt = `DOCUMENTO ACTUAL (${stepName} - ${campaignName}):
 ---
 ${currentOutput}
 ---
+${documentsContext}
 
 INSTRUCCIÓN DEL USUARIO:
 ${instruction}

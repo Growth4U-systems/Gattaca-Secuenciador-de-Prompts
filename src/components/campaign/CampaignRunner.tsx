@@ -128,6 +128,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     stepId: string
     stepName: string
     stepOrder: number
+    baseDocIds: string[]
   } | null>(null)
   const [downloadFormatMenu, setDownloadFormatMenu] = useState<string | null>(null)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
@@ -1727,6 +1728,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                                                   stepId: step.id,
                                                   stepName: step.name,
                                                   stepOrder: step.order,
+                                                  baseDocIds: step.base_doc_ids || [],
                                                 })}
                                                 className="px-3 py-1.5 text-xs bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 font-medium transition-colors"
                                               >
@@ -1993,6 +1995,11 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
 
         if (!campaign || !stepOutput) return null
 
+        // Filter documents that belong to this step
+        const stepDocuments = documents.filter(doc =>
+          editingStepOutput.baseDocIds.includes(doc.id)
+        )
+
         return (
           <StepOutputEditor
             campaignId={editingStepOutput.campaignId}
@@ -2002,6 +2009,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             stepOrder={editingStepOutput.stepOrder}
             currentOutput={stepOutput}
             allStepOutputs={campaign.step_outputs || {}}
+            stepDocuments={stepDocuments}
             onSave={(updatedStepOutputs) => {
               setCampaigns(prev => prev.map(c =>
                 c.id === editingStepOutput.campaignId
