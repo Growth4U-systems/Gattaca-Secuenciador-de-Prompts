@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { FileText, Trash2, Eye, Link2, Search, Filter, FolderOpen, X } from 'lucide-react'
+import { FileText, Trash2, Eye, Link2, Search, Filter, FolderOpen, X, Edit2, Check, Loader2 } from 'lucide-react'
 import { DocCategory } from '@/types/database.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { useModal } from '@/components/ui'
@@ -28,6 +28,7 @@ interface DocumentListProps {
   onDelete: (id: string) => void
   onView: (doc: Document) => void
   onCampaignChange?: (docId: string, campaignId: string | null) => void
+  onRename?: (docId: string, newName: string) => Promise<void>
 }
 
 const CATEGORY_STYLES: Record<string, { bg: string; text: string; icon: string }> = {
@@ -43,6 +44,7 @@ export default function DocumentList({
   onDelete,
   onView,
   onCampaignChange,
+  onRename,
 }: DocumentListProps) {
   const modal = useModal()
 
@@ -51,6 +53,11 @@ export default function DocumentList({
   const [searchInContent, setSearchInContent] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'global' | 'assigned'>('all')
+
+  // State for inline editing
+  const [editingDocId, setEditingDocId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+  const [savingName, setSavingName] = useState(false)
 
   // Get unique categories
   const categories = useMemo(() => {
@@ -108,6 +115,44 @@ export default function DocumentList({
       await onCampaignChange(docId, campaignId === '' ? null : campaignId)
     } finally {
       setUpdatingDoc(null)
+    }
+  }
+
+  // Handle starting the edit mode
+  const handleStartEdit = (doc: Document) => {
+    setEditingDocId(doc.id)
+    setEditingName(doc.filename)
+  }
+
+  // Handle canceling the edit
+  const handleCancelEdit = () => {
+    setEditingDocId(null)
+    setEditingName('')
+  }
+
+  // Handle saving the new name
+  const handleSaveName = async (docId: string) => {
+    if (!onRename || !editingName.trim()) return
+
+    setSavingName(true)
+    try {
+      await onRename(docId, editingName.trim())
+      setEditingDocId(null)
+      setEditingName('')
+    } catch (error) {
+      console.error('Error renaming document:', error)
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  // Handle key press in the edit input
+  const handleEditKeyDown = (e: React.KeyboardEvent, docId: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSaveName(docId)
+    } else if (e.key === 'Escape') {
+      handleCancelEdit()
     }
   }
 
@@ -274,9 +319,57 @@ export default function DocumentList({
                       <FileText size={18} className="text-gray-500 group-hover:text-blue-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-gray-900 truncate group-hover:text-blue-600 transition-colors">
-                        {doc.filename}
-                      </h3>
+                      {editingDocId === doc.id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            onKeyDown={(e) => handleEditKeyDown(e, doc.id)}
+                            className="flex-1 px-3 py-1.5 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                            autoFocus
+                            disabled={savingName}
+                          />
+                          <button
+                            onClick={() => handleSaveName(doc.id)}
+                            disabled={savingName || !editingName.trim()}
+                            className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Guardar"
+                          >
+                            {savingName ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <Check size={16} />
+                            )}
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            disabled={savingName}
+                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+                            title="Cancelar"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                            {doc.filename}
+                          </h3>
+                          {onRename && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleStartEdit(doc)
+                              }}
+                              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded opacity-0 group-hover:opacity-100 transition-all"
+                              title="Editar nombre"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      )}
                       <div className="flex items-center flex-wrap gap-2 mt-1">
                         {getCategoryBadge(doc.category)}
                         {doc.token_count && (

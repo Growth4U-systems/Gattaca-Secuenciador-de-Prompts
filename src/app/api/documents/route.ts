@@ -63,13 +63,13 @@ export async function GET(request: NextRequest) {
 
 /**
  * PATCH /api/documents
- * Update document campaign assignment
- * Body: { documentId: string, campaignId: string | null }
+ * Update document properties (campaign assignment, filename)
+ * Body: { documentId: string, campaignId?: string | null, filename?: string }
  */
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { documentId, campaignId } = body
+    const { documentId, campaignId, filename } = body
 
     if (!documentId) {
       return NextResponse.json(
@@ -84,9 +84,37 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Build update object based on provided fields
+    const updateData: Record<string, unknown> = {}
+
+    // Only include campaignId if it was explicitly provided in the request
+    if ('campaignId' in body) {
+      updateData.campaign_id = campaignId || null
+    }
+
+    // Only include filename if provided and not empty
+    if (filename !== undefined) {
+      const trimmedFilename = filename.trim()
+      if (!trimmedFilename) {
+        return NextResponse.json(
+          { error: 'El nombre del documento no puede estar vacío' },
+          { status: 400 }
+        )
+      }
+      updateData.filename = trimmedFilename
+    }
+
+    // Check if there's anything to update
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { error: 'No fields to update' },
+        { status: 400 }
+      )
+    }
+
     const { data: document, error } = await supabase
       .from('knowledge_base_docs')
-      .update({ campaign_id: campaignId || null })
+      .update(updateData)
       .eq('id', documentId)
       .select()
       .single()

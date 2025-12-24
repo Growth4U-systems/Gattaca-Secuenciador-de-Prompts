@@ -485,6 +485,30 @@ function DocumentsTab({
     }
   }
 
+  const handleRename = async (docId: string, newName: string) => {
+    try {
+      const response = await fetch('/api/documents', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ documentId: docId, filename: newName }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        toast.success('Renombrado', 'Nombre del documento actualizado')
+        onReload()
+      } else {
+        let errorMsg = data.error || 'Failed to rename'
+        if (data.details) errorMsg += ` - ${data.details}`
+        throw new Error(errorMsg)
+      }
+    } catch (error) {
+      toast.error('Error al renombrar', error instanceof Error ? error.message : 'Error desconocido')
+      throw error // Re-throw to let DocumentList handle the state
+    }
+  }
+
   const tokenBreakdown = documents.map(doc => ({
     label: doc.filename,
     tokens: doc.token_count || 0,
@@ -560,6 +584,7 @@ function DocumentsTab({
           onDelete={handleDelete}
           onView={setViewingDoc}
           onCampaignChange={handleCampaignChange}
+          onRename={handleRename}
         />
       )}
 

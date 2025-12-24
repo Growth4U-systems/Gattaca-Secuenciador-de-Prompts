@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { X, Eye, Code, Copy, Check, FileText, ArrowRight, Hash, MessageSquare, Sparkles, Info, Cpu } from 'lucide-react'
+import { X, Eye, Code, Copy, Check, FileText, ArrowRight, Hash, MessageSquare, Sparkles, Info, Cpu, Search } from 'lucide-react'
 import { FlowStep, OutputFormat, LLMModel } from '@/types/flow.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { usePromptValidator } from '@/hooks/usePromptValidator'
@@ -69,6 +69,7 @@ export default function StepEditor({
   const [editedStep, setEditedStep] = useState<FlowStep>({ ...step })
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
+  const [docSearchQuery, setDocSearchQuery] = useState('')
   const [showRealValues, setShowRealValues] = useState(false)
   const [copied, setCopied] = useState(false)
   const [hoveredDoc, setHoveredDoc] = useState<any | null>(null)
@@ -261,21 +262,32 @@ export default function StepEditor({
   // Previous steps (lower order) that can be dependencies
   const availablePrevSteps = allSteps.filter((s) => s.order < step.order)
 
-  // Filter documents by category and assignment status
-  const filteredDocs = documents.filter((doc) => {
-    // Category filter
-    if (categoryFilter !== 'all' && doc.category !== categoryFilter) {
-      return false
-    }
-    // Assignment filter
-    if (assignmentFilter === 'assigned' && !editedStep.base_doc_ids.includes(doc.id)) {
-      return false
-    }
-    if (assignmentFilter === 'unassigned' && editedStep.base_doc_ids.includes(doc.id)) {
-      return false
-    }
-    return true
-  })
+  // Filter documents by search query, category and assignment status
+  const filteredDocs = useMemo(() => {
+    return documents.filter((doc) => {
+      // Search filter
+      if (docSearchQuery) {
+        const query = docSearchQuery.toLowerCase()
+        const matchesFilename = doc.filename.toLowerCase().includes(query)
+        const matchesContent = doc.extracted_content?.toLowerCase().includes(query)
+        if (!matchesFilename && !matchesContent) {
+          return false
+        }
+      }
+      // Category filter
+      if (categoryFilter !== 'all' && doc.category !== categoryFilter) {
+        return false
+      }
+      // Assignment filter
+      if (assignmentFilter === 'assigned' && !editedStep.base_doc_ids.includes(doc.id)) {
+        return false
+      }
+      if (assignmentFilter === 'unassigned' && editedStep.base_doc_ids.includes(doc.id)) {
+        return false
+      }
+      return true
+    })
+  }, [documents, docSearchQuery, categoryFilter, assignmentFilter, editedStep.base_doc_ids])
 
   // Get unique categories from all documents
   const categories = Array.from(new Set(documents.map((doc) => doc.category))).sort()
@@ -399,6 +411,27 @@ export default function StepEditor({
               Documentos Base
             </h3>
 
+            {/* Search Input */}
+            <div className="relative mb-4">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={docSearchQuery}
+                onChange={(e) => setDocSearchQuery(e.target.value)}
+                placeholder="Buscar documentos por nombre o contenido..."
+                className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
+              />
+              {docSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setDocSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
             {/* Filters Row */}
             <div className="flex flex-wrap items-center gap-3 mb-4">
               {/* Category Filter */}
@@ -444,6 +477,13 @@ export default function StepEditor({
                   </button>
                 ))}
               </div>
+
+              {/* Search results counter */}
+              {docSearchQuery && (
+                <span className="text-xs text-blue-600 ml-auto">
+                  {filteredDocs.length} resultado{filteredDocs.length !== 1 ? 's' : ''}
+                </span>
+              )}
             </div>
 
             {documents.length === 0 ? (
@@ -455,9 +495,24 @@ export default function StepEditor({
               </div>
             ) : filteredDocs.length === 0 ? (
               <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                <Search size={24} className="mx-auto mb-2 text-gray-300" />
                 <p className="text-sm text-gray-500 italic">
-                  No hay documentos con estos filtros
+                  No hay documentos que coincidan
+                  {docSearchQuery && ` con "${docSearchQuery}"`}
                 </p>
+                {(docSearchQuery || categoryFilter !== 'all' || assignmentFilter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDocSearchQuery('')
+                      setCategoryFilter('all')
+                      setAssignmentFilter('all')
+                    }}
+                    className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
               </div>
             ) : (
               <>
