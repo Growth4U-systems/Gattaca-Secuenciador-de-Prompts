@@ -10,12 +10,15 @@ export const maxDuration = 60
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { currentOutput, instruction, stepName, campaignName, selectedText } = body as {
+    const { currentOutput, instruction, stepName, campaignName, selectedText, model, temperature, maxTokens } = body as {
       currentOutput: string
       instruction: string
       stepName: string
       campaignName: string
       selectedText?: string
+      model?: string
+      temperature?: number
+      maxTokens?: number
     }
 
     if (!currentOutput || !instruction) {
@@ -92,8 +95,13 @@ ${instruction}
 Por favor, aplica los cambios solicitados y devuelve el documento completo modificado.`
     }
 
+    // Use provided model or default to gemini-2.5-flash
+    const selectedModel = model || 'gemini-2.5-flash'
+    const selectedTemperature = temperature ?? 0.3 // Lower default for predictable edits
+    const selectedMaxTokens = maxTokens ?? 8192
+
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -107,8 +115,8 @@ Por favor, aplica los cambios solicitados y devuelve el documento completo modif
             },
           ],
           generationConfig: {
-            temperature: 0.3, // Lower temperature for more predictable edits
-            maxOutputTokens: 8192,
+            temperature: selectedTemperature,
+            maxOutputTokens: selectedMaxTokens,
           },
         }),
       }
