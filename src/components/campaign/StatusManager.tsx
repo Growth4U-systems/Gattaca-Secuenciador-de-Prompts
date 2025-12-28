@@ -19,14 +19,14 @@ interface StatusManagerProps {
 }
 
 const COLOR_OPTIONS = [
-  { value: 'gray', label: 'Gris', bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-300' },
-  { value: 'blue', label: 'Azul', bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-300' },
-  { value: 'yellow', label: 'Amarillo', bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-300' },
-  { value: 'green', label: 'Verde', bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-300' },
-  { value: 'red', label: 'Rojo', bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300' },
-  { value: 'purple', label: 'Morado', bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-300' },
-  { value: 'orange', label: 'Naranja', bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-300' },
-  { value: 'pink', label: 'Rosa', bg: 'bg-pink-100', text: 'text-pink-700', border: 'border-pink-300' },
+  { value: 'gray', label: 'Gris', bg: '#f3f4f6', text: '#374151', border: '#d1d5db' },
+  { value: 'blue', label: 'Azul', bg: '#dbeafe', text: '#1d4ed8', border: '#93c5fd' },
+  { value: 'yellow', label: 'Amarillo', bg: '#fef3c7', text: '#b45309', border: '#fcd34d' },
+  { value: 'green', label: 'Verde', bg: '#d1fae5', text: '#047857', border: '#6ee7b7' },
+  { value: 'red', label: 'Rojo', bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5' },
+  { value: 'purple', label: 'Morado', bg: '#ede9fe', text: '#6d28d9', border: '#c4b5fd' },
+  { value: 'orange', label: 'Naranja', bg: '#ffedd5', text: '#c2410c', border: '#fdba74' },
+  { value: 'pink', label: 'Rosa', bg: '#fce7f3', text: '#be185d', border: '#f9a8d4' },
 ] as const
 
 const ICON_OPTIONS = [

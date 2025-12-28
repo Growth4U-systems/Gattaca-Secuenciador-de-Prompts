@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight, Sparkles, Zap, Cpu, Pause, Star } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
@@ -137,7 +137,10 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   const [showComparison, setShowComparison] = useState(false)
 
   // Status management state
-  const [statusDropdownOpen, setStatusDropdownOpen] = useState<string | null>(null)
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState<{
+    campaignId: string
+    position: { top: number; left: number }
+  } | null>(null)
   const [showStatusManager, setShowStatusManager] = useState(false)
 
   // Retry dialog state
@@ -1559,53 +1562,41 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                       </div>
 
                       {/* Status Badge - Clickable Dropdown */}
-                      <div className="relative" onClick={e => e.stopPropagation()}>
-                        <button
-                          onClick={() => setStatusDropdownOpen(statusDropdownOpen === campaign.id ? null : campaign.id)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-medium inline-flex items-center gap-1.5 ${statusConfig.bg} ${statusConfig.text} hover:opacity-80 transition-opacity cursor-pointer`}
-                          title="Click para cambiar status"
-                        >
-                          <StatusIcon size={14} className={statusConfig.iconColor} />
-                          {statusConfig.label}
-                          <ChevronDown size={12} className={`transition-transform ${statusDropdownOpen === campaign.id ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        {/* Status Dropdown */}
-                        {statusDropdownOpen === campaign.id && (
-                          <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-30 min-w-[180px] py-1 overflow-hidden">
-                            {getCustomStatuses().map(status => {
-                              const colors = getStatusColors(status.color)
-                              const Icon = getStatusIcon(status.icon)
-                              const isSelected = campaign.status === status.id
-                              return (
-                                <button
-                                  key={status.id}
-                                  onClick={() => handleUpdateCampaignStatus(campaign.id, status.id)}
-                                  className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-gray-50 ${isSelected ? 'bg-gray-100' : ''}`}
-                                >
-                                  <div className={`p-1 rounded ${colors.bg}`}>
-                                    <Icon size={12} className={colors.text} />
-                                  </div>
-                                  <span className={`flex-1 ${colors.text} font-medium`}>{status.name}</span>
-                                  {isSelected && <Check size={14} className="text-green-600" />}
-                                </button>
-                              )
-                            })}
-                            <div className="border-t border-gray-100 mt-1 pt-1">
-                              <button
-                                onClick={() => {
+                      {(() => {
+                        const statusColors = getStatusColors(campaign.status)
+                        const isDropdownOpen = statusDropdownOpen?.campaignId === campaign.id
+                        return (
+                          <div className="relative" onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={(e) => {
+                                if (isDropdownOpen) {
                                   setStatusDropdownOpen(null)
-                                  setShowStatusManager(true)
-                                }}
-                                className="w-full px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-2"
-                              >
-                                <Settings size={14} />
-                                Gestionar status...
-                              </button>
-                            </div>
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect()
+                                  setStatusDropdownOpen({
+                                    campaignId: campaign.id,
+                                    position: {
+                                      top: rect.bottom + 4,
+                                      left: rect.right - 200, // Align right edge
+                                    }
+                                  })
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-xl text-xs font-medium inline-flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer border"
+                              style={{
+                                backgroundColor: statusColors.bg,
+                                color: statusColors.text,
+                                borderColor: statusColors.border,
+                              }}
+                              title="Click para cambiar status"
+                            >
+                              <StatusIcon size={14} />
+                              {statusConfig.label}
+                              <ChevronDown size={12} className={`transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                            </button>
                           </div>
-                        )}
-                      </div>
+                        )
+                      })()}
 
                       {/* Quick Actions */}
                       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -2536,6 +2527,66 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             </div>
           </div>
         </div>
+      )}
+
+      {/* Status Dropdown Portal - Renders on top of everything */}
+      {statusDropdownOpen && (
+        <>
+          {/* Backdrop to close dropdown */}
+          <div
+            className="fixed inset-0"
+            style={{ zIndex: 9998 }}
+            onClick={() => setStatusDropdownOpen(null)}
+          />
+          {/* Dropdown menu */}
+          <div
+            className="fixed bg-white border border-gray-200 rounded-xl shadow-2xl w-[220px] py-1 overflow-hidden"
+            style={{
+              zIndex: 9999,
+              top: statusDropdownOpen.position.top,
+              left: Math.max(10, statusDropdownOpen.position.left),
+            }}
+          >
+            {getCustomStatuses().map(status => {
+              const colors = getStatusColors(status.color)
+              const Icon = getStatusIcon(status.icon)
+              const currentCampaign = campaigns.find(c => c.id === statusDropdownOpen.campaignId)
+              const isSelected = currentCampaign?.status === status.id
+              return (
+                <button
+                  key={status.id}
+                  onClick={() => handleUpdateCampaignStatus(statusDropdownOpen.campaignId, status.id)}
+                  className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}
+                >
+                  <div
+                    className="p-1.5 rounded-lg"
+                    style={{ backgroundColor: colors.bg, border: `1px solid ${colors.border}` }}
+                  >
+                    <Icon size={14} style={{ color: colors.text }} />
+                  </div>
+                  <span className="flex-1 font-medium" style={{ color: colors.text }}>
+                    {status.name}
+                  </span>
+                  {isSelected && <Check size={14} className="text-blue-600" />}
+                </button>
+              )
+            })}
+            <div className="border-t border-gray-100 mt-1 pt-1">
+              <button
+                onClick={() => {
+                  setStatusDropdownOpen(null)
+                  setShowStatusManager(true)
+                }}
+                className="w-full px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-3"
+              >
+                <div className="p-1.5 rounded-lg bg-gray-100">
+                  <Settings size={14} className="text-gray-600" />
+                </div>
+                Gestionar status...
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Status Manager Modal */}
