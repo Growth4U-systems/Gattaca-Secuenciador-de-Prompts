@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight, Sparkles, Zap, Cpu } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight, Sparkles, Zap, Cpu, Pause, Star } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
 import CampaignBulkUpload from './CampaignBulkUpload'
 import CampaignComparison from './CampaignComparison'
 import DeepResearchProgress from './DeepResearchProgress'
+import StatusManager, { CustomStatus, DEFAULT_STATUSES, getStatusIcon, getStatusColors } from './StatusManager'
 import { FlowConfig, FlowStep, LLMModel } from '@/types/flow.types'
 import { useToast, useModal } from '@/components/ui'
 
@@ -133,6 +134,10 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   const [downloadFormatMenu, setDownloadFormatMenu] = useState<string | null>(null)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
+
+  // Status management state
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState<string | null>(null)
+  const [showStatusManager, setShowStatusManager] = useState(false)
 
   // Retry dialog state
   const [retryDialog, setRetryDialog] = useState<{
@@ -610,6 +615,61 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     }
   }
 
+  // Get custom statuses from project or use defaults
+  const getCustomStatuses = (): CustomStatus[] => {
+    if (project?.custom_statuses && Array.isArray(project.custom_statuses) && project.custom_statuses.length > 0) {
+      return project.custom_statuses as CustomStatus[]
+    }
+    return DEFAULT_STATUSES
+  }
+
+  // Update campaign status
+  const handleUpdateCampaignStatus = async (campaignId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/campaign/${campaignId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setCampaigns(prev => prev.map(c =>
+          c.id === campaignId ? { ...c, status: newStatus } : c
+        ))
+        toast.success('Status actualizado', `Campaña marcada como "${getCustomStatuses().find(s => s.id === newStatus)?.name || newStatus}"`)
+      } else {
+        throw new Error(data.error || 'Failed to update status')
+      }
+    } catch (error) {
+      console.error('Error updating campaign status:', error)
+      toast.error('Error', error instanceof Error ? error.message : 'Error desconocido')
+    } finally {
+      setStatusDropdownOpen(null)
+    }
+  }
+
+  // Save custom statuses to project
+  const handleSaveCustomStatuses = async (statuses: CustomStatus[]) => {
+    if (!project) return
+
+    const response = await fetch(`/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ custom_statuses: statuses }),
+    })
+
+    const data = await response.json()
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to save statuses')
+    }
+
+    // Update local project state
+    setProject({ ...project, custom_statuses: statuses } as any)
+  }
+
   const handleRunCampaign = async (campaignId: string) => {
     const confirmed = await modal.confirm({
       title: 'Ejecutar campaña',
@@ -798,6 +858,24 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   }
 
   const getStatusConfig = (status: string) => {
+    // Try to find custom status from project
+    const customStatuses = getCustomStatuses()
+    const customStatus = customStatuses.find(s => s.id === status)
+
+    if (customStatus) {
+      const colorConfig = getStatusColors(customStatus.color)
+      const IconComponent = getStatusIcon(customStatus.icon)
+      return {
+        icon: IconComponent,
+        bg: colorConfig.bg,
+        border: `border ${colorConfig.border}`,
+        text: colorConfig.text,
+        iconColor: colorConfig.text,
+        label: customStatus.name,
+      }
+    }
+
+    // Fallback for legacy statuses
     switch (status) {
       case 'completed':
         return {
@@ -817,6 +895,15 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
           iconColor: 'text-red-500',
           label: 'Error',
         }
+      case 'running':
+        return {
+          icon: Play,
+          bg: 'bg-gradient-to-r from-blue-50 to-indigo-50',
+          border: 'border-blue-200',
+          text: 'text-blue-700',
+          iconColor: 'text-blue-500',
+          label: 'En ejecucion',
+        }
       default:
         return {
           icon: Clock,
@@ -824,7 +911,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
           border: 'border-gray-200',
           text: 'text-gray-600',
           iconColor: 'text-gray-400',
-          label: 'Lista para ejecutar',
+          label: 'Borrador',
         }
     }
   }
@@ -1470,13 +1557,53 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                         <p className="text-xs text-gray-500 text-center mt-1.5 font-medium">{progress}%</p>
                       </div>
 
-                      {/* Status Badge */}
-                      <div
-                        className={`px-3 py-1.5 rounded-xl text-xs font-medium inline-flex items-center gap-1.5 ${statusConfig.bg} ${statusConfig.text}`}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <StatusIcon size={14} className={statusConfig.iconColor} />
-                        {statusConfig.label}
+                      {/* Status Badge - Clickable Dropdown */}
+                      <div className="relative" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => setStatusDropdownOpen(statusDropdownOpen === campaign.id ? null : campaign.id)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-medium inline-flex items-center gap-1.5 ${statusConfig.bg} ${statusConfig.text} hover:opacity-80 transition-opacity cursor-pointer`}
+                          title="Click para cambiar status"
+                        >
+                          <StatusIcon size={14} className={statusConfig.iconColor} />
+                          {statusConfig.label}
+                          <ChevronDown size={12} className={`transition-transform ${statusDropdownOpen === campaign.id ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {/* Status Dropdown */}
+                        {statusDropdownOpen === campaign.id && (
+                          <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-30 min-w-[180px] py-1 overflow-hidden">
+                            {getCustomStatuses().map(status => {
+                              const colors = getStatusColors(status.color)
+                              const Icon = getStatusIcon(status.icon)
+                              const isSelected = campaign.status === status.id
+                              return (
+                                <button
+                                  key={status.id}
+                                  onClick={() => handleUpdateCampaignStatus(campaign.id, status.id)}
+                                  className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-gray-50 ${isSelected ? 'bg-gray-100' : ''}`}
+                                >
+                                  <div className={`p-1 rounded ${colors.bg}`}>
+                                    <Icon size={12} className={colors.text} />
+                                  </div>
+                                  <span className={`flex-1 ${colors.text} font-medium`}>{status.name}</span>
+                                  {isSelected && <Check size={14} className="text-green-600" />}
+                                </button>
+                              )
+                            })}
+                            <div className="border-t border-gray-100 mt-1 pt-1">
+                              <button
+                                onClick={() => {
+                                  setStatusDropdownOpen(null)
+                                  setShowStatusManager(true)
+                                }}
+                                className="w-full px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-2"
+                              >
+                                <Settings size={14} />
+                                Gestionar status...
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Quick Actions */}
@@ -2408,6 +2535,15 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             </div>
           </div>
         </div>
+      )}
+
+      {/* Status Manager Modal */}
+      {showStatusManager && (
+        <StatusManager
+          statuses={getCustomStatuses()}
+          onSave={handleSaveCustomStatuses}
+          onClose={() => setShowStatusManager(false)}
+        />
       )}
     </div>
   )

@@ -35,7 +35,7 @@ export async function GET(
     // RLS automatically filters by user_id
     const { data: project, error } = await supabase
       .from('projects')
-      .select('id, name, variable_definitions, flow_config, deep_research_prompts, campaign_docs_guide')
+      .select('id, name, variable_definitions, flow_config, deep_research_prompts, campaign_docs_guide, custom_statuses')
       .eq('id', projectId)
       .single()
 
