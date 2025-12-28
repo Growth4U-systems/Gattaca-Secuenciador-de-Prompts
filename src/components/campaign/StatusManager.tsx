@@ -175,7 +175,7 @@ export default function StatusManager({ statuses, onSave, onClose }: StatusManag
 
         {/* Status List */}
         <div className="p-5 overflow-y-auto max-h-[calc(85vh-200px)]">
-          <div className="space-y-2">
+          <div className="space-y-3">
             {localStatuses.map((status) => {
               const colorConfig = getStatusColors(status.color)
               const IconComponent = getStatusIcon(status.icon)
@@ -183,30 +183,28 @@ export default function StatusManager({ statuses, onSave, onClose }: StatusManag
               return (
                 <div
                   key={status.id}
-                  className={`flex items-center gap-3 p-3 rounded-lg border ${colorConfig.border} ${colorConfig.bg}`}
+                  className="flex items-center gap-3 p-4 rounded-xl border-2 bg-white shadow-sm"
+                  style={{ borderColor: colorConfig.border }}
                 >
-                  <GripVertical className="w-4 h-4 text-gray-400 cursor-grab" />
+                  <GripVertical className="w-4 h-4 text-gray-400 cursor-grab flex-shrink-0" />
 
-                  {/* Icon Selector */}
-                  <select
-                    value={status.icon}
-                    onChange={(e) => handleEditStatus(status.id, 'icon', e.target.value)}
-                    className="p-1.5 rounded border border-gray-200 bg-white text-sm"
+                  {/* Icon Preview */}
+                  <div
+                    className="p-2 rounded-lg flex-shrink-0"
+                    style={{ backgroundColor: colorConfig.bg }}
                   >
-                    {ICON_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+                    <IconComponent size={18} style={{ color: colorConfig.text }} />
+                  </div>
 
                   {/* Name */}
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     {editingId === status.id ? (
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
                           value={editingName}
                           onChange={(e) => setEditingName(e.target.value)}
-                          className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                          className="flex-1 px-3 py-1.5 text-sm border-2 border-orange-400 rounded-lg focus:outline-none focus:border-orange-500"
                           autoFocus
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') saveEditing(status.id)
@@ -215,34 +213,44 @@ export default function StatusManager({ statuses, onSave, onClose }: StatusManag
                         />
                         <button
                           onClick={() => saveEditing(status.id)}
-                          className="p-1 bg-green-600 text-white rounded hover:bg-green-700"
+                          className="p-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700"
                         >
-                          <Check size={14} />
+                          <Check size={16} />
                         </button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <span className={`text-sm font-medium ${colorConfig.text}`}>
+                        <span
+                          className="text-sm font-semibold"
+                          style={{ color: colorConfig.text }}
+                        >
                           {status.name}
                         </span>
                         {status.isDefault && (
-                          <span className="text-xs bg-white/50 px-1.5 py-0.5 rounded">Por defecto</span>
+                          <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">
+                            Por defecto
+                          </span>
                         )}
-                        <button
-                          onClick={() => startEditing(status.id, status.name)}
-                          className="p-1 hover:bg-white/50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Edit2 size={12} className="text-gray-500" />
-                        </button>
                       </div>
                     )}
                   </div>
+
+                  {/* Icon Selector */}
+                  <select
+                    value={status.icon}
+                    onChange={(e) => handleEditStatus(status.id, 'icon', e.target.value)}
+                    className="px-2 py-1.5 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  >
+                    {ICON_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
 
                   {/* Color Selector */}
                   <select
                     value={status.color}
                     onChange={(e) => handleEditStatus(status.id, 'color', e.target.value)}
-                    className="p-1.5 rounded border border-gray-200 bg-white text-sm"
+                    className="px-2 py-1.5 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-orange-400"
                   >
                     {COLOR_OPTIONS.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -250,30 +258,30 @@ export default function StatusManager({ statuses, onSave, onClose }: StatusManag
                   </select>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     {!status.isDefault && (
                       <button
                         onClick={() => handleSetDefault(status.id)}
-                        className="p-1.5 hover:bg-white/50 rounded text-gray-500 hover:text-yellow-600 transition-colors"
+                        className="p-2 hover:bg-yellow-100 rounded-lg text-gray-400 hover:text-yellow-600 transition-colors"
                         title="Establecer como por defecto"
                       >
-                        <Star size={14} />
+                        <Star size={16} />
                       </button>
                     )}
                     <button
                       onClick={() => startEditing(status.id, status.name)}
-                      className="p-1.5 hover:bg-white/50 rounded text-gray-500 hover:text-blue-600 transition-colors"
+                      className="p-2 hover:bg-blue-100 rounded-lg text-gray-400 hover:text-blue-600 transition-colors"
                       title="Editar nombre"
                     >
-                      <Edit2 size={14} />
+                      <Edit2 size={16} />
                     </button>
                     {!status.isDefault && (
                       <button
                         onClick={() => handleDeleteStatus(status.id)}
-                        className="p-1.5 hover:bg-white/50 rounded text-gray-500 hover:text-red-600 transition-colors"
+                        className="p-2 hover:bg-red-100 rounded-lg text-gray-400 hover:text-red-600 transition-colors"
                         title="Eliminar"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={16} />
                       </button>
                     )}
                   </div>
@@ -284,24 +292,24 @@ export default function StatusManager({ statuses, onSave, onClose }: StatusManag
 
           {/* Add New Status Form */}
           {showAddForm ? (
-            <div className="mt-4 p-4 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-              <h4 className="text-sm font-medium text-gray-700 mb-3">Nuevo status</h4>
+            <div className="mt-4 p-4 border-2 border-dashed border-orange-300 rounded-xl bg-orange-50">
+              <h4 className="text-sm font-semibold text-gray-800 mb-3">Nuevo status</h4>
               <div className="space-y-3">
                 <input
                   type="text"
                   placeholder="Nombre del status"
                   value={newStatus.name || ''}
                   onChange={(e) => setNewStatus({ ...newStatus, name: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-2.5 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:border-orange-500 bg-white"
                   autoFocus
                 />
                 <div className="flex gap-3">
                   <div className="flex-1">
-                    <label className="block text-xs text-gray-600 mb-1">Color</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Color</label>
                     <select
                       value={newStatus.color}
                       onChange={(e) => setNewStatus({ ...newStatus, color: e.target.value as CustomStatus['color'] })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:border-orange-500 bg-white text-gray-700"
                     >
                       {COLOR_OPTIONS.map(opt => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -309,11 +317,11 @@ export default function StatusManager({ statuses, onSave, onClose }: StatusManag
                     </select>
                   </div>
                   <div className="flex-1">
-                    <label className="block text-xs text-gray-600 mb-1">Icono</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Icono</label>
                     <select
                       value={newStatus.icon}
                       onChange={(e) => setNewStatus({ ...newStatus, icon: e.target.value as CustomStatus['icon'] })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:border-orange-500 bg-white text-gray-700"
                     >
                       {ICON_OPTIONS.map(opt => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -321,10 +329,10 @@ export default function StatusManager({ statuses, onSave, onClose }: StatusManag
                     </select>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 pt-2">
                   <button
                     onClick={handleAddStatus}
-                    className="flex-1 px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
+                    className="flex-1 px-4 py-2.5 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
                   >
                     Agregar
                   </button>
@@ -333,7 +341,7 @@ export default function StatusManager({ statuses, onSave, onClose }: StatusManag
                       setShowAddForm(false)
                       setNewStatus({ name: '', color: 'gray', icon: 'clock' })
                     }}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-300 transition-colors"
+                    className="px-4 py-2.5 bg-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-300 transition-colors"
                   >
                     Cancelar
                   </button>
@@ -343,7 +351,7 @@ export default function StatusManager({ statuses, onSave, onClose }: StatusManag
           ) : (
             <button
               onClick={() => setShowAddForm(true)}
-              className="mt-4 w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50 transition-colors flex items-center justify-center gap-2"
+              className="mt-4 w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50 transition-colors flex items-center justify-center gap-2"
             >
               <Plus size={18} />
               <span className="text-sm font-medium">Agregar nuevo status</span>
@@ -355,14 +363,14 @@ export default function StatusManager({ statuses, onSave, onClose }: StatusManag
         <div className="flex items-center justify-end gap-3 p-5 border-t border-gray-200 bg-gray-50">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+            className="px-4 py-2.5 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-6 py-2 bg-orange-600 text-white font-medium rounded-lg hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            className="px-6 py-2.5 bg-orange-600 text-white font-medium rounded-lg hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
           >
             {saving ? (
               <>
