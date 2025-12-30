@@ -1590,9 +1590,9 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                               }}
                               title="Click para cambiar status"
                             >
-                              <StatusIcon size={14} />
+                              <StatusIcon size={14} style={{ color: statusColors.text }} />
                               {statusConfig.label}
-                              <ChevronDown size={12} className={`transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                              <ChevronDown size={12} style={{ color: statusColors.text }} className={`transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
                             </button>
                           </div>
                         )
