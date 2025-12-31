@@ -12,6 +12,7 @@ import { FlowConfig, FlowStep, LLMModel } from '@/types/flow.types'
 import { useToast, useModal } from '@/components/ui'
 import { useOpenRouter } from '@/lib/openrouter-context'
 import { OpenRouterAuthModal } from '@/components/openrouter'
+import OpenRouterModelSelector from '@/components/openrouter/OpenRouterModelSelector'
 
 // Modelos LLM disponibles para retry
 const LLM_MODELS = [
@@ -156,6 +157,8 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     error: string
     failedModel: string
     selectedModel: string
+    errorSource?: string  // 'openrouter', 'api', or 'unknown'
+    originalError?: string  // Original error message for debugging
   } | null>(null)
 
   // Deep Research async polling state
@@ -789,6 +792,45 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
 
       const data = await response.json()
 
+      // Debug: log full error response
+      if (!response.ok || !data.success) {
+        console.log('[runStep] Error response:', {
+          status: response.status,
+          data,
+          error_source: data.error_source,
+          original_error: data.original_error,
+        })
+      }
+
+      // Check for HTTP errors or explicit success: false
+      if (!response.ok || !data.success) {
+        // Si el error permite retry, mostrar diálogo
+        if (data.can_retry !== false) {
+          const failedModel = data.failed_model || overrideModel || 'unknown'
+          // Determine error source for user clarity
+          const errorSource = data.error_source || (response.status >= 500 ? 'api' : 'unknown')
+
+          setRetryDialog({
+            show: true,
+            campaignId,
+            stepId,
+            stepName,
+            error: data.error || 'Error desconocido',
+            failedModel,
+            selectedModel: '', // Usuario selecciona desde OpenRouter
+            errorSource,
+            originalError: data.original_error,
+          })
+        } else {
+          let errorMsg = data.error || 'Execution failed'
+          if (data.details) {
+            errorMsg += ` - ${data.details}`
+          }
+          toast.error('Error de ejecución', errorMsg)
+        }
+        return
+      }
+
       if (data.success) {
         // Check if Deep Research requires async polling
         if (data.async_polling_required) {
@@ -804,30 +846,12 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
           return // Don't clear runningStep yet - polling will handle it
         }
 
-        toast.success('Paso completado', `"${stepName}" en ${(data.duration_ms / 1000).toFixed(1)}s - Modelo: ${data.model_used || 'N/A'}`)
-      } else {
-        // Si el error permite retry, mostrar diálogo
-        if (data.can_retry && data.failed_model) {
-          const failedModel = data.failed_model
-          // Sugerir un modelo diferente al que falló
-          const suggestedModel = LLM_MODELS.find(m => m.value !== failedModel)?.value || 'gemini-2.5-flash'
-
-          setRetryDialog({
-            show: true,
-            campaignId,
-            stepId,
-            stepName,
-            error: data.error || 'Error desconocido',
-            failedModel,
-            selectedModel: suggestedModel,
-          })
-        } else {
-          let errorMsg = data.error || 'Execution failed'
-          if (data.details) {
-            errorMsg += ` - ${data.details}`
-          }
-          toast.error('Error de ejecución', errorMsg)
-        }
+        const durationSec = (data.duration_ms / 1000).toFixed(1)
+        const modelName = data.model_used?.split('/').pop() || 'N/A'
+        toast.success(
+          `✓ "${stepName}" ejecutado`,
+          `Completado en ${durationSec}s con ${modelName}`
+        )
       }
     } catch (error) {
       console.error('Error running step:', error)
@@ -2262,42 +2286,12 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
               {/* Model selector */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cambiar modelo (opcional):
+                  Seleccionar modelo:
                 </label>
-                <select
+                <OpenRouterModelSelector
                   value={stepExecutionConfig.selectedModel}
-                  onChange={(e) => setStepExecutionConfig({ ...stepExecutionConfig, selectedModel: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 bg-white"
-                >
-                  <optgroup label="Google (Gemini)">
-                    {LLM_MODELS.filter(m => m.provider === 'Google').map((model) => (
-                      <option key={model.value} value={model.value}>
-                        {model.label} {model.value === stepExecutionConfig.currentModel ? '(actual)' : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Google Deep Research (Agente Autónomo)">
-                    {LLM_MODELS.filter(m => m.provider === 'Deep Research').map((model) => (
-                      <option key={model.value} value={model.value}>
-                        {model.label} {model.value === stepExecutionConfig.currentModel ? '(actual)' : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="OpenAI">
-                    {LLM_MODELS.filter(m => m.provider === 'OpenAI').map((model) => (
-                      <option key={model.value} value={model.value}>
-                        {model.label} {model.value === stepExecutionConfig.currentModel ? '(actual)' : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Anthropic (Claude)">
-                    {LLM_MODELS.filter(m => m.provider === 'Anthropic').map((model) => (
-                      <option key={model.value} value={model.value}>
-                        {model.label} {model.value === stepExecutionConfig.currentModel ? '(actual)' : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
+                  onChange={(modelId) => setStepExecutionConfig({ ...stepExecutionConfig, selectedModel: modelId })}
+                />
               </div>
 
               {/* Temperature and Max Tokens */}
@@ -2403,7 +2397,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                 ) : (
                   <>
                     <Play size={16} />
-                    Ejecutar con {LLM_MODELS.find(m => m.value === stepExecutionConfig.selectedModel)?.label}
+                    Ejecutar
                   </>
                 )}
               </button>
@@ -2437,13 +2431,40 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
 
             {/* Content */}
             <div className="p-6 space-y-5">
+              {/* Error source badge */}
+              {retryDialog.errorSource && (
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                    retryDialog.errorSource === 'openrouter'
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {retryDialog.errorSource === 'openrouter' && '🔌 Error de OpenRouter'}
+                    {retryDialog.errorSource === 'api' && '⚙️ Error de API'}
+                    {!['openrouter', 'api'].includes(retryDialog.errorSource) && '❓ Error desconocido'}
+                  </span>
+                </div>
+              )}
+
               {/* Error message */}
               <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <p className="text-sm text-red-700 font-mono break-all">
+                <p className="text-sm text-red-700 break-words">
                   {retryDialog.error.substring(0, 300)}
                   {retryDialog.error.length > 300 && '...'}
                 </p>
               </div>
+
+              {/* Original error (collapsible for debugging) */}
+              {retryDialog.originalError && retryDialog.originalError !== retryDialog.error && (
+                <details className="text-xs">
+                  <summary className="text-gray-500 cursor-pointer hover:text-gray-700">
+                    Ver error original (técnico)
+                  </summary>
+                  <pre className="mt-2 p-2 bg-gray-100 rounded text-gray-600 overflow-x-auto">
+                    {retryDialog.originalError}
+                  </pre>
+                </details>
+              )}
 
               {/* Failed model info */}
               <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -2456,56 +2477,10 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Selecciona otro modelo para reintentar:
                 </label>
-                <select
+                <OpenRouterModelSelector
                   value={retryDialog.selectedModel}
-                  onChange={(e) => setRetryDialog({ ...retryDialog, selectedModel: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-                >
-                  <optgroup label="Google (Gemini)">
-                    {LLM_MODELS.filter(m => m.provider === 'Google').map((model) => (
-                      <option
-                        key={model.value}
-                        value={model.value}
-                        disabled={model.value === retryDialog.failedModel}
-                      >
-                        {model.label} {model.value === retryDialog.failedModel ? '(falló)' : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Google Deep Research (Agente Autónomo)">
-                    {LLM_MODELS.filter(m => m.provider === 'Deep Research').map((model) => (
-                      <option
-                        key={model.value}
-                        value={model.value}
-                        disabled={model.value === retryDialog.failedModel}
-                      >
-                        {model.label} {model.value === retryDialog.failedModel ? '(falló)' : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="OpenAI">
-                    {LLM_MODELS.filter(m => m.provider === 'OpenAI').map((model) => (
-                      <option
-                        key={model.value}
-                        value={model.value}
-                        disabled={model.value === retryDialog.failedModel}
-                      >
-                        {model.label} {model.value === retryDialog.failedModel ? '(falló)' : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Anthropic (Claude)">
-                    {LLM_MODELS.filter(m => m.provider === 'Anthropic').map((model) => (
-                      <option
-                        key={model.value}
-                        value={model.value}
-                        disabled={model.value === retryDialog.failedModel}
-                      >
-                        {model.label} {model.value === retryDialog.failedModel ? '(falló)' : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
+                  onChange={(modelId) => setRetryDialog({ ...retryDialog, selectedModel: modelId })}
+                />
               </div>
             </div>
 
@@ -2513,18 +2488,23 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3">
               <button
                 onClick={handleRetryWithModel}
-                disabled={runningStep !== null}
-                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                disabled={runningStep !== null || !retryDialog.selectedModel}
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {runningStep ? (
                   <>
                     <RefreshCw size={16} className="animate-spin" />
                     Ejecutando...
                   </>
+                ) : !retryDialog.selectedModel ? (
+                  <>
+                    <RefreshCw size={16} />
+                    Selecciona un modelo
+                  </>
                 ) : (
                   <>
                     <RefreshCw size={16} />
-                    Reintentar con {LLM_MODELS.find(m => m.value === retryDialog.selectedModel)?.label}
+                    Reintentar
                   </>
                 )}
               </button>

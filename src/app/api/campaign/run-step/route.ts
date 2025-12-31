@@ -148,15 +148,17 @@ export async function POST(request: NextRequest) {
 
       console.error(`Step ${step.name} failed:`, errorData)
 
-      // Retornar info para retry si está disponible
+      // Retornar info para retry con el status code apropiado
       return NextResponse.json(
         {
           error: errorData.error || `Step "${step.name}" failed`,
           details: errorData.details,
-          can_retry: errorData.can_retry || false,
+          can_retry: errorData.can_retry ?? true,
           failed_model: errorData.failed_model || stepConfig.model,
+          error_source: errorData.error_source,  // 'openrouter', 'deep-research', etc.
+          original_error: errorData.original_error,  // Error técnico original
         },
-        { status: 500 }
+        { status: response.status }
       )
     }
 

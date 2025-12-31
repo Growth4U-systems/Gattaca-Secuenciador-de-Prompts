@@ -416,3 +416,19 @@ ANTHROPIC_API_KEY
 - [ ] Probar la edición AI asistida (`suggest-edit` usa Gemini directo)
 - [ ] Verificar el selector de modelos dinámico carga correctamente
 
+### 2. Guardar modelo seleccionado en configuración del flujo
+**Prioridad**: Alta
+**Estado**: Pendiente
+**Descripción**: Cuando el usuario selecciona un modelo en el `StepEditor` usando `OpenRouterModelSelector`, el cambio no se persiste en la base de datos. El modelo debería guardarse en `flow_config.steps[].model`.
+
+**Archivos afectados**:
+- `src/components/campaign/flow/StepEditor.tsx` - El selector de modelo debe llamar a la función de guardado
+- `src/components/campaign/flow/FlowEditor.tsx` - Debe tener la lógica para actualizar el paso y guardar en DB
+
+**Implementación sugerida**:
+1. Asegurar que `StepEditor` propague el cambio de modelo al padre (`FlowEditor`)
+2. `FlowEditor` debe llamar a `updateStep()` o similar cuando cambia el modelo
+3. El cambio debe persistirse en `ecp_campaigns.flow_config` o `projects.flow_config` según corresponda
+
+**Nota**: Verificar que el selector de modelo en el modal de ejecución (que permite override temporal) siga funcionando independientemente del modelo guardado en la configuración.
+

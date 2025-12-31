@@ -47,13 +47,21 @@ async function decryptToken(encryptedData: string): Promise<string> {
     throw new Error('Invalid encrypted data: too short')
   }
 
+  // Format from Node.js: iv (16) + authTag (16) + ciphertext
+  // Web Crypto API expects: iv + ciphertext + authTag (authTag at the end)
   const iv = combined.slice(0, IV_LENGTH)
-  const ciphertext = combined.slice(IV_LENGTH)
+  const authTag = combined.slice(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH)
+  const ciphertext = combined.slice(IV_LENGTH + AUTH_TAG_LENGTH)
+
+  // Reorder for Web Crypto: ciphertext + authTag
+  const ciphertextWithTag = new Uint8Array(ciphertext.length + authTag.length)
+  ciphertextWithTag.set(ciphertext, 0)
+  ciphertextWithTag.set(authTag, ciphertext.length)
 
   const decrypted = await crypto.subtle.decrypt(
-    { name: ALGORITHM, iv },
+    { name: ALGORITHM, iv, tagLength: AUTH_TAG_LENGTH * 8 },
     key,
-    ciphertext
+    ciphertextWithTag
   )
 
   return new TextDecoder().decode(decrypted)
@@ -331,15 +339,21 @@ async function callAnthropic(
 
 // Map internal model names to OpenRouter model IDs
 function mapToOpenRouterModel(model: string): string {
+  // If model already contains '/', it's already in OpenRouter format (e.g., "google/gemini-2.0-flash-exp:free")
+  if (model.includes('/')) {
+    return model
+  }
+
+  // Legacy internal model names -> OpenRouter format
   // Gemini models
-  if (model === 'gemini-3.0-pro-preview') return 'google/gemini-2.0-flash-thinking-exp:free'
+  if (model === 'gemini-3.0-pro-preview') return 'google/gemini-2.0-flash-thinking-exp-1219:free'
   if (model === 'gemini-2.5-pro') return 'google/gemini-2.5-pro-preview'
   if (model === 'gemini-2.5-flash') return 'google/gemini-2.5-flash-preview'
   if (model === 'gemini-2.5-flash-lite') return 'google/gemini-2.0-flash-lite-001'
   if (model.startsWith('gemini')) return `google/${model}`
 
   // OpenAI models
-  if (model === 'gpt-5.2' || model === 'gpt-5' || model === 'gpt-5-mini') return 'openai/gpt-4o' // Fallback, GPT-5 not available yet
+  if (model === 'gpt-5.2' || model === 'gpt-5' || model === 'gpt-5-mini') return 'openai/gpt-4o'
   if (model === 'gpt-4.1' || model === 'gpt-4.1-mini') return 'openai/gpt-4o'
   if (model === 'gpt-4o') return 'openai/gpt-4o'
   if (model === 'gpt-4o-mini') return 'openai/gpt-4o-mini'
@@ -354,12 +368,12 @@ function mapToOpenRouterModel(model: string): string {
   }
 
   // Anthropic models
-  if (model === 'claude-4.5-opus') return 'anthropic/claude-sonnet-4' // claude-4.5 not available yet
+  if (model === 'claude-4.5-opus') return 'anthropic/claude-sonnet-4'
   if (model === 'claude-4.5-sonnet') return 'anthropic/claude-sonnet-4'
   if (model === 'claude-4.5-haiku') return 'anthropic/claude-haiku-3.5'
   if (model.startsWith('claude')) return `anthropic/${model}`
 
-  // Default: return as-is (might already be OpenRouter format)
+  // Default: return as-is
   return model
 }
 
@@ -378,6 +392,48 @@ async function callOpenRouter(
 
   console.log(`[OpenRouter] Calling model: ${openRouterModel} (original: ${model})`)
 
+  // Check if this is a reasoning model (o1, o3, o4 series)
+  const isReasoningModel = model.startsWith('o1') || model.startsWith('o3') || model.startsWith('o4')
+
+  // Some models don't support system/developer instructions
+  const noSystemMessageSupport = isReasoningModel ||
+    openRouterModel.includes('gemma-3n') ||
+    openRouterModel.includes('gemma-2') ||
+    openRouterModel.includes(':free') // Many free models don't support system messages
+
+  if (noSystemMessageSupport) {
+    console.log(`[OpenRouter] Model ${openRouterModel} doesn't support system messages - embedding in user message`)
+  }
+
+  // Reasoning models and some others don't support system messages
+  // They use max_completion_tokens instead of max_tokens
+  const messages = noSystemMessageSupport
+    ? [
+        {
+          role: 'user',
+          content: `${systemPrompt}\n\n${context}\n\n--- TASK ---\n\n${userPrompt}`,
+        },
+      ]
+    : [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `${context}\n\n--- TASK ---\n\n${userPrompt}` },
+      ]
+
+  const requestBody: any = {
+    model: openRouterModel,
+    messages,
+  }
+
+  // Only add temperature and max_tokens for non-reasoning models
+  if (!isReasoningModel) {
+    requestBody.temperature = temperature
+    requestBody.max_tokens = maxTokens
+  } else {
+    // Reasoning models use max_completion_tokens
+    requestBody.max_completion_tokens = maxTokens
+    console.log(`[OpenRouter] Reasoning model detected - using max_completion_tokens, no temperature/system message`)
+  }
+
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -386,27 +442,97 @@ async function callOpenRouter(
       'X-Title': 'Gatacca',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: openRouterModel,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `${context}\n\n--- TASK ---\n\n${userPrompt}` },
-      ],
-      temperature,
-      max_tokens: maxTokens,
-    }),
+    body: JSON.stringify(requestBody),
   })
 
   if (!response.ok) {
     const errorText = await response.text()
     console.error(`[OpenRouter] API error: ${errorText}`)
-    throw new Error(`OpenRouter API error: ${errorText}`)
+
+    // Parse error for friendly message
+    let friendlyMessage = 'Error al llamar al modelo'
+    let errorCode = response.status
+    let rawMessage = ''
+
+    try {
+      const errorJson = JSON.parse(errorText)
+      rawMessage = errorJson.error?.message || ''
+      const metadata = errorJson.error?.metadata?.raw || ''
+
+      // Extract friendly messages from common errors
+      if (rawMessage.includes('is not a valid model ID')) {
+        friendlyMessage = `El modelo "${openRouterModel}" no está disponible. Por favor selecciona otro modelo.`
+        errorCode = 400
+      } else if (rawMessage.includes('not enabled') || rawMessage.includes('Developer instruction')) {
+        friendlyMessage = `El modelo "${openRouterModel}" no soporta esta operación. Intenta con otro modelo.`
+        errorCode = 400
+      } else if (rawMessage.includes('rate limit') || rawMessage.includes('Rate limit') || metadata.includes('rate-limited')) {
+        friendlyMessage = 'El modelo está temporalmente limitado. Espera un momento e intenta de nuevo, o usa otro modelo.'
+        errorCode = 429
+      } else if (rawMessage.includes('Provider returned error')) {
+        // Generic provider error - try to get more details from metadata
+        if (metadata) {
+          friendlyMessage = metadata
+        } else {
+          friendlyMessage = 'El proveedor del modelo falló. Esto puede ser temporal. Intenta de nuevo o usa otro modelo.'
+        }
+        errorCode = 502
+      } else if (rawMessage.includes('insufficient') || rawMessage.includes('credits') || rawMessage.includes('requires more credits')) {
+        friendlyMessage = 'Créditos insuficientes en OpenRouter. Prueba con un modelo gratuito o recarga tu cuenta.'
+        errorCode = 402
+      } else if (rawMessage.includes('context length') || rawMessage.includes('too long')) {
+        friendlyMessage = 'El texto es demasiado largo para este modelo. Usa un modelo con más capacidad o reduce el contenido.'
+        errorCode = 400
+      } else if (rawMessage) {
+        friendlyMessage = rawMessage
+      }
+    } catch {
+      // If can't parse, use generic message
+      rawMessage = errorText
+    }
+
+    const error = new Error(friendlyMessage) as Error & {
+      code: number
+      model: string
+      source: string
+      originalError: string
+    }
+    error.code = errorCode
+    error.model = openRouterModel
+    error.source = 'openrouter'
+    error.originalError = rawMessage || errorText
+    throw error
   }
 
   const data = await response.json()
 
   if (data.error) {
-    throw new Error(`OpenRouter error: ${data.error.message || JSON.stringify(data.error)}`)
+    // Parse OpenRouter error for better user feedback
+    const rawError = data.error.message || JSON.stringify(data.error)
+    let friendlyMessage = rawError
+
+    // Translate common OpenRouter error messages
+    if (rawError.includes('Provider returned error')) {
+      friendlyMessage = `El proveedor del modelo falló. Esto puede ser temporal. Intenta de nuevo o usa otro modelo.`
+    } else if (rawError.includes('No endpoints found')) {
+      friendlyMessage = `Este modelo requiere configurar tu política de datos en OpenRouter. Ve a: https://openrouter.ai/settings/privacy`
+    } else if (rawError.includes('moderation') || rawError.includes('content policy')) {
+      friendlyMessage = `El contenido fue bloqueado por las políticas del modelo. Intenta reformular el prompt o usa otro modelo.`
+    } else if (rawError.includes('overloaded') || rawError.includes('capacity')) {
+      friendlyMessage = `El modelo está sobrecargado. Intenta de nuevo en unos minutos o usa otro modelo.`
+    }
+
+    const error = new Error(friendlyMessage) as Error & {
+      code: number
+      model: string
+      source: string
+      originalError: string
+    }
+    error.code = 502  // Bad Gateway - upstream provider error
+    error.model = openRouterModel
+    error.source = 'openrouter'
+    error.originalError = rawError
+    throw error
   }
 
   const text = data.choices?.[0]?.message?.content || ''
@@ -1160,16 +1286,36 @@ serve(async (req) => {
 
     console.error('Edge function error:', errorMessage, error)
 
-    // Usar step_config del body ya parseado
-    const failedModel = step_config?.model || 'gemini-2.5-flash'
+    // Extract error details from custom error if available
+    const errorWithDetails = error as Error & {
+      code?: number
+      model?: string
+      source?: string
+      originalError?: string
+    }
+    const statusCode = errorWithDetails.code || 500
+    const failedModel = errorWithDetails.model || step_config?.model || 'unknown'
+    const errorSource = errorWithDetails.source || 'unknown'
+
+    // Always allow retry - user might want to try a different/cheaper model
+    const canRetry = true
+
+    // Build response with clear source indication
+    const responseBody: Record<string, any> = {
+      error: errorMessage,
+      failed_model: failedModel,
+      can_retry: canRetry,
+      error_source: errorSource,  // 'openrouter', 'api', or 'unknown'
+    }
+
+    // Include original error for debugging (only in development or for technical users)
+    if (errorWithDetails.originalError && errorWithDetails.originalError !== errorMessage) {
+      responseBody.original_error = errorWithDetails.originalError
+    }
 
     return new Response(
-      JSON.stringify({
-        error: errorMessage,
-        failed_model: failedModel,
-        can_retry: true,  // Indica al frontend que puede reintentar con otro modelo
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      JSON.stringify(responseBody),
+      { status: statusCode, headers: { 'Content-Type': 'application/json' } }
     )
   }
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useOpenRouter } from '@/lib/openrouter-context'
 import { ChevronDown, Loader2, Search, Zap, DollarSign, AlertCircle } from 'lucide-react'
 
@@ -37,6 +37,8 @@ export default function OpenRouterModelSelector({
   const [error, setError] = useState<string | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   // Fetch models when connected
   useEffect(() => {
@@ -93,6 +95,19 @@ export default function OpenRouterModelSelector({
   // Get selected model info
   const selectedModel = models.find((m) => m.id === value)
 
+  // Calculate dropdown position when opening
+  const openDropdown = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setDropdownPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: Math.max(rect.width, 320),
+      })
+    }
+    setIsOpen(true)
+  }
+
   // Format price for display
   const formatPrice = (price: number) => {
     if (price === 0) return 'Gratis'
@@ -123,8 +138,9 @@ export default function OpenRouterModelSelector({
     <div className={`relative ${className}`}>
       {/* Trigger Button */}
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => !disabled && setIsOpen(!isOpen)}
+        onClick={() => !disabled && (isOpen ? setIsOpen(false) : openDropdown())}
         disabled={disabled || loading}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 bg-white border border-gray-300 rounded-lg hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors ${
           disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
@@ -159,12 +175,19 @@ export default function OpenRouterModelSelector({
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0 z-[99]"
             onClick={() => setIsOpen(false)}
           />
 
-          {/* Dropdown Content */}
-          <div className="absolute z-50 mt-1 w-full min-w-[320px] max-h-[400px] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+          {/* Dropdown Content - Fixed position to escape modal overflow */}
+          <div
+            className="fixed z-[100] max-h-[400px] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
+            style={{
+              top: dropdownPosition.top,
+              left: dropdownPosition.left,
+              width: dropdownPosition.width,
+            }}
+          >
             {/* Search */}
             <div className="p-2 border-b border-gray-100">
               <div className="relative">
@@ -174,7 +197,7 @@ export default function OpenRouterModelSelector({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Buscar modelo..."
-                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full pl-8 pr-3 py-1.5 text-sm text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-gray-400"
                   autoFocus
                 />
               </div>
