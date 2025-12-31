@@ -1,24 +1,11 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { X, Save, RotateCcw, Edit2, AlertTriangle, Table, Download, Sparkles, Loader2, Check, XCircle, MousePointer2, ChevronDown, ChevronUp, FileOutput, Clock, Hash, Type, Cpu, Settings, Maximize2, Minimize2 } from 'lucide-react'
 import MarkdownRenderer, { extractTables, tablesToCSV } from '../common/MarkdownRenderer'
 import { useToast, useModal } from '@/components/ui'
-
-// Modelos LLM disponibles para el asistente de IA
-const LLM_MODELS = [
-  // Gemini
-  { value: 'gemini-3.0-pro-preview', label: 'Gemini 3.0 Pro', provider: 'Google' },
-  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google' },
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google' },
-  // OpenAI
-  { value: 'gpt-5', label: 'GPT-5', provider: 'OpenAI' },
-  { value: 'gpt-4.1', label: 'GPT-4.1', provider: 'OpenAI' },
-  { value: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI' },
-  // Anthropic
-  { value: 'claude-4.5-sonnet', label: 'Claude 4.5 Sonnet', provider: 'Anthropic' },
-  { value: 'claude-4.5-haiku', label: 'Claude 4.5 Haiku', provider: 'Anthropic' },
-]
+import { useOpenRouter } from '@/lib/openrouter-context'
+import OpenRouterModelSelector from '@/components/openrouter/OpenRouterModelSelector'
 
 // Token equivalence helper: 1 token ≈ 0.75 words, 500 words = 1 page
 const getTokenEquivalence = (tokens: number) => {
@@ -116,11 +103,26 @@ export default function StepOutputEditor({
   const [showComparison, setShowComparison] = useState(false)
   const [showAiConfig, setShowAiConfig] = useState(false)
 
-  // AI Model configuration
-  const [aiModel, setAiModel] = useState('gemini-2.5-flash')
+  // OpenRouter context
+  const { isConnected: isOpenRouterConnected } = useOpenRouter()
+
+  // AI Model configuration - load from localStorage if available
+  const [aiModel, setAiModel] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('gatacca_suggest_model') || 'google/gemini-2.0-flash-exp:free'
+    }
+    return 'google/gemini-2.0-flash-exp:free'
+  })
   const [aiTemperature, setAiTemperature] = useState(0.7)
   const [aiMaxTokens, setAiMaxTokens] = useState(8192)
   const [includeDocsInAi, setIncludeDocsInAi] = useState(true)
+
+  // Save model selection to localStorage
+  useEffect(() => {
+    if (aiModel) {
+      localStorage.setItem('gatacca_suggest_model', aiModel)
+    }
+  }, [aiModel])
 
   // View mode states
   const [isCompactHeader, setIsCompactHeader] = useState(false)
@@ -479,8 +481,9 @@ export default function StepOutputEditor({
               </button>
               <button
                 onClick={handleGenerateSuggestion}
-                disabled={isGenerating || !aiPrompt.trim()}
+                disabled={isGenerating || !aiPrompt.trim() || !isOpenRouterConnected}
                 className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm rounded-xl hover:from-purple-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed inline-flex items-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
+                title={!isOpenRouterConnected ? 'Conecta OpenRouter para usar esta función' : undefined}
               >
                 {isGenerating ? (
                   <>
@@ -506,38 +509,16 @@ export default function StepOutputEditor({
               </div>
 
               <div className="grid grid-cols-3 gap-4">
-                {/* Model Selector */}
+                {/* Model Selector - OpenRouter */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Modelo
                   </label>
-                  <select
+                  <OpenRouterModelSelector
                     value={aiModel}
-                    onChange={(e) => setAiModel(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 bg-white"
-                  >
-                    <optgroup label="Google (Gemini)">
-                      {LLM_MODELS.filter(m => m.provider === 'Google').map((model) => (
-                        <option key={model.value} value={model.value}>
-                          {model.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="OpenAI">
-                      {LLM_MODELS.filter(m => m.provider === 'OpenAI').map((model) => (
-                        <option key={model.value} value={model.value}>
-                          {model.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Anthropic (Claude)">
-                      {LLM_MODELS.filter(m => m.provider === 'Anthropic').map((model) => (
-                        <option key={model.value} value={model.value}>
-                          {model.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
+                    onChange={setAiModel}
+                    disabled={isGenerating}
+                  />
                 </div>
 
                 {/* Temperature */}
