@@ -52,9 +52,9 @@ export async function POST(request: NextRequest) {
     let insertData: any = {
       project_id: projectId,
       ecp_name,
-      problem_core: problem_core || '',
-      country: country || '',
-      industry: industry || '',
+      problem_core: problem_core || null,
+      country: country || null,
+      industry: industry || null,
       status: 'draft',
       custom_variables: custom_variables || {},
       step_outputs: {},

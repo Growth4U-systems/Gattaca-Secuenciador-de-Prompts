@@ -19,7 +19,16 @@
       "Bash(supabase --version:*)",
       "Bash(wc:*)",
       "Bash(grep:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(npx supabase functions deploy:*)",
+      "Bash(supabase start:*)",
+      "Bash(npx supabase:*)",
+      "Bash(rm:*)",
+      "Bash(kill:*)",
+      "Bash(supabase status:*)",
+      "Bash(npx tsc:*)",
+      "Bash(echo:*)",
+      "Bash(docker exec:*)"
     ]
   }
 }

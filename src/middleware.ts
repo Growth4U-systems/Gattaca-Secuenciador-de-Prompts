@@ -55,23 +55,31 @@ export async function middleware(request: NextRequest) {
   )
 
   // Refresh session if expired
-  const { data: { session } } = await supabase.auth.getSession()
+  try {
+    const { data: { session } } = await Promise.race([
+      supabase.auth.getSession(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Session timeout')), 5000))
+    ]) as any
 
-  // Protected routes
-  const isAuthPage = request.nextUrl.pathname.startsWith('/auth')
-  const isApiRoute = request.nextUrl.pathname.startsWith('/api')
-  const isProtectedRoute = !isAuthPage && !isApiRoute
+    // Protected routes
+    const isAuthPage = request.nextUrl.pathname.startsWith('/auth')
+    const isApiRoute = request.nextUrl.pathname.startsWith('/api')
+    const isProtectedRoute = !isAuthPage && !isApiRoute
 
-  // Redirect to login if accessing protected route without session
-  if (isProtectedRoute && !session) {
-    const redirectUrl = new URL('/auth/login', request.url)
-    return NextResponse.redirect(redirectUrl)
-  }
+    // Redirect to login if accessing protected route without session
+    if (isProtectedRoute && !session) {
+      const redirectUrl = new URL('/auth/login', request.url)
+      return NextResponse.redirect(redirectUrl)
+    }
 
-  // Redirect to home if accessing auth pages with active session
-  if (isAuthPage && session && !request.nextUrl.pathname.includes('/callback')) {
-    const redirectUrl = new URL('/', request.url)
-    return NextResponse.redirect(redirectUrl)
+    // Redirect to home if accessing auth pages with active session
+    if (isAuthPage && session && !request.nextUrl.pathname.includes('/callback')) {
+      const redirectUrl = new URL('/', request.url)
+      return NextResponse.redirect(redirectUrl)
+    }
+  } catch (error) {
+    console.error('Middleware auth error:', error)
+    // If auth check fails, allow the request to proceed to avoid blocking the app
   }
 
   return response

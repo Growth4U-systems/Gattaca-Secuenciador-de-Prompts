@@ -3,15 +3,125 @@
 import { useAuth } from '@/lib/auth-context'
 import { useRouter, usePathname } from 'next/navigation'
 import { LogOut, Sparkles, Loader2, ChevronDown, Dna } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import NotificationBell from '@/components/notifications/NotificationBell'
+import { OpenRouterStatusBadge, OpenRouterAuthModal } from '@/components/openrouter'
+import { useOpenRouter } from '@/lib/openrouter-context'
+import { useToast } from '@/components/ui/Toast/ToastContext'
 
 export default function Header() {
   const { user, signOut, loading } = useAuth()
+  const { isConnected, isLoading: isLoadingOpenRouter, hasCompletedInitialCheck } = useOpenRouter()
+  const { success } = useToast()
   const router = useRouter()
   const pathname = usePathname()
   const [signingOut, setSigningOut] = useState(false)
+  const [showOpenRouterModal, setShowOpenRouterModal] = useState(false)
+  const [modalTrigger, setModalTrigger] = useState<'login' | 'action'>('action')
+  const hasScheduledModal = useRef(false)
+  const lastCheckedUserId = useRef<string | null>(null)
+  const hasShownSuccessToast = useRef(false)
+
+  // Show success toast when OAuth connection completes successfully
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const params = new URLSearchParams(window.location.search)
+    const success_param = params.get('openrouter_success')
+
+    if (success_param === 'true' && !hasShownSuccessToast.current) {
+      success('¡Conexión exitosa!', 'Tu cuenta de OpenRouter está conectada correctamente')
+      hasShownSuccessToast.current = true
+
+      // Clean up URL parameter
+      params.delete('openrouter_success')
+      const newUrl = params.toString()
+        ? `${window.location.pathname}?${params.toString()}`
+        : window.location.pathname
+      window.history.replaceState({}, '', newUrl)
+    }
+  }, [success])
+
+  // Check OpenRouter connection after user logs in
+  useEffect(() => {
+    console.log('[Header] Effect check:', {
+      user: !!user,
+      loading,
+      isLoadingOpenRouter,
+      isConnected,
+      hasCompletedInitialCheck,
+      hasScheduledModal: hasScheduledModal.current,
+      lastCheckedUserId: lastCheckedUserId.current
+    })
+
+    // Skip if no user or on auth pages
+    if (!user || pathname?.startsWith('/auth')) {
+      hasScheduledModal.current = false
+      lastCheckedUserId.current = null
+      return
+    }
+
+    // Skip if still loading auth or OpenRouter status
+    if (loading || isLoadingOpenRouter) {
+      console.log('[Header] Still loading, skipping')
+      return
+    }
+
+    // CRITICAL: Wait until the initial check is completed before making any decision
+    if (!hasCompletedInitialCheck) {
+      console.log('[Header] Initial check not completed yet, waiting...')
+      return
+    }
+
+    // Check if we've already checked for this specific login session
+    // Reset if it's a different user or if user logged out and back in
+    if (lastCheckedUserId.current !== user.id) {
+      console.log('[Header] New user detected, resetting flags')
+      hasScheduledModal.current = false
+      lastCheckedUserId.current = user.id
+    }
+
+    // Check if we've already scheduled the modal for this login
+    if (hasScheduledModal.current) {
+      console.log('[Header] Already scheduled, skipping')
+      return
+    }
+
+    console.log('[Header] Final check - isConnected:', isConnected)
+
+    // If user is not connected, show the modal
+    if (!isConnected) {
+      console.log('[Header] NOT CONNECTED - Scheduling modal')
+      // Mark as scheduled to prevent re-scheduling
+      hasScheduledModal.current = true
+
+      // Small delay to let the UI settle after login
+      setTimeout(() => {
+        console.log('[Header] Opening modal now')
+        setModalTrigger('login')
+        setShowOpenRouterModal(true)
+      }, 1500)
+    } else {
+      console.log('[Header] User IS CONNECTED - Not showing modal')
+    }
+  }, [user, loading, isConnected, isLoadingOpenRouter, hasCompletedInitialCheck, pathname])
+
+  const handleOpenRouterBadgeClick = () => {
+    setModalTrigger('action')
+    setShowOpenRouterModal(true)
+  }
+
+  const handleCloseModal = () => {
+    setShowOpenRouterModal(false)
+  }
+
+  // Clear the scheduled flag when user connects to OpenRouter
+  useEffect(() => {
+    if (user && isConnected && !isLoadingOpenRouter) {
+      hasScheduledModal.current = false
+    }
+  }, [user, isConnected, isLoadingOpenRouter])
 
   // Don't show header on auth pages
   if (pathname?.startsWith('/auth')) {
@@ -80,6 +190,9 @@ export default function Header() {
             {/* User Menu */}
             {user && (
               <div className="flex items-center gap-3">
+                {/* OpenRouter Status */}
+                <OpenRouterStatusBadge onClick={handleOpenRouterBadgeClick} />
+
                 {/* Notification Bell */}
                 <NotificationBell />
 
@@ -126,6 +239,13 @@ export default function Header() {
           </div>
         </div>
       </header>
+
+      {/* OpenRouter Auth Modal */}
+      <OpenRouterAuthModal
+        isOpen={showOpenRouterModal}
+        onClose={handleCloseModal}
+        trigger={modalTrigger}
+      />
     </>
   )
 }

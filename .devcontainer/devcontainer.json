@@ -62,7 +62,8 @@
     "3000": {
       "label": "Next.js Dev Server",
       "onAutoForward": "notify",
-      "protocol": "http"
+      "protocol": "http",
+      "requireLocalPort": true
     },
     "54321": {
       "label": "Supabase API",

@@ -13,16 +13,19 @@
 DO $$
 DECLARE
   -- 🔧 CONFIGURE THIS: Replace with your admin user UUID
-  target_user_id UUID := 'YOUR_ADMIN_USER_UUID_HERE';
+  target_user_id UUID;
 
   -- Internal variables
   placeholder_id UUID := '00000000-0000-0000-0000-000000000000';
   updated_count INTEGER;
   user_email TEXT;
 BEGIN
-  -- Validate that target_user_id was configured
-  IF target_user_id = 'YOUR_ADMIN_USER_UUID_HERE' THEN
-    RAISE EXCEPTION 'Migration not configured: Please replace YOUR_ADMIN_USER_UUID_HERE with actual user UUID';
+  -- Skip if no user is configured (safe for local development)
+  SELECT id INTO target_user_id FROM auth.users LIMIT 1;
+
+  IF target_user_id IS NULL THEN
+    RAISE NOTICE 'No users found. Skipping placeholder migration.';
+    RETURN;
   END IF;
 
   -- Check if there are any projects that need migration

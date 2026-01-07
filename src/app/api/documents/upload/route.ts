@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase-server'
 
 // PDF and DOCX parsing libraries
@@ -107,22 +106,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'No text content could be extracted' },
         { status: 400 }
-      )
-    }
-
-    // Create Supabase client with service role for server operations
-    console.log('Creating Supabase client...')
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseKey) {
-      console.error('Missing env vars:', { hasUrl: !!supabaseUrl, hasKey: !!supabaseKey })
-      return NextResponse.json(
-        {
-          error: 'Server configuration error',
-          details: 'Missing Supabase credentials. Check environment variables.'
-        },
-        { status: 500 }
       )
     }
 

@@ -6,6 +6,7 @@ import { FlowStep, OutputFormat, LLMModel } from '@/types/flow.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { usePromptValidator } from '@/hooks/usePromptValidator'
 import PromptValidationPanel, { ValidationBadge } from './PromptValidationPanel'
+import { OpenRouterModelSelector } from '@/components/openrouter'
 
 interface StepEditorProps {
   step: FlowStep
@@ -640,49 +641,19 @@ export default function StepEditor({
             </h3>
 
             <div className="space-y-4">
-              {/* Model Selector */}
+              {/* Model Selector - Dynamic from OpenRouter */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1.5">
                   Modelo LLM
                 </label>
-                <select
-                  value={editedStep.model || 'gemini-2.5-flash'}
-                  onChange={(e) =>
-                    setEditedStep((prev) => ({ ...prev, model: e.target.value as LLMModel }))
+                <OpenRouterModelSelector
+                  value={editedStep.model || 'google/gemini-2.5-flash-preview'}
+                  onChange={(modelId) =>
+                    setEditedStep((prev) => ({ ...prev, model: modelId as LLMModel }))
                   }
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-900 bg-white"
-                >
-                  <optgroup label="Google (Gemini)">
-                    {LLM_MODELS.filter(m => m.provider === 'Google').map((model) => (
-                      <option key={model.value} value={model.value}>
-                        {model.label} - {model.desc} ({model.context})
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Google Deep Research (Agente Autónomo)">
-                    {LLM_MODELS.filter(m => m.provider === 'Deep Research').map((model) => (
-                      <option key={model.value} value={model.value}>
-                        {model.label} - {model.desc} ({model.context})
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="OpenAI">
-                    {LLM_MODELS.filter(m => m.provider === 'OpenAI').map((model) => (
-                      <option key={model.value} value={model.value}>
-                        {model.label} - {model.desc} ({model.context})
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Anthropic (Claude)">
-                    {LLM_MODELS.filter(m => m.provider === 'Anthropic').map((model) => (
-                      <option key={model.value} value={model.value}>
-                        {model.label} - {model.desc} ({model.context})
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
+                />
                 <p className="text-xs text-gray-500 mt-1.5">
-                  Si el modelo falla, podrás elegir otro para reintentar
+                  Modelos cargados desde tu cuenta de OpenRouter. Si el modelo falla, podrás elegir otro.
                 </p>
               </div>
 

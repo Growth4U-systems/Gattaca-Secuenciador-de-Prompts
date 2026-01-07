@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
   // Use the configured site URL to avoid issues with 0.0.0.0 binding
   // Falls back to localhost:3000 if not set
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
   if (code) {
     try {

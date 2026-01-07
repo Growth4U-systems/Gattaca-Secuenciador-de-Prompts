@@ -16,7 +16,7 @@ function LoginContent() {
   const [error, setError] = useState<string | null>(null)
   const hasCheckedRef = useRef(false)
 
-  const redirectUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`
+  const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`
 
   useEffect(() => {
     const errorParam = searchParams.get('error')

@@ -23,7 +23,8 @@ export type GroqModel = 'llama-3.3-70b-versatile' | 'llama-3.1-8b-instant' | 'mi
 // Google Deep Research - Agente autónomo de investigación (usa Interactions API, no generateContent)
 export type DeepResearchModel = 'deep-research-pro-preview-12-2025'
 
-export type LLMModel = GeminiModel | OpenAIModel | AnthropicModel | GroqModel | DeepResearchModel
+// LLMModel ahora acepta strings genéricos para soportar IDs de OpenRouter (ej: "google/gemini-2.5-flash-preview")
+export type LLMModel = GeminiModel | OpenAIModel | AnthropicModel | GroqModel | DeepResearchModel | string
 
 // Configuración de fallback
 export interface FallbackConfig {
