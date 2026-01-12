@@ -51,8 +51,9 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (campaignError || !campaign) {
+      console.error('[run-step] Campaign query failed:', { campaignId, campaignError, campaign })
       return NextResponse.json(
-        { error: 'Campaign not found' },
+        { error: 'Campaign not found', details: campaignError?.message },
         { status: 404 }
       )
     }
