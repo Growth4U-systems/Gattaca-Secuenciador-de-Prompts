@@ -1076,7 +1076,7 @@ serve(async (req) => {
     // Load campaign
     const { data: campaign, error: campaignError } = await supabase
       .from('ecp_campaigns')
-      .select('*, projects(*)')
+      .select('*, projects_legacy(*)')
       .eq('id', campaign_id)
       .single()
 
@@ -1087,7 +1087,7 @@ serve(async (req) => {
       )
     }
 
-    const project = campaign.projects
+    const project = campaign.projects_legacy
     const startTime = Date.now()
 
     // Log execution start
