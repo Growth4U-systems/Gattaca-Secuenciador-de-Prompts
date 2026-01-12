@@ -81,8 +81,8 @@ function isTextModel(model: OpenRouterModel): boolean {
     return false
   }
 
-  // Skip deprecated/preview models that don't work well
-  if (model.id.includes('gemini-2.0') || model.id.includes('preview') && !model.id.includes('gemini-3')) {
+  // Skip gemini-2.0 models (deprecated/broken)
+  if (model.id.includes('gemini-2.0')) {
     return false
   }
 
