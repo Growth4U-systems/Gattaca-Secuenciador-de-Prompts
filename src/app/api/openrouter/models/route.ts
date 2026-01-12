@@ -77,30 +77,55 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user's OpenRouter token
+    const userId = session.user.id
+    let apiKey: string | null = null
+    let keySource: 'user' | 'agency' = 'user'
+
+    // 1. Try user's personal token first
     const { data: tokenRecord } = await supabase
       .from('user_openrouter_tokens')
       .select('encrypted_api_key')
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .single()
 
-    if (!tokenRecord?.encrypted_api_key) {
+    if (tokenRecord?.encrypted_api_key && tokenRecord.encrypted_api_key !== 'PENDING') {
+      try {
+        apiKey = decryptToken(tokenRecord.encrypted_api_key)
+        keySource = 'user'
+      } catch {
+        console.warn('Failed to decrypt user OpenRouter key')
+      }
+    }
+
+    // 2. If no user key, try agency key
+    if (!apiKey) {
+      const { data: membership } = await supabase
+        .from('agency_members')
+        .select('agency_id, agencies(id, openrouter_api_key)')
+        .eq('user_id', userId)
+        .single()
+
+      const agencyData = membership?.agencies as unknown as {
+        id: string
+        openrouter_api_key: string | null
+      } | null
+
+      if (agencyData?.openrouter_api_key) {
+        try {
+          apiKey = decryptToken(agencyData.openrouter_api_key)
+          keySource = 'agency'
+        } catch {
+          console.warn('Failed to decrypt agency OpenRouter key')
+        }
+      }
+    }
+
+    // 3. No key available
+    if (!apiKey) {
       return NextResponse.json({
         connected: false,
         models: [],
         message: 'OpenRouter not connected',
-      })
-    }
-
-    // Decrypt the API key
-    let apiKey: string
-    try {
-      apiKey = decryptToken(tokenRecord.encrypted_api_key)
-    } catch {
-      return NextResponse.json({
-        connected: false,
-        models: [],
-        message: 'Failed to decrypt API key',
       })
     }
 
@@ -164,6 +189,7 @@ export async function GET() {
 
     return NextResponse.json({
       connected: true,
+      source: keySource,
       models: formattedModels,
       grouped: groupedModels,
       count: formattedModels.length,
