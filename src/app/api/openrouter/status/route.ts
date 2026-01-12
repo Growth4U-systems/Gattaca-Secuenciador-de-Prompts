@@ -16,57 +16,71 @@ export async function GET() {
     const userId = session.user.id
     console.log('[OpenRouter Status] Checking status for user:', userId)
 
-    const { data: tokenRecord, error } = await supabase
+    // 1. Check user's personal token first
+    const { data: tokenRecord } = await supabase
       .from('user_openrouter_tokens')
       .select('encrypted_api_key, key_prefix, last_used_at, created_at, expires_at, credit_limit, limit_remaining, usage')
       .eq('user_id', userId)
       .single()
 
-    if (error) {
-      console.log('[OpenRouter Status] Query error:', error.message, error.code)
+    // If user has a valid personal token, return it
+    if (tokenRecord?.key_prefix && tokenRecord?.encrypted_api_key && tokenRecord.encrypted_api_key !== 'PENDING') {
+      console.log('[OpenRouter Status] User personal token found')
       return NextResponse.json({
-        connected: false,
-        tokenInfo: null,
+        connected: true,
+        source: 'user',
+        tokenInfo: {
+          keyPrefix: tokenRecord.key_prefix,
+          lastUsedAt: tokenRecord.last_used_at,
+          createdAt: tokenRecord.created_at,
+          expiresAt: tokenRecord.expires_at,
+          creditLimit: tokenRecord.credit_limit,
+          limitRemaining: tokenRecord.limit_remaining,
+          usage: tokenRecord.usage,
+        },
       })
     }
 
-    if (!tokenRecord) {
-      console.log('[OpenRouter Status] No token record found')
+    // 2. Check agency key
+    console.log('[OpenRouter Status] No user token, checking agency...')
+    const { data: membership } = await supabase
+      .from('agency_members')
+      .select('agency_id, agencies(id, name, openrouter_api_key, openrouter_key_hint, openrouter_key_last_used_at)')
+      .eq('user_id', userId)
+      .single()
+
+    // Supabase returns the relation as an object when using .single() on the parent
+    const agencyData = membership?.agencies as unknown as {
+      id: string
+      name: string
+      openrouter_api_key: string | null
+      openrouter_key_hint: string | null
+      openrouter_key_last_used_at: string | null
+    } | null
+
+    if (agencyData?.openrouter_api_key) {
+      console.log('[OpenRouter Status] Agency key found for:', agencyData.name)
       return NextResponse.json({
-        connected: false,
-        tokenInfo: null,
+        connected: true,
+        source: 'agency',
+        agencyName: agencyData.name,
+        tokenInfo: {
+          keyPrefix: agencyData.openrouter_key_hint || '***agency***',
+          lastUsedAt: agencyData.openrouter_key_last_used_at,
+          createdAt: null,
+          expiresAt: null,
+          creditLimit: null,
+          limitRemaining: null,
+          usage: null,
+        },
       })
     }
 
-    console.log('[OpenRouter Status] Token record found:', {
-      hasKey: !!tokenRecord.encrypted_api_key,
-      keyLength: tokenRecord.encrypted_api_key?.length,
-      keyPrefix: tokenRecord.key_prefix,
-      isPending: tokenRecord.encrypted_api_key === 'PENDING'
-    })
-
-    // Check if there's actually an API key (not just pending OAuth data)
-    // The encrypted_api_key should not be empty, 'PENDING', or missing
-    if (!tokenRecord.key_prefix || !tokenRecord.encrypted_api_key || tokenRecord.encrypted_api_key === 'PENDING') {
-      console.log('[OpenRouter Status] Token not ready - returning disconnected')
-      return NextResponse.json({
-        connected: false,
-        tokenInfo: null,
-      })
-    }
-
-    console.log('[OpenRouter Status] Token valid - returning connected')
+    // 3. No key available
+    console.log('[OpenRouter Status] No key found')
     return NextResponse.json({
-      connected: true,
-      tokenInfo: {
-        keyPrefix: tokenRecord.key_prefix,
-        lastUsedAt: tokenRecord.last_used_at,
-        createdAt: tokenRecord.created_at,
-        expiresAt: tokenRecord.expires_at,
-        creditLimit: tokenRecord.credit_limit,
-        limitRemaining: tokenRecord.limit_remaining,
-        usage: tokenRecord.usage,
-      },
+      connected: false,
+      tokenInfo: null,
     })
   } catch (error) {
     console.error('[OpenRouter Status] Unexpected error:', error)

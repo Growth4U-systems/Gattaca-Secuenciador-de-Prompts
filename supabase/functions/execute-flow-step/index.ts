@@ -1001,43 +1001,75 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // =========================================================================
-    // FETCH AND DECRYPT USER'S OPENROUTER API KEY
+    // FETCH AND DECRYPT OPENROUTER API KEY (User -> Agency -> Error)
     // =========================================================================
-    const { data: tokenRecord, error: tokenError } = await supabase
+    let userOpenRouterKey: string | null = null
+    let keySource: 'user' | 'agency' = 'user'
+
+    // 1. Try user's personal token first
+    const { data: tokenRecord } = await supabase
       .from('user_openrouter_tokens')
       .select('encrypted_api_key')
       .eq('user_id', user_id)
       .single()
 
-    if (tokenError || !tokenRecord?.encrypted_api_key) {
+    if (tokenRecord?.encrypted_api_key) {
+      try {
+        userOpenRouterKey = await decryptToken(tokenRecord.encrypted_api_key)
+        keySource = 'user'
+        console.log('[OpenRouter] Using user personal key')
+
+        // Update last_used_at for user token
+        await supabase
+          .from('user_openrouter_tokens')
+          .update({ last_used_at: new Date().toISOString() })
+          .eq('user_id', user_id)
+      } catch (decryptError) {
+        console.warn('Failed to decrypt user OpenRouter key:', decryptError)
+      }
+    }
+
+    // 2. If no user key, try agency key
+    if (!userOpenRouterKey) {
+      console.log('[OpenRouter] No user key, checking agency...')
+
+      const { data: membership } = await supabase
+        .from('agency_members')
+        .select('agency_id, agencies(id, openrouter_api_key)')
+        .eq('user_id', user_id)
+        .single()
+
+      const agencyData = membership?.agencies as { id: string; openrouter_api_key: string | null } | null
+
+      if (agencyData?.openrouter_api_key) {
+        try {
+          userOpenRouterKey = await decryptToken(agencyData.openrouter_api_key)
+          keySource = 'agency'
+          console.log('[OpenRouter] Using agency key')
+
+          // Update last_used_at for agency
+          await supabase
+            .from('agencies')
+            .update({ openrouter_key_last_used_at: new Date().toISOString() })
+            .eq('id', agencyData.id)
+        } catch (decryptError) {
+          console.warn('Failed to decrypt agency OpenRouter key:', decryptError)
+        }
+      }
+    }
+
+    // 3. No key available - return error
+    if (!userOpenRouterKey) {
       return new Response(
         JSON.stringify({
-          error: 'OpenRouter not connected. Please connect your OpenRouter account first.',
+          error: 'OpenRouter not connected. Please connect your OpenRouter account or ask your agency admin to configure an API key.',
           requires_openrouter: true
         }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
-    let userOpenRouterKey: string
-    try {
-      userOpenRouterKey = await decryptToken(tokenRecord.encrypted_api_key)
-    } catch (decryptError) {
-      console.error('Failed to decrypt OpenRouter key:', decryptError)
-      return new Response(
-        JSON.stringify({
-          error: 'Failed to decrypt OpenRouter API key. Please reconnect your account.',
-          requires_openrouter: true
-        }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Update last_used_at
-    await supabase
-      .from('user_openrouter_tokens')
-      .update({ last_used_at: new Date().toISOString() })
-      .eq('user_id', user_id)
+    console.log(`[OpenRouter] Key source: ${keySource}`)
 
     // =========================================================================
 
