@@ -55,16 +55,37 @@ function getProviderName(modelId: string): string {
   return providerMap[provider] || provider.charAt(0).toUpperCase() + provider.slice(1)
 }
 
-// Filter for text-to-text models only
+// Filter for text-generation models only (exclude image generators, embeddings, etc.)
 function isTextModel(model: OpenRouterModel): boolean {
-  // Skip image/audio models
-  if (model.architecture?.modality && !model.architecture.modality.includes('text')) {
+  const modality = model.architecture?.modality || ''
+
+  // Must output text only (not images/audio)
+  // Valid: "text->text", "text+image->text" (multimodal input, text output)
+  // Invalid: "text->image", "text+image->text+image", etc.
+  if (modality && !modality.endsWith('->text')) {
     return false
   }
+
   // Skip embedding models
   if (model.id.includes('embed') || model.id.includes('embedding')) {
     return false
   }
+
+  // Skip audio/speech models
+  if (model.id.includes('audio') || model.id.includes('speech') || model.id.includes('tts') || model.id.includes('whisper')) {
+    return false
+  }
+
+  // Skip image generation models
+  if (model.id.includes('dall-e') || model.id.includes('stable-diffusion') || model.id.includes('midjourney')) {
+    return false
+  }
+
+  // Skip deprecated/preview models that don't work well
+  if (model.id.includes('gemini-2.0') || model.id.includes('preview') && !model.id.includes('gemini-3')) {
+    return false
+  }
+
   return true
 }
 
