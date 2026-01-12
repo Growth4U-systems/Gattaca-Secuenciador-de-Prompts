@@ -70,12 +70,12 @@ export async function createProject(data: {
   name: string
   description?: string
 }) {
-  // For now, use a dummy user_id since we don't have auth yet
+  // user_id is now nullable, no need for placeholder
   const { data: newProject, error } = await supabase
     .from('projects')
     .insert({
-      ...data,
-      user_id: '00000000-0000-0000-0000-000000000000', // Placeholder
+      name: data.name,
+      description: data.description,
     })
     .select()
     .single()

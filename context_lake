@@ -1,0 +1,1863 @@
+# PRD
+
+# 📋 PRD: Context Lake Feature for Gatacca
+
+---
+
+## Document Information
+
+| Field | Value |
+| --- | --- |
+| **Product Name** | Gatacca |
+| **Feature Name** | Context Lake |
+| **Version** | 1.0 |
+| **Date** | 11 January 2026 |
+| **Status** | Draft |
+| **Owner** | Growth4U Product Team |
+| **Stakeholders** | Engineering, Design, GTM Clients |
+
+---
+
+## 1. Executive Summary
+
+### 1.1 Problem Statement
+
+Companies using Gatacca currently struggle with a fundamental challenge: **AI systems lack institutional memory and authority awareness**. When AI models generate content or provide recommendations, they treat all information equally—a casual Slack message from three years ago has the same "weight" as the CEO-approved Brand Guidelines updated yesterday.
+
+This creates three critical failures:
+
+1. **The "AI Schizophrenia" Problem:** Different AI sessions produce inconsistent outputs because they access context randomly, leading to brand voice inconsistencies and contradictory information.
+2. **The "Data Swamp" Problem:** Traditional document storage becomes a chaotic repository where valuable, authoritative information is indistinguishable from outdated drafts and irrelevant noise.
+3. **The "Stale Context" Problem:** Static document repositories don't reflect real-time business changes, causing AI to operate with obsolete information.
+
+### 1.2 Proposed Solution
+
+**Context Lake** is a hierarchical, living context management system that transforms how Gatacca serves company-specific knowledge to AI models. Unlike passive data storage (Data Lakes), Context Lake is an **active system** that:
+
+- Structures all company context into a **3-tier hierarchy** (Prelación System)
+- Establishes **relationships** between documents (dependency graphs)
+- Provides **auto-updating** mechanisms when source-of-truth documents change
+- Serves **semantically-indexed, authority-weighted** context to AI models in real-time
+
+### 1.3 Strategic Value Proposition
+
+> "Data Lakes were built to analyze the past. Context Lake is built to create the future."
+> 
+
+Context Lake positions Gatacca as the **"Operating System for Company Memory"**—ensuring that regardless of which AI model a company uses (GPT, Claude, Gemini), the output is always aligned with institutional truth, current strategy, and brand identity.
+
+---
+
+## 2. Goals & Success Metrics
+
+### 2.1 Primary Goals
+
+| Goal | Description |
+| --- | --- |
+| **G1: Eliminate AI Hallucinations** | Reduce factually incorrect AI outputs by ensuring authoritative context always supersedes transient information |
+| **G2: Enforce Brand Consistency** | Guarantee that AI-generated content adheres to the company's Tone of Voice and Brand Guidelines |
+| **G3: Enable Real-Time Context** | Ensure AI models operate with information that has <5 minute latency from source systems |
+| **G4: Automate Context Maintenance** | Reduce manual effort required to keep context updated through cascade update detection and alerts |
+
+### 2.2 Success Metrics (KPIs)
+
+| Metric | Baseline | Target | Measurement Method |
+| --- | --- | --- | --- |
+| **Hallucination Rate** | TBD | <5% | LLM-as-judge evaluation on sample outputs |
+| **Brand Voice Consistency Score** | TBD | >90% | Human evaluation rubric (10-sample weekly audit) |
+| **Context Freshness Latency** | 24+ hours | <5 minutes | Time delta between source edit and index update |
+| **Context Conflict Resolution** | 0% automated | 100% automated | % of tier conflicts resolved by hierarchy engine |
+| **Document Staleness Alerts** | N/A | 100% coverage | % of Tier 2 docs with active validity monitoring |
+| **User NPS (Context Quality)** | TBD | >40 | Post-session survey on context relevance |
+
+---
+
+## 3. User Personas & Use Cases
+
+### 3.1 Primary Personas
+
+### Persona 1: The CMO / Marketing Director
+
+- **Goal:** Ensure all AI-generated marketing content sounds like the brand, not generic AI
+- **Pain:** "Our AI outputs feel inconsistent. The email draft this morning sounded completely different from the LinkedIn post yesterday."
+- **Context Lake Value:** Tier 1 documents (ToV, Brand Guidelines) are injected into every AI interaction, guaranteeing consistency
+
+### Persona 2: The Content Marketing Manager
+
+- **Goal:** Quickly produce on-brand content that references accurate product information
+- **Pain:** "I found out the AI quoted last year's pricing. We updated it 3 months ago but nobody told the AI."
+- **Context Lake Value:** Real-time sync ensures pricing/feature changes propagate immediately; Ripple Editor shows affected downstream content
+
+### Persona 3: The Operations/RevOps Lead
+
+- **Goal:** Maintain clean, accurate company knowledge without manual effort
+- **Pain:** "We have 200+ documents. I have no idea which ones are outdated or contradicting each other."
+- **Context Lake Value:** Context Gardener agent monitors document health and alerts on staleness/conflicts
+
+### 3.2 User Stories
+
+| ID | As a... | I want to... | So that... | Priority |
+| --- | --- | --- | --- | --- |
+| **US-01** | CMO | Upload our Brand Guidelines as a "Tier 1 Pillar" document | The AI always follows our tone of voice, regardless of what other documents say | P0 |
+| **US-02** | Content Manager | See which documents depend on a Pillar I'm about to edit | I can understand the impact before making changes | P0 |
+| **US-03** | Content Manager | Receive automatic alerts when a Tier 2 document is >6 months old | I can review and update or archive it before it misleads the AI | P0 |
+| **US-04** | Marketer | Ask the AI a question and see which sources it used | I can trust the answer and verify if needed | P1 |
+| **US-05** | Admin | Set relationships between documents (e.g., "Sales Script depends on Pricing") | Updates to Pricing trigger alerts for dependent docs | P0 |
+| **US-06** | CMO | View a dashboard showing the "health" of our context | I know at a glance if something is stale or conflicting | P1 |
+| **US-07** | New Team Member | Search the Context Lake for company knowledge | I get authoritative answers weighted by document tier | P1 |
+| **US-08** | Admin | When uploading a document, classify its tier and set validity period | The hierarchy engine can correctly prioritize it | P0 |
+
+---
+
+## 4. Feature Requirements
+
+### 4.1 Core Feature: The Prelación (Hierarchy) System
+
+The hierarchy system is the foundational architecture that enables Context Lake to distinguish "truth" from "noise."
+
+### 4.1.1 Document Tier Taxonomy
+
+| Tier | Name | Description | Examples | Authority Score | Time Decay |
+| --- | --- | --- | --- | --- | --- |
+| **Tier 1** | The Constitution (Pillar) | Immutable foundational documents that define company truth. These override all other sources. | Brand Guidelines, Tone of Voice, ICP Definition, Product Source of Truth, Pricing, Mission/Vision | `1.0` | None (timeless until revoked) |
+| **Tier 2** | The Library (Operative) | Active strategic documents with medium lifespan. Subject to periodic review. | Competitive Analysis, Campaign Briefs, Quarterly Playbooks, Feature Documentation, Sales Scripts | `0.5 - 0.8` | Yes (configurable, default 6 months) |
+| **Tier 3** | The Archive (Transient) | Ephemeral communications and raw data. Never supersedes higher tiers. | Slack history, Email threads, Meeting transcripts, Support tickets, News clippings | `0.0 - 0.3` | Yes (aggressive decay) |
+
+### 4.1.2 Metadata Schema
+
+Every document ingested into Context Lake must have the following metadata:
+
+```
+{
+  "doc_id": "uuid",
+  "doc_tier": 1 | 2 | 3,
+  "authority_score": 0.0 - 1.0,
+  "author_id": "user_uuid",
+  "author_role": "CEO | Manager | Contributor | External",
+  "approval_status": "Approved | Draft | Archived",
+  "validity_start": "ISO-8601 date",
+  "validity_end": "ISO-8601 date | null",
+  "freshness_date": "ISO-8601 timestamp",
+  "parent_dependencies": ["doc_id_1", "doc_id_2"],
+  "child_dependents": ["doc_id_3", "doc_id_4"],
+  "product_tags": ["Product A", "Product B"],
+  "conflict_check": "passed | warning | conflict"
+}
+
+```
+
+### 4.1.3 Authority Score Calculation
+
+The `authority_score` is computed as:
+
+```
+authority_score = (tier_weight × 0.5) + (author_role_weight × 0.3) + (approval_status_weight × 0.2)
+
+```
+
+Where:
+
+- `tier_weight`: Tier 1 = 1.0, Tier 2 = 0.6, Tier 3 = 0.2
+- `author_role_weight`: CEO = 1.0, Director = 0.8, Manager = 0.6, Contributor = 0.4, External = 0.2
+- `approval_status_weight`: Approved = 1.0, Draft = 0.3, Archived = 0.0
+
+---
+
+### 4.2 Core Feature: The Hierarchy Engine
+
+The Hierarchy Engine is the retrieval system that ensures AI models receive context weighted by authority, not just semantic similarity.
+
+### 4.2.1 Retrieval Architecture (3-Layer System)
+
+**Layer 1: The Gatekeeper (Metadata Filtering)**
+
+Before any semantic search occurs, hard filters are applied based on query intent:
+
+| Query Intent | Filter Applied |
+| --- | --- |
+| "Official policy", "guidelines", "rules" | `WHERE doc_tier = 1` |
+| "Current campaign", "this quarter" | `WHERE doc_tier IN (1, 2) AND validity_end > NOW()` |
+| "Historical", "archive", "past" | No tier filter |
+
+**Layer 2: Score Boosting (Weighted Ranking)**
+
+For queries without explicit intent, the final relevance score is computed as:
+
+$$Score_{final} = (alpha cdot S_{semantic}) + (beta cdot S_{keyword}) + (gamma cdot Boost_{hierarchy}) + (delta cdot Decay_{time})$$
+
+Where:
+
+- $S_{semantic}$: Cosine similarity from vector search (0 to 1)
+- $S_{keyword}$: BM25 score from sparse search (normalized 0 to 1)
+- $Boost_{hierarchy}$:
+    - Tier 1: +0.5
+    - Tier 2: +0.2
+    - Tier 3: +0.0
+- $Decay_{time}$: $e^{-\lambda \cdot days\_since\_update}$ (applied only to Tier 2 & 3)
+
+**Practical Example:**
+
+Query: "What is our sales strategy?"
+
+| Document | Tier | Semantic Score | Final Score (with boosting) |
+| --- | --- | --- | --- |
+| Sales Playbook 2025 (Tier 1) | 1 | 0.72 | 0.72 + 0.5 = **1.22** ✅ |
+| Slack thread about sales (Tier 3) | 3 | 0.89 | 0.89 + 0.0 - 0.15 = **0.74** |
+
+The Tier 1 document wins despite lower semantic similarity.
+
+**Layer 3: Semantic Reranking (The Judge)**
+
+After initial retrieval (top 50 candidates), a cross-encoder reranker (e.g., Cohere Rerank) performs a final pass:
+
+- Reads full query + document text simultaneously
+- Detects nuance (negations, specificity)
+- Reorders top 10-25 results for final context assembly
+
+### 4.2.2 Conflict Resolution Protocol
+
+When the system detects potentially contradictory information:
+
+1. **Detection:** During retrieval, if top-5 results contain documents from different tiers with conflicting claims (detected via entity/claim extraction)
+2. **Resolution:** Higher tier always wins
+3. **Logging:** Conflict is logged for Context Gardener review
+4. **User Alert:** Optional flag shown to user: "Note: This answer prioritized your Brand Guidelines (Tier 1) over a Slack discussion (Tier 3)"
+
+---
+
+### 4.3 Core Feature: Document Relationships (Dependency Graph)
+
+A critical differentiator of Context Lake is the explicit modeling of how documents relate to each other.
+
+### 4.3.1 Relationship Types
+
+| Type | Description | Example |
+| --- | --- | --- |
+| **Parent-Child** | One document is the authoritative source for another | "Pricing Page" (Tier 2) → child of → "Product Pricing" (Tier 1) |
+| **Sibling** | Documents cover the same topic at the same tier | "Competitor A Analysis" ↔ "Competitor B Analysis" |
+| **Reference** | One document cites another without hierarchy | "Blog Post" → references → "Case Study" |
+
+### 4.3.2 Relationship Definition
+
+Users can define relationships via:
+
+1. **Manual Assignment:** During ingestion or in the document detail view
+2. **AI-Suggested:** Context Lake analyzes content and suggests likely relationships (user confirms)
+3. **Explicit Mentions:** If Document A contains an explicit link/mention of Document B, relationship is auto-created
+
+### 4.3.3 Cascade Update Detection
+
+When a Tier 1 or Tier 2 document is edited:
+
+1. System identifies all documents with `parent_dependencies` pointing to edited doc
+2. **Shallow Check:** If edit is minor (formatting, typos), no alert
+3. **Deep Check:** If edit changes key entities (prices, names, dates), system triggers:
+    - List of affected dependent documents
+    - Option to:
+        - a) Auto-update dependents (AI rewrites affected sections)
+        - b) Flag dependents for manual review
+        - c) Mark dependents as "Potentially Stale"
+
+---
+
+### 4.4 Core Feature: Real-Time Context Ingestion
+
+Context Lake must reflect reality, not yesterday's reality.
+
+### 4.4.1 Ingestion Pipeline
+
+```
+┌─────────────────┐     ┌──────────────┐     ┌─────────────────┐     ┌─────────────┐
+│  Source Systems │ ──▶ │  CDC Stream  │ ──▶ │   Processor     │ ──▶ │ Vector DB   │
+│  (Notion, GDrive│     │  (Debezium)  │     │  (RisingWave)   │     │  (Qdrant)   │
+│   Slack, etc.)  │     │              │     │  - Filter       │     │             │
+└─────────────────┘     └──────────────┘     │  - Enrich       │     └─────────────┘
+                                              │  - Chunk        │
+                                              │  - Vectorize    │
+                                              └─────────────────┘
+
+```
+
+**Latency Target:** Document approved → Indexed and retrievable in <5 minutes
+
+### 4.4.2 Source Connectors (Phase 1)
+
+| Source | Connector Type | Sync Method |
+| --- | --- | --- |
+| Google Drive | OAuth + Webhooks | Real-time on edit |
+| Notion | API + Webhooks | Real-time on edit |
+| Slack | Bot + Events API | Real-time (Tier 3 only) |
+| Manual Upload | Direct | Immediate |
+
+### 4.4.3 Document Processing Pipeline
+
+1. **Extraction:** Text extraction from PDF, DOCX, HTML, Markdown
+2. **Chunking:**
+    - Tier 1: Semantic chunking (preserve meaning boundaries)
+    - Tier 2: Hierarchical chunking (preserve structure)
+    - Tier 3: Fixed-size chunking (speed-optimized)
+3. **Enrichment:** Auto-detect author, extract entities, suggest tier
+4. **Vectorization:** Generate embeddings (model: TBD, e.g., OpenAI `text-embedding-3-large`)
+5. **Indexing:** Write to vector DB with full metadata payload
+
+---
+
+### 4.5 Core Feature: The Context Gardener (Maintenance Agent)
+
+An automated agent that maintains Context Lake health.
+
+### 4.5.1 Gardener Responsibilities
+
+| Task | Trigger | Action |
+| --- | --- | --- |
+| **Staleness Detection** | Tier 2 doc validity_end approaching (30/14/7 days) | Send alert to document owner |
+| **Staleness Detection** | Tier 2 doc >6 months without edit | Prompt review: "Still valid?" |
+| **Conflict Detection** | Two docs at same tier contain contradictory claims | Flag for human resolution |
+| **Orphan Detection** | Document has no relationships and low usage | Suggest archive or relationship |
+| **Cascade Notification** | Parent doc edited with entity changes | Notify dependent doc owners |
+| **Usage Analytics** | Weekly digest | Report: most/least used docs, query patterns |
+
+### 4.5.2 Alert Channels
+
+- In-app notification center
+- Email digest (configurable frequency)
+- Slack/Teams integration (optional)
+
+---
+
+### 4.6 Core Feature: GraphRAG for Synthesis Queries
+
+For high-level questions that span many documents, Context Lake implements GraphRAG.
+
+### 4.6.1 When GraphRAG is Used
+
+| Query Type | Example | Retrieval Method |
+| --- | --- | --- |
+| **Specific Fact** | "What is the price of Product X?" | Standard Vector Search |
+| **Synthesis/Global** | "What are the recurring themes in our customer feedback?" | GraphRAG |
+
+### 4.6.2 GraphRAG Architecture
+
+1. **Entity Extraction:** Extract entities (Products, People, Concepts) and relationships from Tier 1 & 2 docs
+2. **Community Detection:** Cluster related entities into semantic communities (Leiden algorithm)
+3. **Hierarchical Summaries:** Pre-generate summaries at community and super-community levels
+4. **Query Routing:** If query classified as "synthesis," navigate graph hierarchy instead of vector search
+
+---
+
+## 5. UI/UX Requirements
+
+Based on Tab 7 research, Context Lake requires four primary interfaces:
+
+### 5.1 The Context Radar (Dashboard)
+
+**Purpose:** At-a-glance health view of company context
+
+**Visual Design:**
+
+- **Central View:** Concentric rings (solar system metaphor)
+    - **Core (Gold):** Tier 1 Pillar documents (large, fixed icons)
+    - **Middle Orbit (Blue):** Tier 2 Operative documents (rotating, with health bars)
+    - **Outer Cloud (Gray):** Tier 3 Transient documents (small dots)
+- **Health Indicators:**
+    - Green ring = Fresh & valid
+    - Yellow ring = Approaching staleness
+    - Red ring = Stale or conflicting
+- **Relationship Lines:** Hover on any document → illuminate dependency connections
+
+**Sidebar: "The Gardener"**
+
+- Context Debt queue (documents needing attention)
+- Recent conflicts/alerts
+- Quick actions (Archive, Refresh, Assign)
+
+### 5.2 The Ingestion Triage (Upload Flow)
+
+**Purpose:** Ensure no document enters Context Lake without proper classification
+
+**Flow:**
+
+1. **Drag/Drop Upload**
+2. **AI Analysis:** "This appears to be a Brand Guidelines document"
+3. **Tier Selector:** Vertical slider with warnings
+    - Tier 1: ⚠️ "This will override existing brand context"
+    - Tier 2: Requires validity period
+    - Tier 3: Default, no validity required
+4. **Relationship Assignment:** "Which products/topics does this relate to?"
+5. **Conflict Check:** Real-time scan for contradictions with existing docs
+6. **Confirm & Index**
+
+### 5.3 The Ripple Editor
+
+**Purpose:** Edit Pillar documents with full visibility into downstream impact
+
+**Layout:** Split screen
+
+- **Left Panel:** Document editor
+- **Right Panel:** Impact Preview
+    - List of dependent documents
+    - Highlighted sections that reference edited content
+    - Options: "Auto-update", "Flag for review", "Ignore"
+- **Save Button:** "Save & Propagate" (with ripple animation)
+
+### 5.4 The X-Ray Chat (AI Interface)
+
+**Purpose:** Transparent AI interaction showing context sources
+
+**Layout:**
+
+- **Center:** Standard chat interface
+- **Right Sidebar: Sources Panel**
+    - ✅ Documents used (with tier badges)
+    - ⛔ Documents ignored (with reason: "Tier 3 contradicted Tier 1", "Expired")
+    - Confidence indicator per claim
+- **Inline Citations:** Clickable references to source chunks within AI responses
+
+---
+
+## 6. Technical Architecture
+
+### 6.1 System Components
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                           CONTEXT LAKE ARCHITECTURE                        │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│   ┌───────────────┐    ┌───────────────┐    ┌───────────────┐             │
+│   │   Connectors  │    │   Connectors  │    │   Connectors  │             │
+│   │  Google Drive │    │    Notion     │    │    Slack      │             │
+│   └───────┬───────┘    └───────┬───────┘    └───────┬───────┘             │
+│           │                    │                    │                      │
+│           └────────────────────┼────────────────────┘                      │
+│                                ▼                                           │
+│                    ┌───────────────────────┐                               │
+│                    │    CDC / Event Bus    │                               │
+│                    │      (Debezium)       │                               │
+│                    └───────────┬───────────┘                               │
+│                                │                                           │
+│                                ▼                                           │
+│                    ┌───────────────────────┐                               │
+│                    │   Stream Processor    │                               │
+│                    │     (RisingWave)      │                               │
+│                    │   - Chunking          │                               │
+│                    │   - Enrichment        │                               │
+│                    │   - Metadata Gen      │                               │
+│                    └───────────┬───────────┘                               │
+│                                │                                           │
+│                                ▼                                           │
+│           ┌────────────────────┴────────────────────┐                      │
+│           │                                         │                      │
+│           ▼                                         ▼                      │
+│   ┌───────────────────┐                   ┌───────────────────┐            │
+│   │   Vector Store    │                   │  Knowledge Graph  │            │
+│   │     (Qdrant)      │                   │    (GraphRAG)     │            │
+│   │ - Dense vectors   │                   │ - Entities        │            │
+│   │ - Sparse vectors  │                   │ - Relationships   │            │
+│   │ - Metadata        │                   │ - Summaries       │            │
+│   └─────────┬─────────┘                   └─────────┬─────────┘            │
+│             │                                       │                      │
+│             └───────────────────┬───────────────────┘                      │
+│                                 │                                          │
+│                                 ▼                                          │
+│                     ┌───────────────────────┐                              │
+│                     │    Hierarchy Engine   │                              │
+│                     │   - Score Boosting    │                              │
+│                     │   - Metadata Filter   │                              │
+│                     │   - Reranking         │                              │
+│                     └───────────┬───────────┘                              │
+│                                 │                                          │
+│                                 ▼                                          │
+│                     ┌───────────────────────┐                              │
+│                     │      API Layer        │                              │
+│                     │  (Gatacca Backend)    │                              │
+│                     └───────────────────────┘                              │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+```
+
+### 6.2 Technology Stack
+
+| Component | Technology | Rationale |
+| --- | --- | --- |
+| Vector Database | Qdrant | Native hybrid search, score boosting, payload filtering |
+| Stream Processing | RisingWave | Real-time streaming SQL, native vector support |
+| Knowledge Graph | Neo4j or Custom GraphRAG | Entity relationships, community detection |
+| Embeddings | OpenAI text-embedding-3-large | High quality, cost-effective |
+| Reranking | Cohere Rerank v3.5 | Best-in-class cross-encoder |
+| CDC | Debezium | Industry standard, wide connector support |
+| Backend API | Python (FastAPI) | Async, ML-friendly |
+
+### 6.3 Data Model (Database Schema)
+
+**Documents Table**
+
+```sql
+CREATE TABLE documents (
+    id UUID PRIMARY KEY,
+    company_id UUID NOT NULL,
+    title TEXT NOT NULL,
+    content_hash TEXT,
+    doc_tier INTEGER CHECK (doc_tier IN (1, 2, 3)),
+    authority_score FLOAT,
+    author_id UUID,
+    author_role TEXT,
+    approval_status TEXT,
+    validity_start DATE,
+    validity_end DATE,
+    freshness_date TIMESTAMP,
+    source_type TEXT,
+    source_url TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+```
+
+**Relationships Table**
+
+```sql
+CREATE TABLE document_relationships (
+    id UUID PRIMARY KEY,
+    parent_doc_id UUID REFERENCES documents(id),
+    child_doc_id UUID REFERENCES documents(id),
+    relationship_type TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(parent_doc_id, child_doc_id)
+);
+
+```
+
+**Chunks Table (Vector DB - Qdrant Collection)**
+
+```json
+{
+  "id": "uuid",
+  "vector": [/* dense embedding */],
+  "sparse_vector": {/* BM25 sparse */},
+  "payload": {
+    "doc_id": "uuid",
+    "doc_tier": 1,
+    "authority_score": 0.95,
+    "chunk_index": 0,
+    "text": "...",
+    "validity_end": "2026-12-31",
+    "freshness_date": "2026-01-11T12:00:00Z"
+  }
+}
+
+```
+
+---
+
+## 7. Implementation Roadmap
+
+### Phase 1: MVP — Foundation (Weeks 1-4)
+
+**Objective:** Validate core hierarchy and retrieval mechanics
+
+| Week | Deliverables |
+| --- | --- |
+| 1-2 | • Qdrant cluster deployment |
+| • Basic ingestion API (manual upload only) |  |
+| • Tier classification UI |  |
+| • Metadata schema implementation |  |
+| 3-4 | • Hybrid search (dense + sparse) |
+| • Score boosting by tier |  |
+| • Basic retrieval API |  |
+| • Test with 50 documents (25 Tier 1, 25 Tier 3) |  |
+
+**Success Criteria:** AI queries demonstrably prefer Tier 1 documents over Tier 3 for same-topic queries
+
+### Phase 2: Hierarchy Engine (Weeks 5-8)
+
+**Objective:** Full prelación system with relationships
+
+| Week | Deliverables |
+| --- | --- |
+| 5-6 | • Cohere Reranker integration |
+| • Relationship definition UI |  |
+| • Dependency graph storage |  |
+| • Cascade update detection |  |
+| 7-8 | • Ingestion Triage flow |
+| • Ripple Editor MVP |  |
+| • Conflict detection algorithm |  |
+| • Metadata filtering by query intent |  |
+
+**Success Criteria:** <5% hallucination rate on test query set; cascade alerts fire correctly
+
+### Phase 3: Real-Time & Automation (Weeks 9-12)
+
+**Objective:** Live sync and Context Gardener
+
+| Week | Deliverables |
+| --- | --- |
+| 9-10 | • RisingWave CDC pipeline |
+| • Google Drive connector |  |
+| • Notion connector |  |
+| • <5 min freshness latency |  |
+| 11-12 | • Context Gardener agent |
+| • Staleness alerts |  |
+| • Usage analytics dashboard |  |
+| • Context Radar dashboard |  |
+
+**Success Criteria:** End-to-end flow from source edit to retrievable vector in <5 minutes
+
+### Phase 4: Advanced & GraphRAG (Weeks 13-16)
+
+**Objective:** Synthesis capabilities and polish
+
+| Week | Deliverables |
+| --- | --- |
+| 13-14 | • GraphRAG implementation (Tier 1 & 2 only) |
+| • Synthesis query routing |  |
+| • X-Ray Chat UI |  |
+| 15-16 | • Slack connector (Tier 3) |
+| • Performance optimization |  |
+| • Documentation |  |
+| • Beta launch |  |
+
+**Success Criteria:** Synthesis queries return accurate, comprehensive summaries
+
+---
+
+## 8. Risks & Mitigations
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| **Reranker latency impacts UX** | Medium | High | Limit reranking to top-25 docs; use only for complex queries; implement caching |
+| **Users mis-classify document tiers** | High | High | AI-suggested tier with confidence score; validation rules (e.g., "Only 5 Tier 1 docs per category"); admin review |
+| **Context contamination (bad data enters)** | Medium | High | Prelación acts as firewall—even if false info enters at Tier 3, it's suppressed by Tier 1; approval workflow for Tier 1 |
+| **CDC pipeline failures cause stale context** | Low | High | Monitoring + alerting on lag; fallback to batch sync; freshness badges in UI |
+| **Relationship graph becomes unmanageable** | Medium | Medium | Limit relationships per doc; AI-suggested pruning; visualization tools |
+| **Adoption friction—users skip tier assignment** | High | Medium | Default to Tier 3 if unassigned; gamification (completion scores); required tier for certain actions |
+
+---
+
+## 9. Dependencies & Constraints
+
+### 9.1 Dependencies
+
+| Dependency | Type | Owner | Risk if Delayed |
+| --- | --- | --- | --- |
+| Qdrant cloud infrastructure | External | DevOps | Blocks all retrieval work |
+| Cohere API access | External | Vendor | Blocks reranking; fallback to simpler ranking |
+| RisingWave setup | Internal | Data Eng | Blocks real-time; use batch temporarily |
+| Embedding model selection | Internal | ML Team | Affects retrieval quality; use OpenAI default |
+| Source system OAuth grants | External | Clients | Blocks connectors for that source |
+
+### 9.2 Constraints
+
+- **Budget:** Reranker API costs scale with query volume; implement caching
+- **Latency:** P95 retrieval should be <500ms for good UX
+- **Storage:** Vector storage costs scale with chunk count; implement TTL for Tier 3
+- **Compliance:** GDPR/SOC2 considerations for customer data in vector DB
+
+---
+
+## 10. Acceptance Criteria
+
+### 10.1 Feature Complete (Must Have)
+
+- [ ]  Users can upload documents and assign Tier (1/2/3)
+- [ ]  Tier 1 documents demonstrably outrank Tier 3 in retrieval
+- [ ]  Users can define parent-child relationships between documents
+- [ ]  Editing a Tier 1 doc triggers alerts for dependent documents
+- [ ]  Staleness alerts fire for Tier 2 docs approaching validity_end
+- [ ]  Context Radar dashboard displays document health by tier
+- [ ]  Ingestion pipeline processes uploaded docs in <5 minutes
+- [ ]  AI responses include source citations with tier badges
+
+### 10.2 Quality Gates
+
+- [ ]  Hallucination rate <5% on benchmark query set
+- [ ]  Brand voice consistency >90% on human evaluation
+- [ ]  P95 retrieval latency <500ms
+- [ ]  Zero data loss in CDC pipeline (verified by reconciliation)
+- [ ]  100% of Tier 2 docs have validity monitoring enabled
+
+---
+
+## 11. Appendix
+
+### 11.1 Glossary
+
+| Term | Definition |
+| --- | --- |
+| **Context Lake** | Active knowledge management system designed for AI consumption |
+| **Prelación** | Spanish legal term meaning "priority" or "precedence"; the hierarchy system |
+| **Tier 1 (Pillar)** | Foundational documents with absolute authority |
+| **Tier 2 (Operative)** | Active strategic documents with medium lifespan |
+| **Tier 3 (Transient)** | Ephemeral communications with low/decaying authority |
+| **CDC** | Change Data Capture; real-time sync of data changes |
+| **Score Boosting** | Modifying relevance score based on metadata |
+| **Reranking** | Second-pass ordering using cross-encoder model |
+| **GraphRAG** | Graph-based RAG for synthesis queries |
+| **Context Gardener** | Automated agent maintaining Context Lake health |
+
+### 11.2 Related Documents
+
+- Tab 2-7: Research & Concept Development (source page)
+- Gatacca Product Vision (TBD link)
+- Qdrant Documentation: [qdrant.tech/documentation](http://qdrant.tech/documentation)
+- Cohere Rerank: [cohere.com/rerank](http://cohere.com/rerank)
+- GraphRAG: [microsoft.github.io/graphrag](http://microsoft.github.io/graphrag)
+
+---
+
+**Document Status:** Ready for Review
+
+---
+
+Would you like me to save this PRD to a new page in your Documents database, or make any adjustments to specific sections?
+
+## Research & Docs
+
+### Libro Blanco Técnico Estratégico: Arquitectura de "Context Lake" y Protocolo de Contexto de Modelos (MCP) para Gatacca
+
+## 1. Resumen Ejecutivo: La Transición de la Información al Conocimiento Accionable
+
+En el actual ecosistema de la inteligencia artificial empresarial, nos encontramos en un punto de inflexión crítico. Las arquitecturas de datos tradicionales, diseñadas durante las últimas dos décadas para satisfacer las necesidades de la analítica humana y la generación de informes estáticos, se están revelando insuficientes para alimentar la nueva generación de agentes de Inteligencia Artificial Generativa. Gatacca, bajo la visión de Growth4u, ha identificado correctamente esta limitación fundamental. La propuesta de implementar un **"Context Lake"** (Lago de Contexto), gobernado por un sistema de **"Prelación"** o jerarquía de autoridad documental, no es simplemente una mejora incremental sobre el paradigma del Data Lake; representa una reingeniería completa de cómo la organización captura, procesa y sirve su capital intelectual.
+
+Este documento técnico, elaborado desde la perspectiva de la Arquitectura de IA y Estrategia de Conocimiento, valida exhaustivamente la tesis de Gatacca. Nuestra investigación confirma que el mero almacenamiento masivo de datos no estructurados —el enfoque clásico del "Big Data"— resulta en un "pantano de datos" ("Data Swamp") que confunde a los Modelos de Lenguaje Grande (LLMs), induciendo alucinaciones y respuestas irrelevantes.1 Para que un agente de IA opere con la precisión de un experto humano, no necesita acceso a *todos* los datos, sino acceso al *contexto* correcto, en el momento preciso y con la autoridad adecuada.
+
+El análisis que se presenta a continuación detalla una arquitectura compuesta por tres pilares tecnológicos avanzados que, en conjunto, materializan la visión de Gatacca:
+
+1. **El Context Lake como Repositorio Semántico Vivo:** A diferencia de los almacenes estáticos, validamos el uso de tecnologías de streaming de datos en tiempo real, específicamente **RisingWave**, para garantizar que el conocimiento disponible para la IA tenga una latencia cercana a cero, superando la limitación de "conocimiento congelado" de los modelos pre-entrenados.3
+2. **El Protocolo de Contexto de Modelos (MCP):** Adoptamos el estándar abierto desarrollado por Anthropic como el bus de interoperabilidad universal. MCP resuelve el problema de la fragmentación de datos (silos) permitiendo que nuestros agentes se conecten de manera segura y estandarizada a fuentes dispares como Google Drive, Slack y bases de datos operacionales, sin la necesidad de mantener docenas de conectores personalizados frágiles.5
+3. **El Motor de Jerarquía (Hierarchy Engine):** El núcleo de nuestra diferenciación estratégica. Implementamos una lógica de **"Prelación Ponderada"** utilizando Búsqueda Híbrida y técnicas de *Score Boosting* en bases de datos vectoriales como **Qdrant**, refinadas posteriormente por modelos de *Reranking* (Cohere). Este motor permite al sistema distinguir matemáticamente entre un documento constitucional de la empresa (Tier 1) y una conversación informal (Tier 2), asegurando que la IA priorice la verdad institucional sobre el ruido transitorio.7
+
+A lo largo de este informe, desglosaremos la implementación técnica, la justificación teórica y la hoja de ruta estratégica para transformar a Gatacca en una organización "AI-Native", donde el conocimiento fluye dinámicamente desde su creación hasta la inferencia de la IA, sin fricción y con total gobernanza.
+
+## 2. Validación de Concepto y Arquitectura de Datos: Del Lago de Datos al Lago de Contexto
+
+Para comprender la magnitud de la propuesta de "Context Lake", es imperativo primero deconstruir las limitaciones de las arquitecturas heredadas y definir con precisión ontológica qué constituye este nuevo paradigma. La industria tecnológica ha transitado desde los Data Warehouses (estructurados y rígidos) hacia los Data Lakes (flexibles pero caóticos), y ahora hacia los Context Lakes (semánticos y vivos).
+
+### 2.1. La Insuficiencia del Paradigma "Data Lake" para la IA Generativa
+
+El concepto de Data Lake surgió como respuesta a la explosión del Big Data. Se diseñó bajo la premisa de "ingestar ahora, procesar después". Herramientas como Hadoop y S3 permitieron a las empresas volcar terabytes de logs, correos electrónicos, PDFs y tablas SQL en un repositorio centralizado. Según la literatura técnica analizada 1, el éxito del Data Lake es indiscutible en el ámbito de la analítica retrospectiva: permite a los científicos de datos entrenar modelos predictivos y a los analistas de negocio generar dashboards de rendimiento trimestral.
+
+Sin embargo, cuando intentamos conectar un LLM directamente a un Data Lake para crear un sistema de RAG (Retrieval-Augmented Generation), el modelo falla estrepitosamente. Las razones son estructurales:
+
+1. **Optimización de Recuperación Incompatible:** Los Data Lakes están optimizados para el escaneo de alto rendimiento (throughput) y consultas deterministas. Un analista pregunta: *"Dame la suma total de ventas de la región Norte en 2024"*. El sistema escanea columnas y devuelve un número exacto. Un agente de IA, por el contrario, realiza consultas probabilísticas y semánticas: *"¿Cuál es la postura estratégica de Gatacca frente a la competencia asiática?"*. Un Data Lake tradicional no tiene índices semánticos para responder a esto; solo puede buscar palabras clave exactas, lo que resulta en una recuperación pobre o nula.9
+2. **Latencia de Ingestión (The Freshness Gap):** Los pipelines de Data Lake suelen ser procesos por lotes (batch) que corren diariamente o semanalmente. Si se actualiza un documento de política crítica a las 10:00 AM, y el pipeline corre a medianoche, la IA operará con información obsoleta durante 14 horas. En un entorno operativo dinámico, esto es inaceptable. Los modelos de IA, como GPT-4, ya sufren de estar "congelados en el tiempo" debido a su fecha de corte de entrenamiento; el sistema de recuperación no puede permitirse añadir más latencia.3
+3. **Ausencia de Contexto Semántico (Data Swamp):** Al volcar datos sin procesar, se pierde el contexto. Un archivo llamado final_v2.pdf en una carpeta olvidada puede contradecir a política_oficial_2025.pdf. Sin una capa de curación y entendimiento semántico, el Data Lake se convierte en un pantano donde la información valiosa es indistinguible del ruido.
+
+![](attachment:ddca84bb-8ffb-4048-a688-795c9b28a640:image3.png)
+
+### 2.2. Definición Ontológica del "Context Lake" para Gatacca
+
+Basándonos en las implementaciones de vanguardia observadas en empresas como Tacnode y RisingWave, definimos el **Context Lake** no como un almacén pasivo, sino como un sistema activo de gestión de conocimiento diseñado específicamente para la inferencia de máquinas.1
+
+El Context Lake de Gatacca se caracterizará por tres atributos fundamentales que lo diferencian de cualquier infraestructura previa en la organización:
+
+1. **Naturaleza Vectorial Nativa:** La unidad atómica de almacenamiento no es el "archivo" o la "fila", sino el "vector" (embedding). Cada pieza de información que entra al lago es convertida inmediatamente en una representación numérica multidimensional que captura su significado semántico. Esto permite que la recuperación se base en conceptos, no en palabras clave.9
+2. **Streaming y Tiempo Real (CDC):** El Context Lake se alimenta de flujos de datos continuos. Utilizando tecnologías de *Change Data Capture* (CDC), cualquier modificación en los sistemas fuente (un cambio en una base de datos Postgres, una edición en Notion) se propaga al lago en milisegundos. Esto asegura que el "Grounding" de la IA sea siempre consistente con la realidad operativa actual de Gatacca.4
+3. **Curación Automatizada (The Hierarchy Engine):** A diferencia del volcado indiscriminado del Data Lake, el Context Lake aplica reglas estrictas de ingreso. Los datos son enriquecidos con metadatos de autoridad, vigencia y jerarquía antes de ser indexados. Es aquí donde reside el sistema de "Prelación": el lago sabe intrínsecamente que un documento firmado por el CEO tiene más "peso gravitacional" que un borrador técnico.
+
+### 2.3. Validación de Mercado y Tecnologías Habilitadoras
+
+Nuestra investigación confirma que esta arquitectura no es teórica, sino que representa el estado del arte en ingeniería de datos para IA.
+
+- **Validación por Problema (Tacnode):** Tacnode identifica explícitamente que las arquitecturas heredadas fallan en la inferencia. Argumentan que el "Context Lake" es la nueva fundación necesaria porque los LLMs requieren datos estructurados semánticamente para evitar la alucinación. Sin esta capa, la IA es un "loro estocástico" sin anclaje en la realidad empresarial.2
+- **Validación por Solución (RisingWave & Qdrant):** RisingWave se posiciona como el motor de ingestión para estos lagos, permitiendo transformar flujos de eventos en vectores en tiempo real. Su integración con bases de datos vectoriales como Qdrant demuestra que la tecnología para construir pipelines de latencia ultra-baja ya está madura y disponible.1
+- **Validación por Infraestructura (Pulumi):** El concepto de "Grounding" o anclaje es central. Pulumi Neo demuestra que cuando una IA se entrena o conecta al contexto específico de la infraestructura de una empresa (su "Context Lake"), supera dramáticamente a los modelos genéricos en tareas de resolución de problemas y generación de código.13
+
+En conclusión, la transición hacia un Context Lake es técnicamente viable y estratégicamente indispensable. Para Gatacca, esto implica abandonar la idea de "guardar archivos" y adoptar la mentalidad de "indexar conocimiento vivo".
+
+## 3. El Protocolo de Contexto de Modelos (MCP): El Tejido Conectivo Estratégico
+
+Una vez establecido el repositorio central (el Context Lake), el siguiente desafío crítico es la conectividad. ¿Cómo conectamos este vasto océano de vectores semánticos con los diversos agentes de IA, interfaces de chat y herramientas de automatización que Gatacca desplegará? La respuesta tradicional sería construir APIs REST personalizadas para cada integración, un enfoque que escala mal y es costoso de mantener.
+
+La solución estratégica que proponemos es la adopción del **Model Context Protocol (MCP)**. MCP no es solo una especificación técnica; es un cambio de paradigma en la interoperabilidad de la IA, impulsado por líderes de la industria como Anthropic.5
+
+### 3.1. Anatomía Técnica del MCP
+
+Para el equipo de ingeniería de Gatacca, es vital comprender que MCP funciona bajo una arquitectura cliente-host-servidor que desacopla la inteligencia (el modelo) de los datos (el contexto).
+
+1. El Servidor MCP (The Context Provider):
+    
+    Este es el componente que Gatacca debe desarrollar o configurar. Un servidor MCP es un servicio ligero que expone los datos de la organización. A diferencia de una API tradicional que expone endpoints, un servidor MCP expone tres primitivas estandarizadas 14:
+    
+    - **Recursos (Resources):** Datos pasivos que pueden ser leídos por la IA (ej. documentos, logs, registros de base de datos). Son análogos a archivos GET.
+    - **Herramientas (Tools):** Funciones ejecutables que la IA puede invocar (ej. buscar_documento_pilar(query), crear_ticket_jira()). Esto permite a la IA tomar acción.
+    - **Prompts:** Plantillas reutilizables de interacción (ej. "Resumir este incidente de seguridad").
+2. El Cliente MCP (The Connector):
+    
+    Este componente reside dentro de la aplicación que utiliza el LLM (como Claude Desktop, o la interfaz web personalizada de Gatacca). El cliente mantiene una conexión persistente con los servidores configurados, negociando capacidades y enrutando solicitudes.
+    
+3. El Host (The Orchestrator):
+    
+    Es la aplicación principal (el "cerebro") que decide cuándo consultar al servidor MCP. El host asegura que el LLM reciba el contexto adecuado sin verse abrumado por toda la base de datos.
+    
+
+### 3.2. Implementación de la Estrategia de Prelación vía MCP
+
+Un hallazgo crucial de nuestra investigación en la especificación técnica de MCP 5 es que el protocolo *ya contempla* mecanismos nativos para la priorización, lo cual valida directamente el requisito de "Prelación" de Gatacca sin necesidad de inventar estándares propietarios.
+
+- Anotaciones de Prioridad (Priority Annotations):
+    
+    El esquema JSON-RPC de MCP define una interfaz Annotations que puede adjuntarse a cualquier recurso. Dentro de esta interfaz, existe el campo explícito priority, un valor flotante normalizado entre 0.0 y 1.0.
+    
+    - **Aplicación en Gatacca:** Cuando el servidor MCP de Gatacca devuelve una lista de documentos encontrados en el Context Lake, asignará automáticamente priority: 1.0 a los Documentos Pilares (Tier 1) y valores inferiores (ej. 0.5 o 0.1) a los Documentos Transitorios.
+    - **Impacto:** Esto instruye explícitamente al Host (el agente de IA) sobre qué información debe considerar "verdad canónica" y cuál es meramente informativa. Es la implementación programática de la autoridad.
+- Seguridad y Aislamiento:
+    
+    El diseño de MCP sigue el principio de mínimo privilegio. Los servidores no ven todo el historial de conversación del usuario; solo reciben las llamadas a herramientas o solicitudes de recursos específicas.5 Esto es vital para Gatacca, ya que permite conectar fuentes sensibles (como datos financieros o legales en el Context Lake) sin exponerlas indiscriminadamente al contexto general del modelo.
+    
+
+### 3.3. Ecosistema y Aceleradores
+
+La adopción de MCP permite a Gatacca aprovechar un ecosistema de conectores pre-construidos ("Reference Implementations").
+
+- **Google Drive & Notion:** Ya existen servidores MCP comunitarios y oficiales para estas plataformas.15 Esto significa que podemos integrar los repositorios documentales actuales de Gatacca en el sistema de IA en cuestión de días, no meses.
+- **Bases de Datos (PostgreSQL/Qdrant):** Existen adaptadores para bases de datos que permiten exponer tablas y colecciones vectoriales directamente como recursos MCP.17
+
+![](attachment:c99d16be-a592-4f0b-ba2a-fefb3db5eabe:image2.png)
+
+La integración de MCP convierte la infraestructura de Gatacca en un sistema modular. Si mañana decidimos cambiar Qdrant por Weaviate, o Google Drive por SharePoint, solo necesitamos cambiar el servidor MCP correspondiente; el agente de IA (el Cliente) no necesita ser reprogramado. Esta flexibilidad es el pilar de una estrategia de IA a largo plazo.
+
+## 4. El "Motor de Jerarquía": Ingeniería de la Prelación y la Verdad
+
+Hemos definido dónde se almacenan los datos (Context Lake) y cómo viajan (MCP). Ahora abordamos el corazón de la solicitud del usuario: la lógica de negocio que discrimina la verdad del ruido. En términos técnicos, esto es el problema de **Retrieval Ranking and Re-ranking**.
+
+Un sistema de búsqueda vectorial estándar (basado puramente en similitud de coseno) es "agnóstico a la autoridad". Si un empleado escribe en Slack una opinión errónea pero semánticamente muy descriptiva sobre un proceso, y el manual oficial es técnico y escueto, la búsqueda vectorial simple devolverá el chat de Slack primero. Esto es inaceptable para Gatacca.
+
+El "Hierarchy Engine" que proponemos es un sistema de tres capas diseñado para imponer la voluntad institucional sobre la similitud estadística.
+
+### 4.1. Taxonomía de Documentos y Metadatos
+
+Antes de cualquier algoritmo, necesitamos una estructura de datos rigurosa. Cada documento ingestado en el Context Lake debe ser etiquetado (automática o manualmente) con metadatos críticos que residirán en el *payload* de la base de datos vectorial.19
+
+- **doc_tier (Entero 1-3):**
+    - **Tier 1 (Pilar - La Constitución):** Documentos inmutables que definen la verdad de la empresa. Estatutos, Visión, Manuales de Operaciones, OKRs anuales, Políticas de RRHH.
+    - **Tier 2 (Operativo - La Acción):** Documentos de vida media. Especificaciones de proyectos activos, Memos trimestrales, Informes de estado, Documentación técnica de productos actuales.
+    - **Tier 3 (Transitorio - El Flujo):** Comunicaciones efímeras. Historiales de Slack, correos electrónicos diarios, notas de reuniones rápidas, noticias externas, tickets de soporte cerrados.
+- **authority_score (Float 0.0 - 1.0):** Un puntaje calculado basado en el autor (CEO = 1.0, Becario = 0.5) y el estado de revisión (Aprobado = 1.0, Borrador = 0.3).
+- **validity_period (Rango de Fechas):** Define la ventana de tiempo en la que el documento es válido. Un documento Tier 1 vencido pierde inmediatamente su estatus.
+- **freshness_date (Timestamp):** Fecha de última actualización sustancial.
+
+### 4.2. Capa 1: Búsqueda Híbrida y Filtrado de Metadatos (The Gatekeeper)
+
+La primera línea de defensa es la **Búsqueda Híbrida**. Esta técnica combina dos métodos de recuperación 21:
+
+1. **Búsqueda Densa (Vectorial):** Encuentra coincidencias semánticas ("significado").
+2. **Búsqueda Dispersa (Sparse/BM25):** Encuentra coincidencias exactas de palabras clave ("terminología").
+
+Para Gatacca, añadimos una capa de **Filtrado de Metadatos**.23 Dependiendo de la intención de la consulta del usuario, el sistema puede aplicar filtros estrictos ("Hard Filters").
+
+- *Ejemplo:* Si el usuario pregunta "¿Cuál es la política oficial de vacaciones?", el sistema detecta la intención "Normativa" y aplica automáticamente el filtro WHERE doc_tier IN . Esto elimina el 100% del ruido de Tier 2 y Tier 3 antes incluso de calcular similitudes. Los chats de Slack sobre vacaciones simplemente dejan de existir para esta consulta.
+
+### 4.3. Capa 2: Lógica de Peso Ponderado (Score Boosting)
+
+Para consultas más abiertas donde no podemos filtrar estrictamente, necesitamos que los documentos importantes "floten" hacia arriba. Aquí utilizamos las capacidades de **Score Boosting** de bases de datos como **Qdrant**.7
+
+A diferencia de un filtro binario (sí/no), el boosting modifica el puntaje final de relevancia. Diseñamos la siguiente función de puntuación (Scoring Function) para el motor de Gatacca:
+
+$$Score_{final} = (\alpha \cdot S_{semántico}) + (\beta \cdot S_{keyword}) + (\gamma \cdot Boost_{jerarquía}) + (\delta \cdot Decaimiento_{tiempo})$$
+
+Donde:
+
+- **$S_{semántico}$:** Similitud coseno (0 a 1).
+- **$Boost_{jerarquía}$:** Un valor sumativo basado en el doc_tier.
+    - Si Tier 1: $+0.5$ puntos.
+    - Si Tier 2: $+0.2$ puntos.
+    - Si Tier 3: $+0.0$ puntos.
+- **$Decaimiento_{tiempo}$:** Una función de decaimiento exponencial aplicada solo a documentos Tier 2 y 3.
+    - Formula: $e^{-\lambda \cdot (días\_transcurridos)}$.
+    - Efecto: Un chat de Slack de hace un año tendrá un puntaje cercano a 0, mientras que uno de hoy tendrá su puntaje original. Los documentos Tier 1 son inmunes a este decaimiento (son atemporales hasta que se revoquen).
+
+**Resultado Práctico:** Supongamos una consulta sobre "Estrategia de Ventas".
+
+- *Documento A (Tier 1, Manual de Ventas 2024):* Similitud semántica 0.75 (moderada) + Boost 0.5 = **1.25**.
+- *Documento B (Tier 3, Chat de Slack viral sobre ventas):* Similitud semántica 0.90 (muy alta) + Boost 0.0 - Decaimiento 0.1 = **0.80**.
+
+El sistema prioriza correctamente el Manual (Doc A) a pesar de que el chat (Doc B) tenía palabras más parecidas a la consulta. Esta es la matematización de la "Prelación".
+
+![](attachment:9813d348-1eb8-488d-94ba-c1924d810583:image1.png)
+
+### 4.3. Capa 3: Reranking Semántico (The Judge)
+
+La búsqueda vectorial y el boosting son rápidos y eficientes, pero operan sobre representaciones comprimidas (embeddings). A veces, se necesita una revisión más profunda. Aquí entra la capa final de **Reranking**.8
+
+Después de que Qdrant devuelve los top 50 candidatos (ya ponderados por jerarquía), pasamos estos textos completos a un modelo especializado de Reranking, como **Cohere Rerank v3.5**.
+
+- **Mecanismo:** El Reranker es un modelo "Cross-Encoder". A diferencia de los embeddings que miran documento y consulta por separado, el Reranker lee ambos simultáneamente y se pregunta: *"¿Realmente responde este documento a esta pregunta?"*.
+- **Valor para Gatacca:** El Reranker actúa como un juez humano final. Puede detectar matices sutiles. Por ejemplo, si la consulta es negativa ("Qué NO hacer en caso de incendio"), la búsqueda vectorial podría traer documentos que hablan mucho de incendios. El Reranker entenderá la negación y priorizará el documento que contiene las prohibiciones explícitas.
+- **Estrategia:** Aplicaremos Reranking solo al top 25-50 de resultados para mantener la latencia baja, reordenándolos antes de enviarlos al LLM para la generación de la respuesta final.
+
+## 5. GraphRAG y la Síntesis Global: Más Allá de la Búsqueda Vectorial
+
+Hasta ahora, hemos resuelto el problema de encontrar "la aguja en el pajar" (recuperación precisa). Sin embargo, Gatacca enfrentará un tipo de consulta más compleja: la consulta de síntesis global. Ejemplos: *"¿Cuáles son los temas recurrentes en los informes de fallos de los últimos 6 meses?"* o *"¿Cómo ha evolucionado la cultura de la empresa según los correos del último año?"*.
+
+La búsqueda vectorial falla aquí porque la respuesta no está en *un* documento, sino dispersa en miles de fragmentos. Recuperar los top 10 documentos no sirve; necesitamos leerlos todos. Aquí es donde introducimos **GraphRAG**, una innovación reciente liderada por Microsoft Research.28
+
+### 5.1. El Enfoque Basado en Grafos
+
+GraphRAG no solo indexa texto como vectores; construye un **Grafo de Conocimiento** (Knowledge Graph) estructurado.
+
+1. **Extracción de Entidades:** El sistema lee los documentos de Gatacca y extrae entidades (Personas, Proyectos, Departamentos, Conceptos) y las relaciones entre ellas.
+2. **Detección de Comunidades:** Utiliza algoritmos como Leiden para agrupar estas entidades en comunidades semánticas estrechamente relacionadas.
+3. **Resúmenes Jerárquicos:** Lo más innovador es que GraphRAG genera resúmenes pre-computados para cada comunidad. Crea un resumen de "Todos los problemas de ingeniería", luego un resumen superior de "Todos los desafíos técnicos", y así sucesivamente hasta un resumen global.
+
+### 5.2. Aplicación Estratégica en Gatacca
+
+Implementaremos GraphRAG específicamente para el **Tier 1 y Tier 2** de documentos (Pilar y Operativo).
+
+- **Caso de Uso:** Cuando un ejecutivo de Gatacca pida un "Resumen de Situación", el sistema no hará una búsqueda vectorial. Navegará por la jerarquía de resúmenes pre-generados de GraphRAG.
+- **Beneficio:** Esto permite responder preguntas de alto nivel ("Global Queries") con una precisión y exhaustividad imposible para los sistemas RAG tradicionales, proporcionando una visión holística de la organización en lugar de una visión de cerradura.
+- **Integración:** GraphRAG servirá como una fuente de contexto complementaria. El agente decidirá: ¿Es esta una pregunta de dato específico (usar Qdrant Vector Search) o una pregunta de comprensión general (usar GraphRAG)?
+
+## 6. Infraestructura de Datos en Tiempo Real: El Motor de Frescura
+
+La utilidad del Context Lake depende directamente de su "frescura". Un sistema que tarda 24 horas en indexar un documento nuevo es inútil para la toma de decisiones ágil. Para lograr la visión de "Real-Time Context", validamos el uso de bases de datos de streaming como **RisingWave**.1
+
+### 6.1. Pipeline de Ingestión Streaming (CDC)
+
+La arquitectura propuesta reemplaza los trabajos batch nocturnos (ETL) con un pipeline de eventos continuo:
+
+1. **Fuente (Source):** Los sistemas operativos de Gatacca (PostgreSQL transaccional, Notion API, Google Drive Webhooks).
+2. **Captura (Change Data Capture - CDC):** Herramientas como Debezium o conectores nativos capturan cada inserción, actualización o borrado en tiempo real.
+3. **Procesamiento (RisingWave):** RisingWave ingesta estos flujos. Aquí es donde ocurre la magia del pre-procesamiento:
+    - *Filtrado:* Descartar datos irrelevantes.
+    - *Enriquecimiento:* Cruzar el ID del autor con la tabla de empleados para obtener su cargo y calcular el authority_score.
+    - *Chunking:* Dividir textos largos en fragmentos procesables.
+4. **Vectorización y Sink (Qdrant):** RisingWave envía los datos procesados a un servicio de embedding y escribe los vectores resultantes y sus metadatos directamente en Qdrant.4
+
+Este flujo garantiza que un documento aprobado a las 09:00:00 esté indexado, vectorizado, jerarquizado y disponible para la IA a las 09:00:05.
+
+### 6.2. Mantenimiento de Documentos Vivos
+
+El Context Lake debe ser higiénico. El pipeline de RisingWave también gestionará el ciclo de vida:
+
+- **TTL (Time-To-Live) Dinámico:** Cuando un documento Tier 3 (transitorio) supera su fecha de caducidad, el sistema puede disparar automáticamente su borrado o archivado en "Cold Storage" para mantener el índice vectorial ligero y performante.
+- **Propagación de Revocaciones:** Si un documento Tier 1 es marcado como "Obsoleto" en el sistema de origen, ese cambio de estado se propaga instantáneamente, actualizando su metadato validity en Qdrant para que el motor de jerarquía lo degrade inmediatamente.
+
+## 7. Estrategia de Implementación y Gobernanza
+
+Habiendo validado la tecnología y diseñado la arquitectura, presentamos la hoja de ruta para la ejecución. Esta estrategia está diseñada para mitigar riesgos, entregando valor incremental desde el primer mes.
+
+### 7.1. Hoja de Ruta de Implementación (Roadmap Detallado)
+
+A continuación, detallamos las fases críticas del despliegue. A diferencia de un cronograma lineal simple, este enfoque prioriza la habilitación de capacidades (capabilities).
+
+### Fase 1: MVP de Validación y Conectividad (Semanas 1-4)
+
+- **Objetivo Estratégico:** Establecer la "tubería" básica (MCP) y validar la conexión entre una fuente de datos y un LLM.
+- **Entregables Técnicos:**
+    1. **Despliegue de Infraestructura Base:** Instalación de un clúster de Qdrant (Docker/Kubernetes) y configuración básica segura.
+    2. **Servidor MCP "Gatacca-Core":** Desarrollo de un servidor MCP en Python utilizando el SDK oficial. Este servidor expondrá una herramienta simple de búsqueda (search_docs).
+    3. **Ingestión Manual Controlada:** Carga de un corpus limitado de 50 documentos (25 Pilar, 25 Ruido) para pruebas controladas.
+    4. **Validación de Prioridad:** Implementación hard-coded de la anotación priority: 1.0 para los documentos Pilar en la respuesta MCP.
+- **Resultado de Negocio:** Un agente de IA (Claude/OpenAI) capaz de responder preguntas sobre esos 50 documentos, demostrando preferencia por los documentos Pilar.
+
+### Fase 2: El Motor de Jerarquía y Búsqueda Híbrida (Semanas 5-8)
+
+- **Objetivo Estratégico:** Implementar la inteligencia de discriminación (Prelación) y mejorar la precisión de recuperación.
+- **Entregables Técnicos:**
+    1. **Integración de Embeddings Híbridos:** Configuración de Qdrant para indexar vectores densos y dispersos (BM25) simultáneamente.
+    2. **Lógica de Score Boosting:** Implementación del algoritmo de puntuación ($Score + \alpha$) en las consultas de búsqueda.
+    3. **Integración de Cohere Rerank:** Añadir el paso de reranking posterior a la búsqueda para refinar el top-k resultados.
+    4. **Etiquetado de Metadatos:** Definición del esquema de metadatos (doc_tier, author, date) y scripts de migración para etiquetar el corpus existente.
+- **Resultado de Negocio:** Reducción drástica de alucinaciones y respuestas irrelevantes. El sistema demuestra capacidad para ignorar información "ruidosa" en favor de información oficial.
+
+### Fase 3: Streaming e Industrialización (Mes 3 en adelante)
+
+- **Objetivo Estratégico:** Automatización total, frescura en tiempo real y escalado a toda la organización.
+- **Entregables Técnicos:**
+    1. **Despliegue de RisingWave:** Configuración del clúster de streaming para procesar eventos CDC.
+    2. **Conectores de Fuentes Vivas:** Conexión de Google Drive, Slack y Notion al pipeline de RisingWave.
+    3. **Implementación de GraphRAG:** Inicio del procesamiento batch nocturno para generar grafos de conocimiento de los documentos Tier 1.
+    4. **Dashboard de Gobernanza:** Herramientas para visualizar qué documentos están en el lago, su tier y su frecuencia de uso.
+- **Resultado de Negocio:** Un "Context Lake" totalmente operativo y autónomo. La organización tiene acceso a inteligencia en tiempo real.
+
+### 7.2. Gobernanza de "Documentos Vivos"
+
+La tecnología por sí sola no garantiza el éxito; requiere procesos humanos. Proponemos un modelo de gobernanza de datos para acompañar al Context Lake:
+
+- **El Rol del "Jardinero de Conocimiento":** Designar responsables de dominio (Domain Stewards) cuya tarea no es escribir documentos, sino asegurar que los metadatos de los documentos Pilar sean correctos (ej. verificar que un documento obsoleto esté marcado como tal).
+- **Auditoría de IA:** Implementar un mecanismo de feedback donde los usuarios puedan marcar una respuesta de la IA como "basada en información obsoleta". Este feedback debe alimentar directamente al sistema para corregir el validity_period o el doc_tier del documento fuente.
+
+### 7.3. Análisis de Riesgos
+
+- **Riesgo:** *Latencia excesiva en Reranking.*
+    - *Mitigación:* Utilizar Reranking solo para consultas complejas o limitar el reranking al top-10 documentos. Para consultas simples, confiar en el Score Boosting de Qdrant.
+- **Riesgo:** *Contaminación del Contexto (Data Poisoning).*
+    - *Mitigación:* El sistema de Prelación actúa como cortafuegos. Incluso si información falsa entra al lago, si carece de las credenciales de autoridad (Tier 1), será suprimida matemáticamente por el algoritmo de ranking.
+
+## 8. Conclusión
+
+La transformación de Gatacca hacia una arquitectura de **Context Lake** no es una mera actualización tecnológica; es una evolución estratégica necesaria para sobrevivir y prosperar en la era de la IA generativa. Al abandonar el almacenamiento estático en favor de un ecosistema dinámico, priorizado y conectado vía **MCP**, Gatacca resolverá el problema central que aqueja a la mayoría de las implementaciones de IA empresarial: la falta de confianza.
+
+La combinación de **RisingWave** para la inmediatez, **Qdrant** con **Score Boosting** para la autoridad, y **GraphRAG** para la comprensión profunda, crea una infraestructura robusta. El sistema de "Prelación" propuesto asegura que la IA de Gatacca no solo sea rápida e inteligente, sino también alineada institucionalmente, capaz de distinguir entre el ruido efímero y la verdad estratégica. Esta arquitectura está lista para ser construida hoy.
+
+### Works cited
+
+1. Context Lake - RisingWave: Real-Time Event Streaming Platform, accessed on January 9, 2026, https://risingwave.com/glossary/context-lake/
+2. The Future of AI Infrastructure Is Context, Not Data | Tacnode, accessed on January 9, 2026, https://tacnode.io/post/the-next-evolution-of-ai-infrastructure-from-data-lake-to-context-lake
+3. What Is a Context Lake and Why You Need One - RisingWave, accessed on January 9, 2026, https://risingwave.com/blog/what-is-a-context-lake/
+4. Stream changes from a PostgreSQL Database to a Vector Store - AI Advances, accessed on January 9, 2026, https://ai.gopubby.com/stream-changes-from-a-postgresql-database-to-a-vector-store-83df7adc0bfa
+5. Specification - Model Context Protocol, accessed on January 9, 2026, https://modelcontextprotocol.io/specification/2025-06-18
+6. Introducing the Model Context Protocol - Anthropic, accessed on January 9, 2026, https://www.anthropic.com/news/model-context-protocol
+7. Hybrid Queries - Qdrant, accessed on January 9, 2026, https://qdrant.tech/documentation/concepts/hybrid-queries/
+8. Metadata-Driven Retrieval-Augmented Generation for Financial Question Answering - arXiv, accessed on January 9, 2026, https://arxiv.org/html/2510.24402v1
+9. Vector Databases Meet Data Lakes: Building Searchable Context Layers | by Manik Hossain, accessed on January 9, 2026, https://medium.com/@manik.ruet08/vector-databases-meet-data-lakes-building-searchable-context-layers-44e6255b678b
+10. Stream Processing Glossary - RisingWave: Real-Time Event Streaming Platform, accessed on January 9, 2026, https://risingwave.com/glossary/
+11. OpenAI Acquires Rockset | Hacker News, accessed on January 9, 2026, https://news.ycombinator.com/item?id=40750391
+12. awesome-open-source-data-engineering/[README.md](http://README.md) at main - GitHub, accessed on January 9, 2026, https://github.com/pracdata/awesome-open-source-data-engineering/blob/main/README.md
+13. Grounded AI: Why Neo Knows Your Infrastructure | Pulumi Blog, accessed on January 9, 2026, https://www.pulumi.com/blog/grounded-ai-why-neo-knows-your-infrastructure/
+14. Introducing Hierarchy-Aware Document Chunker — no more broken context across chunks : r/Rag - Reddit, accessed on January 9, 2026, https://www.reddit.com/r/Rag/comments/1mu8snn/introducing_hierarchyaware_document_chunker_no/
+15. Google Drive MCP Server – Integrates with Google Drive to enable listing, searching, and reading files, plus reading and writing to Google Sheets. - Reddit, accessed on January 9, 2026, https://www.reddit.com/r/mcp/comments/1j71d0i/google_drive_mcp_server_integrates_with_google/
+16. Notion MCP – Connect Notion to your favorite AI tools - Notion API, accessed on January 9, 2026, https://developers.notion.com/docs/mcp
+17. modelcontextprotocol/servers: Model Context Protocol Servers - GitHub, accessed on January 9, 2026, https://github.com/modelcontextprotocol/servers
+18. ancoleman/qdrant-rag-mcp - GitHub, accessed on January 9, 2026, https://github.com/ancoleman/qdrant-rag-mcp
+19. What is hybrid search architecture in RAG: combining vector and metadata filtering? - [Tinq.ai](http://Tinq.ai), accessed on January 9, 2026, https://tinq.ai/answers/what-is-hybrid-search-architecture-in-rag-combining-vector-and-metadata-filtering
+20. 8 Advanced RAG Techniques & How to Implement Them - Intuz, accessed on January 9, 2026, https://www.intuz.com/blog/advanced-rag-techniques
+21. Hybrid search - Pinecone Docs, accessed on January 9, 2026, https://docs.pinecone.io/guides/search/hybrid-search
+22. Getting Started with Hybrid Search | Pinecone, accessed on January 9, 2026, https://www.pinecone.io/learn/hybrid-search-intro/
+23. Pre and Post Filtering in Vector Search with Metadata and RAG Pipelines - DEV Community, accessed on January 9, 2026, https://dev.to/volland/pre-and-post-filtering-in-vector-search-with-metadata-and-rag-pipelines-2hji
+24. Vector Search retrieval quality guide - Azure Databricks - Microsoft Learn, accessed on January 9, 2026, https://learn.microsoft.com/en-us/azure/databricks/vector-search/vector-search-retrieval-quality
+25. Qdrant 1.14 - Reranking Support & Extensive Resource Optimizations, accessed on January 9, 2026, https://qdrant.tech/blog/qdrant-1.14.x/
+26. A Long-Context Re-Ranker for Contextual Retrieval to Improve the Accuracy of RAG Systems | by ChatDOC | Medium, accessed on January 9, 2026, https://medium.com/@chatdocai/a-long-context-re-ranker-for-contextual-retrieval-to-improve-the-accuracy-of-rag-systems-ea10f674b267
+27. Unlocking RAG's potential: Enhancing retrieval through reranking - Leapfrog Technology, accessed on January 9, 2026, https://lftechnology.com/blog/unlocking-rag-potential-retrieval-through-reranking
+28. Global Search - GraphRAG - Microsoft Open Source, accessed on January 9, 2026, https://microsoft.github.io/graphrag/query/global_search/
+29. GraphRAG: Improving global search via dynamic community selection - Microsoft Research, accessed on January 9, 2026, https://www.microsoft.com/en-us/research/blog/graphrag-improving-global-search-via-dynamic-community-selection/
+30. Welcome - GraphRAG, accessed on January 9, 2026, https://microsoft.github.io/graphrag/
+31. AI Tools | Tech News, Tutorials & Expert Insights - Packt, accessed on January 9, 2026, https://www.packtpub.com/en-us/learning/how-to-tutorials/tag/ai-tools
+
+### **Tab 2**
+
+¡Has dado en el clavo! La intuición que tienes es buenísima y estratégicamente muy necesaria.
+
+He investigado a fondo el término y tengo buenas noticias: el concepto de **Context Lake** está empezando a nacer en la industria tecnológica (empresas de infraestructura de datos como *Tacnode* o *RisingWave* lo usan), pero lo enfocan casi exclusivamente a "datos técnicos en tiempo real" (logs, clicks).
+
+Tu visión es diferente y un "océano azul": Tú propones un Context Lake Semántico y de Negocio.
+
+Mientras los ingenieros ven "datos", tú ves "Identidad y Gobernanza". Has identificado el problema de la "Amnesia y Esquizofrenia de la IA": que ChatGPT te hable con un tono y Claude con otro porque no comparten memoria.
+
+Aquí tienes el análisis de cómo estructurar **Gatacca como un Context Lake**, cómo diferenciarlo y, sobre todo, la arquitectura técnica para lograr esa "prelación" (jerarquía) de documentos que es la clave de tu idea.
+
+### 1. ¿Qué es el Context Lake (Visión Gatacca)?
+
+Para mí, la definición ganadora para Gatacca es:
+
+> "El Sistema Operativo de la Memoria de tu Empresa."
+> 
+
+A diferencia de un Data Lake (que es un almacén pasivo de archivos), el Context Lake es **activo**. Se sitúa *antes* de los modelos (ChatGPT, Gemini, Claude) para inyectarles la personalidad, reglas y "verdades" de la empresa en cada interacción.
+
+- **Nota rápida:** Cuando mencionaste *"Town of Boys"*, te referías casi seguro al **Tone of Voice (ToV)** o Tono de Voz. Es el término estándar en marketing. Al corregirlo en tu pitch, ganarás mucha autoridad inmediata con los directores de marketing.
+
+### 2. La Arquitectura de la "Prelación": Cómo lograr la jerarquía
+
+Esta es la parte más potente de tu planteamiento. La mayoría de los sistemas actuales (RAGs básicos) fallan porque tratan igual a un PDF de hace 3 años que a tu Brand Book actual.
+
+Para lograr tu visión de **Documentos Pilares (Prelación 1)** vs. **Documentos Secundarios**, necesitas una arquitectura de **"Tiered Context" (Contexto por Niveles)**:
+
+### Nivel 1: "La Constitución" (Tus Documentos Pilares)
+
+- **Qué son:** Tone of Voice, Manifiesto de Marca, Definición del ICP, "La Verdad del Producto".
+- **Regla Técnica (Inyección Forzosa):**
+    - Estos documentos tienen **prioridad absoluta**.
+    - No se dejan al azar. Técnicamente, fragmentos de estos documentos (o sus reglas resumidas) se inyectan siempre en el *System Prompt* (las instrucciones ocultas de la IA).
+    - Si la IA encuentra una contradicción entre un chat antiguo y el Documento Pilar, el Pilar siempre gana.
+
+### Nivel 2: "El Conocimiento Vivo" (Contexto Dinámico)
+
+- **Qué son:** Análisis de competidores, características de features, informes de campañas del Q1.
+- **Regla Técnica (Reranking):**
+    - Aquí usamos búsqueda semántica, pero con un algoritmo de **"Boost"**. Si buscas "precios", el sistema le da más puntos (score) al documento oficial de precios que a un email donde se mencionan precios.
+    - Tienen caducidad: un análisis de competencia pierde "peso" automáticamente pasados 6 meses.
+
+### Nivel 3: "Memoria Episódica" (El Historial)
+
+- **Qué son:** Chats anteriores, transcripciones de reuniones, correos sueltos.
+- **Regla Técnica:** Sirven para recordar "dónde nos quedamos", pero nunca deben sobrescribir a un Documento Pilar.
+
+### 3. Roadmap: ¿Qué necesita Gatacca para construir esto?
+
+Para materializar esta visión y que no sea solo un "Google Drive con Chat", necesitas estas 3 piezas clave:
+
+1. **GraphRAG (Gráfico de Conocimiento + RAG):**
+    - Esta es la tecnología que necesitas investigar. A diferencia de una base de datos vectorial normal (que solo busca palabras parecidas), un **Grafo** entiende *relaciones*.
+    - *Ejemplo:* Si actualizas el documento "Producto A" (Pilar), el Grafo sabe que el documento "Argumentario de Ventas del Producto A" depende de él y te avisa de que ha quedado obsoleto.
+2. **El "Jardinero de Contexto" (Context Gardener):**
+    - Como dijiste, los documentos deben actualizarse.
+    - Crea un agente IA en segundo plano ("El Jardinero") que monitoree lo que pasa. Si detecta que en las últimas 50 conversaciones el "Público Objetivo" ha cambiado, el Jardinero envía una alerta al humano: *"Parece que tu ICP ha cambiado. ¿Quieres actualizar tu Documento Pilar de ICP con estos nuevos datos?"*.
+3. **Protocolo MCP (Model Context Protocol):**
+    - *Ojo a esto:* Anthropic acaba de lanzar un estándar abierto llamado **MCP**. Es exactamente lo que quieres hacer: una forma estándar de conectar datos externos a IAs.
+    - Si haces que Gatacca sea compatible con MCP, te será facilísimo conectarte a Claude y a otros sistemas sin reescribir código cada vez.
+
+### 4. Propuesta de Naming
+
+Aunque "Context Lake" es técnicamente correcto, para venderlo a negocio podrías darle un matiz más de "control":
+
+- **Context Core:** Suena al núcleo inamovible de la empresa.
+- **Brand OS:** Sistema Operativo de Marca.
+- **Semantic Vault:** Donde guardas lo sagrado.
+
+Conclusión:
+
+Tu idea es sólida. El mercado se está moviendo del "Prompt Engineering" (aprender a hablarle a la IA) al "Context Engineering" (asegurarse de que la IA sepa de qué habla). Gatacca, con esa estructura de prelación, se posiciona justo ahí.
+
+### **Tab 3**
+
+¡Has dado en el clavo! Tu intuición es excelente y estratégica.
+
+He investigado a fondo el término y te confirmo que **tienes una "oportunidad de océano azul"**. El término *Context Lake* existe, pero se usa en nichos muy técnicos de ingeniería de datos (empresas como *Tacnode* o *RisingWave*) para referirse a "tuberías de datos en tiempo real" (logs, eventos).
+
+**Nadie lo ha reclamado aún para el mundo de Negocio y Marketing** con la visión que tú tienes: un repositorio de **identidad, significado y estrategia**.
+
+Aquí tienes el desglose de la investigación y la propuesta concreta para que **Gatacca** se apropie de este concepto y resuelva técnicamente el problema de la jerarquía (prelación) de documentos.
+
+### 1. El Concepto: "Gatacca Context Lake"
+
+Mientras que un *Data Lake* almacena datos fríos (números, excels), tu *Context Lake* almacena **"Verdades de Marca"**.
+
+- **El Problema:** La "Esquizofrenia de la IA". Si usas ChatGPT, Claude y Gemini por separado, cada uno tiene una "personalidad" diferente y alucina hechos distintos sobre tu empresa porque no comparten memoria.
+- **La Solución (Gatacca):** Actúa como el cerebro central. Tú no entrenas al modelo, gestionas el contexto. Gatacca inyecta la identidad de la empresa en cualquier modelo (OpenAI, Anthropic, Google) para que todos "hablen" igual.
+
+### 2. Arquitectura de Jerarquía (Cómo resolver la "Prelación")
+
+Tienes toda la razón: un sistema RAG (*Retrieval Augmented Generation*) estándar falla porque trata igual a un documento de hace 3 años que a tu *Brand Book* actual.
+
+Para implementar tu visión de "Documentos Pilares" vs. "Documentos Secundarios", necesitas una arquitectura de **Contexto Por Capas (Tiered Context)**. Así es como debes construirlo técnicamente:
+
+### Nivel 1: La Constitución (Prelación Absoluta)
+
+- **Qué son:** Tono de Voz (Tone of Voice), Manifiesto de Marca, La "Verdad" del Producto (qué hace y qué no), ICP.
+- **Tratamiento Técnico:** **Inyección en System Prompt.**
+    - Estos documentos no se "buscan" por similitud. Se **imponen**.
+    - Gatacca debe inyectar estos pilares (o sus resúmenes) en las instrucciones maestras ("System Message") de la IA *antes* de que empiece a generar una sola palabra. Son las "gafas" con las que el modelo debe ver el mundo.
+
+### Nivel 2: La Biblioteca Viva (Prelación Media)
+
+- **Qué son:** Análisis de competidores, Whitepapers, descripciones de features específicas, campañas pasadas.
+- **Tratamiento Técnico:** **GraphRAG (Grafos + Vectores).**
+    - Aquí es donde entra tu idea de **relación**. No basta con guardar el texto; necesitas un **Grafo de Conocimiento** que entienda que el documento *"Análisis Competidor X"* es **hijo** del documento *"Producto Y"*.
+    - Si preguntas por el Producto Y, el sistema sabe "tirar del hilo" y traer el contexto de sus competidores automáticamente.
+
+### Nivel 3: El Flujo (Prelación Baja)
+
+- **Qué son:** Notas de reuniones, borradores, correos, tendencias semanales.
+- **Tratamiento Técnico:** **TTL (Time To Live).**
+    - Tienen fecha de caducidad. Sirven para contexto inmediato pero no deben ensuciar las decisiones estratégicas a largo plazo.
+
+### 3. Hoja de Ruta: ¿Qué necesitamos para sacarlo adelante?
+
+Para que Gatacca sea el líder en *Context Lakes*, necesitas desarrollar 3 componentes clave más allá de un simple "almacén de archivos":
+
+### A. El "Ingestor Semántico" (The Gatekeeper)
+
+No puedes dejar que los usuarios suban PDFs sin más (eso crea un pantano de datos).
+
+- **La Feature:** Cuando subes un documento, Gatacca pregunta: *"¿Es esto una Verdad Pilar (Nivel 1) o Información de Soporte (Nivel 2)?"*.
+- **Conflict Resolution:** Si subes un nuevo "Tono de Voz", el sistema debe detectar que ya existe uno y preguntar: *"¿Esto reemplaza a la versión anterior?"*. Si dices sí, el anterior se archiva. Esto garantiza que **nunca haya dos verdades contradictorias** activas a la vez.
+
+### B. El "Jardinero de Contexto" (Living Documents)
+
+Lo que mencionas de que los documentos deben actualizarse es vital.
+
+- **Agente de Mantenimiento:** Gatacca debe tener un agente en segundo plano que revise la antigüedad de los documentos.
+- *Ejemplo:* "Oye, tu documento de 'Competidores' tiene 6 meses y el mercado ha cambiado. ¿Sigue siendo válido o lo marcamos como obsoleto?".
+
+### C. El "Router Agnóstico"
+
+Gatacca se convierte en la capa de control.
+
+1. El usuario pide un copy.
+2. Gatacca recupera el **Tono de Voz (Nivel 1)**.
+3. Gatacca busca detalles específicos en el **Nivel 2**.
+4. Gatacca ensambla el prompt perfecto.
+5. Gatacca elige el modelo (ej. "Para creatividad usamos Claude, para datos usamos GPT-4") y le envía el prompt.
+
+### Resumen para tu Pitch
+
+Puedes vender el **Gatacca Context Lake** con este enfoque:
+
+> "Los Data Lakes eran para analizar el pasado. El Context Lake es para crear el futuro.
+> 
+> 
+> Gatacca centraliza la memoria viva de tu empresa en una estructura jerárquica, asegurando que uses el modelo de IA que uses, tu marca, tu tono y tu estrategia sean siempre innegociables."1
+> 
+
+### Tab 4
+
+To create a Standard Operating Procedure (SOP) for building a company-specific context, you must move beyond simple data storage to "Context Engineering"—the discipline of designing inputs to shape AI behavior. This process involves constructing a **Context Lake**, a specialized system that prepares and manages unstructured data as "just-in-time" context for AI models.
+
+The following is an exhaustive guide to the steps and documents required, categorized for SOP creation.
+
+### Phase 1: Context Audit and Strategy
+
+Before aggregating data, you must identify gaps in the AI's current "worldview" to ensure it understands the business's unique reality.
+
+**1. Conduct a "Context Gap" Audit**
+
+- **Interaction Review:** Analyze past AI sessions to identify where the model failed due to a lack of knowledge.
+- **Voice and Message Audit:** Compare AI-generated content against high-performing human-generated work to identify tonal discrepancies.
+- **Process Mapping:** Document decision-making chains and approval workflows to understand *how* work moves through the organization.
+- **Tribal Knowledge Extraction:** Conduct stakeholder interviews to capture unspoken rules, winning tactics, and stories that define the company's competitive edge,.
+
+### Phase 2: Document Aggregation (The "Context Pack")
+
+You must gather specific document types and classify them by their permanence and authority. These form the "Context Pack" or "Context Core",.
+
+**2. Compile Static Context (The "Constitution")**
+These are high-authority, foundational documents that rarely change and define the company’s identity.
+
+- **Brand Identity:** Brand guidelines, tone of voice (ToV) editorial guidelines, and mission/vision statements,,.
+- **Product Truth:** Detailed product capabilities, benefits, differentiators, use cases, and alternatives.
+- **Ideal Customer Profile (ICP):** Detailed personas, sales call transcripts that highlight ICP segments, and audience targeting criteria,.
+- **Strategic Positioning:** "Positioning anchors," unique value propositions (UVPs), and lists of key competitors,.
+- **Governance Documents:** Company policies, compliance guidelines (e.g., GDPR, HIPAA), and list of "banned" topics or phrases,.
+
+**3. Compile Dynamic and Short-Term Context**
+These documents reflect the current operational state and change frequently.
+
+- **Performance Data:** Past campaign performance reports (e.g., ROAS, CPA), top-performing creative examples, and subject lines,.
+- **Current Initiatives:** Media plans, budget allocation plans, and active creative briefs.
+- **Market Intelligence:** Recent competitor research, expert POVs, and industry trend reports.
+
+### Phase 3: Context Structuring and Engineering
+
+Raw data must be processed into "ergonomic" formats for the AI. This involves breaking down documents and assigning them "authority" scores.
+
+**4. Implement Document Hierarchies (The "Prelación" System)**
+Assign a "Tier" to every document to resolve conflicts (e.g., when an old Slack message contradicts a new policy),.
+
+- **Tier 1 (Pillars):** Immutable truths (e.g., Brand Book, CEO-signed policies). These have absolute priority (`priority: 1.0`),.
+- **Tier 2 (Operational):** Active project specs and quarterly memos (`priority: 0.5`),.
+- **Tier 3 (Transient):** Slack history, daily emails, and support tickets (`priority: 0.0` - `0.1`).
+- **Scoring Metadata:** Tag documents with an `authority_score` (based on author/approval status) and `freshness_date`,.
+
+**5. Apply Chunking Strategies**
+Break documents into retrieval-ready segments based on their structure,.
+
+- **Semantic Chunking:** Use for complex narratives (e.g., legal contracts, blogs) to group text by topic coherence rather than character count,.
+- **Layout-Aware/Hierarchical Chunking:** Use for structured reports and manuals to preserve headings, lists, and tables,.
+- **Fixed-Size Chunking:** Use for uniform data where structure is less critical.
+
+**6. Define Metadata and Schemas**
+Design database schemas that act as prompts themselves. Use descriptive column names (e.g., `extract_receipt_data(name: str, age: int)`) rather than cryptic codes to help the AI understand the data structure. Create a metadata dictionary to ensure consistency across the organization.
+
+### Phase 4: Infrastructure and Integration
+
+Establish the technical architecture to serve this context to the AI in real-time.
+
+**7. Establish the Context Lake**
+Move from a passive Data Lake (storage) to an active **Context Lake** (delivery).
+
+- **Unified Storage:** Store structured (SQL), semi-structured (JSON), and vector embeddings in a unified engine to allow multimodal retrieval,.
+- **Real-Time Ingestion:** Implement Change Data Capture (CDC) to stream updates immediately (e.g., a database change updates the context in milliseconds), preventing "stale" answers,.
+
+**8. Deploy the Model Context Protocol (MCP)**
+Use MCP as the standard connection layer to avoid building custom APIs for every data source.
+
+- **MCP Server:** Configure servers to expose your data as **Resources** (read-only data like manuals), **Tools** (executable actions like "Create Jira Ticket"), and **Prompts** (standard templates),.
+- **Client Integration:** Connect these servers to your AI host (e.g., Claude Desktop, IDEs) to allow the model to query internal systems securely.
+
+**9. Configure Retrieval Augmented Generation (RAG)**
+Set up the retrieval mechanism:
+
+- **Hybrid Search:** Combine keyword search (BM25) with semantic vector search for precision.
+- **Reranking:** Use a reranker model to re-order retrieved results based on relevance before sending them to the LLM,.
+- **GraphRAG:** For high-level "global" questions (e.g., "What are the recurring themes in Q3 feedback?"), use a knowledge graph to understand relationships between documents,.
+
+### Phase 5: Governance and Version Control
+
+Treat context as a software product that requires maintenance and versioning.
+
+**10. Implement Context Version Control**
+
+- **Versioning:** Use Git-based workflows or semantic versioning (Major.Minor.Patch) for context documents,.
+- **Audit Trails:** Maintain logs of who changed a document and when. Ensure every change to the "Context Core" has a clear commit message explaining the "why",.
+- **Branching:** Use branches to test new context rules (e.g., "New Product Launch") before merging them into the main "production" context.
+
+**11. Assign "Context Gardeners"**
+Designate specific roles (Human-in-the-loop) responsible for pruning obsolete data, verifying "Tier 1" document accuracy, and monitoring AI outputs for hallucinations caused by bad context.
+
+**12. Security and Permissions**
+
+- **Access Control:** Implement Role-Based Access Control (RBAC) to ensure the AI only retrieves data the current user is authorized to see.
+- **Secrets Management:** Ensure no API keys or PII (Personally Identifiable Information) are stored in the context repositories.
+
+### Analogy for Understanding
+
+Think of the **Context Lake** as a **hyper-modern library** and the **Context Engineering** as the **librarian's indexing system**.
+In a traditional "Data Lake," books are thrown in a pile on the floor; the information is there, but finding it is chaotic. In a "Context Lake," the librarian (the AI's retrieval system) has read and indexed every book (Context Engineering). When you ask a question, the librarian doesn't just point to a section; they pull the specific paragraph from the most authoritative, recent edition (Tier 1 document) and place it open in front of you,.
+
+### Briefing Document: Synthesizing the Modern AI Knowledge and Context Stack
+
+## Executive Summary
+
+The proliferation of generative AI has exposed a critical flaw in traditional enterprise data architecture: Large Language Models (LLMs), while powerful, are generalists that lack the specific, timely, and authoritative context required for reliable business use. This deficiency results in significant operational risks, including factual "hallucinations," reliance on outdated information, and an inability to perform nuanced, role-specific tasks. The core challenge is no longer about model intelligence but about connecting models to a live, curated reality.
+
+A new architectural and operational paradigm is emerging to address this gap, shifting the focus from passive data storage (Data Lakes) to active, real-time context delivery. This paradigm is built on three pillars:
+
+1. **Context Engineering:** An evolution of prompt engineering, this discipline focuses on curating the optimal set of information—prompts, tools, message history, and retrieved data—for an LLM's finite attention budget at the moment of inference.
+2. **The Context Lake:** A new infrastructure layer designed to replace the data lake for AI applications. It is an active system that ingests data in real-time, transforms it into vector-native, semantically-rich formats, and serves it with near-zero latency, ensuring AI agents operate on an always-current view of the business.
+3. **Hierarchical Retrieval:** Advanced Retrieval-Augmented Generation (RAG) techniques that impose a clear hierarchy of authority on information. By distinguishing between foundational "pillar" documents and transient "noise" through metadata, score boosting, and reranking, this ensures AI responses are grounded in institutional truth.
+
+This integrated approach, connected through open standards like the Model Context Protocol (MCP), transforms generic AI into a trusted, expert extension of the organization. It enables the creation of sophisticated, role-specific AI assistants for sales, customer service, and operations that are not only intelligent but also safe, compliant, and consistently aligned with business reality.
+
+---
+
+## I. The Foundational Challenge: From Data Overload to Context Scarcity
+
+The core limitation of applying generative AI within an enterprise is the disconnect between the model's general knowledge and the organization's specific, dynamic operational reality. Traditional data architectures, optimized for historical analysis by humans, are ill-suited to serve the real-time contextual needs of AI agents.
+
+### A. Limitations of Traditional Architectures for Real-Time AI
+
+Data Lakes, Warehouses, and Lakehouses were designed for an era of retrospective analysis, not real-time decision-making. They excel at explaining the past but fail to keep up with the present, leading to several fundamental constraints for AI applications.
+
+- **The Freshness Gap:** Most data pipelines rely on batch jobs and delayed ingestion, meaning that by the time data is available for querying, it may be minutes, hours, or even days out of date. An AI agent operating on this stale information is effectively guessing, which is unacceptable in dynamic domains like fraud detection, customer service, or sales.
+- **The Concurrency Ceiling:** These systems were optimized for a small number of large analytical queries, not the thousands of concurrent, low-latency lookups required by production AI systems. Lakehouses often fail at 100-500 queries per second (QPS), whereas AI applications can demand over 10,000 QPS with sub-50ms latency.
+- **Incompatible Retrieval Optimization:** Data Lakes are optimized for high-throughput scans based on exact keywords or deterministic queries (e.g., "total sales in Q3"). AI agents, however, perform probabilistic, semantic queries (e.g., "our strategic posture against competitors"). Traditional infrastructures lack the semantic indexing to answer such questions effectively.
+- **The Data Swamp Effect:** The "ingest now, process later" philosophy of data lakes leads to a chaotic repository where valuable, authoritative information is indistinguishable from outdated drafts, informal conversations, and irrelevant noise, confusing LLMs and leading to poor retrieval quality.
+
+### B. Why LLMs Fail in a Business Context
+
+Without a purpose-built context delivery system, even the most advanced LLMs exhibit predictable failure modes when applied to enterprise workflows.
+
+- **Hallucinations:** When an LLM lacks specific information, it will often "invent" plausible-sounding but factually incorrect details. This can erode customer trust and create serious business liabilities, such as quoting a non-existent return policy.
+- **Outdated Knowledge:** LLMs are trained on a static snapshot of data with a fixed cutoff date. They are inherently unaware of products launched last week, policy changes made this morning, or current market conditions.
+- **Lack of Specificity:** Generic models lack the nuanced understanding of a company's Ideal Customer Profile (ICP), internal processes, brand voice, or competitive landscape required to perform valuable, role-specific tasks like drafting a targeted sales outreach email.
+
+## II. The New Paradigm: Context Engineering and the Context Lake
+
+To overcome these challenges, a new approach is required that treats context not as an afterthought but as the central component of the AI architecture. This involves a new discipline, Context Engineering, and a new foundational infrastructure, the Context Lake.
+
+### A. Context Engineering: The Evolution of Prompting
+
+Context engineering is the discipline of curating and maintaining the optimal set of tokens (information) for an LLM during inference. It expands beyond writing static prompts to dynamically managing the entire context state available to the model, recognizing that LLMs have a finite "attention budget" that diminishes in effectiveness as the context window grows.
+
+### The Four Layers of GTM Context Engineering
+
+A structured approach to context engineering involves generating, processing, and structuring information across four key layers.
+
+| Layer | Description |
+| --- | --- |
+| **1. Core Inputs** | Gathering other inputs to company research data, such as foundational research on competitors, product data, and sales calls. |
+| **2. Context Generation** | Generating messaging and positioning foundations from research, including use cases, brand story, and reference points. |
+| **3. Contextualization** | Creating reasoning guardrails for how to interpret and use contextual data, including stress-testing examples. |
+| **4. Context Processing** | Creating workflows and prompts to produce channel-specific on-brand GTM assets from the contextualized data. |
+
+### The Anatomy of Effective Context and Prompts
+
+A high-performing prompt or context package is clear, structured, and rich with relevant data.
+
+- **Role & Persona:** Defines who the AI is and who it's targeting (e.g., "You are a B2B SaaS SDR focused on mid-market HR tech buyers").
+- **Goal/Task:** Specifies the exact action to be taken (e.g., "Generate 10 LinkedIn DM openers").
+- **Output Format:** Instructs the AI on how to structure the response for workflow integration (e.g., "Return results as a CSV with columns...").
+- **Context & Guardrails:** Provides the background data (ICP data, CRM context, company signals) and constraints (character limits, approved templates) to keep the output relevant, compliant, and usable.
+
+### B. The Context Lake: The Architectural Foundation for Real-Time AI
+
+The Context Lake is a unified infrastructure layer designed to deliver live, multi-modal context at the speed and scale of AI decision-making. It is not a passive storage repository but an active system that prepares, manages, and serves an organization's knowledge.
+
+**Key Characteristics:**
+
+- **Real-time Ingestion:** Utilizes Change Data Capture (CDC) and streaming technologies to ingest events and updates from source systems in milliseconds, eliminating the "freshness gap."
+- **Continuous Transformation:** Employs materialized views that update incrementally as new data arrives, ensuring that derived context (features, aggregations) is always current and query-ready.
+- **Vector-Native:** The atomic unit of storage is the vector embedding, which captures the semantic meaning of information, allowing for retrieval based on concepts rather than just keywords.
+- **Unified, Multi-modal Query Engine:** A single execution layer that can retrieve and join structured rows, semi-structured JSON, and vector embeddings in a single query plan.
+- **Elastic Scaling with Workload Isolation:** Ingestion, transformation, and retrieval run in dedicated resource pools, preventing workloads from interfering with one another.
+
+This architecture enables the **ITERATE Operating Model**, a continuous, real-time loop where the system can Ingest, Transform, Explore, Retrieve, Act, Test, and Evolve instantaneously.
+
+## III. Core Mechanisms for Grounding AI in Reality
+
+With a Context Lake in place, specific mechanisms are used to ensure the information delivered to the LLM is relevant, accurate, and authoritative.
+
+### A. Retrieval-Augmented Generation (RAG)
+
+RAG is the core process that grounds an LLM in a specific knowledge base. Instead of relying on its pre-trained memory, the AI is augmented with just-in-time information from the Context Lake.
+
+**The RAG Workflow:**
+
+1. **Retrieve:** When a user query is received, the system first performs a fast, semantic search on the Context Lake to find the most relevant document chunks.
+2. **Augment:** The retrieved chunks are bundled with the original user query into a new, expanded prompt for the LLM. The prompt explicitly instructs the model to base its answer only on the provided context.
+3. **Generate:** The LLM receives the augmented prompt and generates a response that is factually grounded in the retrieved information, drastically reducing hallucinations.
+
+### B. Establishing a Hierarchy of Truth ("Prelación")
+
+A standard RAG system is often "authority-agnostic," meaning it might retrieve a semantically similar but incorrect statement from an informal Slack chat over a less descriptive but official policy document. To solve this, a "Hierarchy Engine" is needed to impose institutional authority on the retrieval process.
+
+**A Tiered Document Taxonomy:**
+
+- **Tier 1 (Pillar - "The Constitution"):** Immutable documents defining company truth, such as brand manifests, official policies, and annual OKRs. These are timeless until formally revoked.
+- **Tier 2 (Operative - "The Action"):** Documents with a medium lifespan, like active project specifications, quarterly reports, and technical documentation.
+- **Tier 3 (Transitory - "The Flow"):** Ephemeral communications, including Slack histories, daily emails, and meeting notes. These decay in relevance over time.
+
+**Implementation Techniques:**
+
+- **Metadata Filtering:** Applying hard filters based on metadata tags. For a query about "official vacation policy," the system can pre-filter to only include `doc_tier: 1` documents.
+- **Score Boosting:** Modifying the final relevance score during a vector search. A Tier 1 document receives a significant positive boost, ensuring it "floats" to the top of the search results even if its semantic similarity score is lower than a Tier 3 document. A time-decay function is also applied to Tier 2 and 3 documents.
+- **Semantic Reranking:** After initial retrieval, a more sophisticated cross-encoder model (like Cohere Rerank) reads the query and the top candidate documents simultaneously to judge true relevance, acting as a final "human-like" judge.
+
+### C. Advanced RAG Techniques
+
+- **Semantic Chunking:** Instead of splitting documents into fixed-size chunks, this technique groups sentences based on their semantic similarity. This ensures each chunk is a cohesive, focused unit of meaning, preventing the dilution of context that occurs when unrelated topics are grouped together.
+- **GraphRAG:** For complex "synthesis" queries (e.g., "What are the recurring themes in our support tickets this quarter?"), a knowledge graph is constructed from the documents. This graph understands entities (products, people, concepts) and their relationships, allowing the system to answer high-level, global questions that cannot be addressed by retrieving a few individual chunks.
+
+## IV. Interoperability and Managing Long-Horizon Tasks
+
+For AI agents to be truly effective, they must integrate seamlessly with existing tools and manage tasks that exceed the token limit of a single context window.
+
+### A. Model Context Protocol (MCP): The Universal Connector for AI
+
+MCP is an emerging open standard designed to let LLMs interact with external systems in a secure, structured way. It functions like a universal USB port for AI, allowing models to "plug into" platforms like HubSpot, databases, or a Context Lake without requiring custom APIs for each integration.
+
+- **How it Works:** An MCP server exposes three primitives that an AI agent can interact with:
+    1. **Resources:** Passive data that can be read (e.g., CRM records, documents).
+    2. **Tools:** Executable functions the AI can invoke (e.g., `create_service_ticket()`).
+    3. **Prompts:** Reusable templates for interaction.
+- **HubSpot Use Cases:** Integrating AI agents via MCP enables powerful workflows such as intelligent lead routing based on real-time CRM and compliance data, proactive service alerts powered by IoT and service history, and detecting churn risk by analyzing customer activity patterns in the CRM.
+
+### B. Managing Long-Horizon Tasks
+
+For complex tasks like codebase migrations or in-depth research projects that generate more tokens than can fit in an LLM's context window, specialized context management techniques are required.
+
+- **Compaction:** The practice of summarizing a long conversation history and starting a new context window with the compressed summary, preserving critical details while discarding redundant information like raw tool outputs.
+- **Structured Note-Taking (Agentic Memory):** The agent maintains its own notes (e.g., in a [`NOTES.md`](http://NOTES.md) file or via a memory tool) that exist outside the context window. It can read these notes to re-orient itself after a context reset, allowing it to maintain coherence over multi-hour tasks.
+- **Sub-agent Architectures:** A main agent orchestrates a high-level plan, delegating focused tasks to specialized sub-agents. Each sub-agent can use a full context window for its deep work and return only a concise summary to the main agent, enabling parallel exploration and a clear separation of concerns.
+
+## V. Practical Application: AI-Powered Sales, Operations, and Knowledge Management
+
+The combination of these concepts enables the creation of highly effective, role-specific AI assistants that can be safely embedded into core business workflows.
+
+### A. Role-Specific AI Sales Prompt Framework
+
+Generic AI sales prompts fail because they don't fit specific workflows, aren't tailored to roles (SDR, AE, CSM), and ignore compliance guardrails. An effective framework requires contextual, workflow-ready prompts.
+
+| Role | Sample Use Cases & Prompts |
+| --- | --- |
+| **SDRs** | **Prospect Research & Personalization:** "Act as a B2B SDR. Given [prospect's LinkedIn profile], extract 3 personalized insights I can use in an outreach message. Prioritize shared experiences, recent activity, and career milestones." |
+| **AEs** | **Objection Handling & Nurturing:** "Respond to this objection: '{{objection}}'. Keep the tone consultative and empathetic. Include a reassuring stat or case study. Keep it under 120 words." |
+| **CSMs** | **Renewal & Expansion:** "You are the CSM for {{Account}}. Renewal is on {{Renewal_Date}}. Usage shows high engagement with {{Feature_X}}. Draft a renewal reminder that highlights value and suggests a call to optimize other features." |
+| **RevOps** | **Data Hygiene & Lead Scoring:** "You are a RevOps analyst. Given a dataset of leads, assign a lead score (0-100) based on likelihood to convert. Output a CSV with Lead_ID, Score, and Key_Factors." |
+
+### B. Version Control: Managing the Evolution of Knowledge
+
+Version control systems (VCS), traditionally used for software code, provide an essential framework for managing the lifecycle of documents and knowledge within an enterprise. By treating documents and design systems as code, organizations can maintain a clear, auditable "single source of truth."
+
+- **Types of VCS:**
+    - **Centralized (CVCS) like SVN:** A single central repository holds the project history. Simple to manage but has a single point of failure.
+    - **Distributed (DVCS) like Git:** Every user has a full local copy of the repository. More flexible, supports offline work, and is more resilient.
+- **Core Concepts:**
+    - **Commit:** Saving a set of changes to the repository with a descriptive message. Best practices call for small, atomic commits.
+    - **Branch:** A separate line of development that allows for experimentation or parallel work without affecting the main version.
+    - **Merge:** The process of combining changes from different branches.
+- **Best Practices for Knowledge Management:**
+    - **Descriptive Commit Messages:** Clearly explain the "why" behind a change to a document or policy.
+    - **Branching for Revisions:** Use branches for major revisions or new policy drafts, allowing for review before merging into the "main" official version.
+    - **Semantic Versioning:** Apply a `MAJOR.MINOR.PATCH` versioning scheme to documents to clearly communicate the impact of changes (e.g., a MAJOR version change for a complete policy overhaul).
+
+## VI. Governance, Safety, and Measurement
+
+Scaling AI-powered outreach and knowledge systems requires robust guardrails and a consistent framework for measuring performance and ensuring safety.
+
+### A. Safety Guardrails and Responsible AI
+
+AI systems introduce unique risks that must be proactively managed.
+
+- **LLM-Specific Risks:**
+    - **Inferential Access:** Users with legitimate access to multiple individual data sources might combine them via AI to derive unauthorized insights.
+    - **Data Contamination:** Incorrect information can enter the system and propagate through its memory, influencing future decisions across the organization.
+    - **Prompt Injection:** Malicious actors can manipulate system behavior through carefully crafted queries.
+- **Mitigation Strategies and Guardrails:**
+    - **Seat Rotation & Pacing Limits:** Spread automated outreach across multiple sender accounts and cap daily sends to avoid platform flags and appear more human. HeyReach provides tools to manage this.
+    - **Human-in-the-Loop Review:** Require human approval for AI-generated messages, especially in late-stage deals or for high-stakes communications.
+    - **Fallback Defaults:** Define safe backup copy (e.g., "Hi there" instead of "Hi [FirstName],") to prevent sending broken personalization tokens if data is missing.
+    - **Permission-Aware Synthesis:** Implement permission layers that consider data source combinations and monitor query patterns for sensitive correlations. Kendra's GenAI Index can automatically inherit source system permissions.
+
+### B. Evaluation and Measurement Framework
+
+To ensure AI prompts and RAG systems are delivering value, a consistent audit loop is essential for tracking quality, performance, and compliance.
+
+**Key Metrics for RAG Systems:**
+
+| Metric | Category | Description | How to Measure |
+| --- | --- | --- | --- |
+| **Context Precision** | Retriever Quality | Measures how well the system ranks relevant information from the retrieved context. | Compare AI-ranked chunks to a ground truth set of relevant chunks. |
+| **Context Recall** | Retriever Quality | Measures the percentage of ground truth information covered by the retrieved context. | Check if all key points from a ground truth answer are present in the retrieved chunks. |
+| **Faithfulness** | Generator Quality | Evaluates how closely the generator's output aligns with the information in the provided source material. | Compare claims in the generated response against the source text. |
+| **Answer Similarity** | Overall Quality | Compares the semantic meaning of a generated answer with a ground truth answer. | Use an LLM-as-a-judge or semantic similarity models. |
+| **Hallucination Rate** | Generator Quality | Measures the extent to which the generator produces incorrect claims not present in the source data. | Manually or with an LLM-as-a-judge, count claims in the output that are not supported by the context. |
+| **Deliverability Health** | System Health | Measures if campaigns are avoiding spam filters and reaching users. | Track bounce rate (<2%), open rate (>40%), and spam rate (<0.1%). |
+
+A simple scorecard tracking these metrics, with clear ownership and a regular review cadence (e.g., weekly GTM sync), keeps AI adoption grounded in real results and allows for rapid iteration and improvement.
+
+### Tab 6
+
+¡Qué buena visión tienes! Has identificado un problema real: la "amnesia" y la "esquizofrenia" de las IAs. Efectivamente, un Data Lake es un almacén pasivo de datos (fríos), mientras que tú propones un **Context Lake** como un sistema activo de **significados y reglas de negocio**.
+
+He analizado a fondo la estructura para materializar esto en **Gatacca** y te he preparado la **Taxonomía Documental** exacta que necesitas.
+
+Pero antes, un apunte rápido para tu pitch que te dará mucha autoridad inmediata con directores de Marketing:
+
+> Cuando dices "Town of Boys", te refieres al "Tone of Voice" (ToV) o Tono de Voz. Es el término estándar en la industria. Tener ese documento bien definido es el pilar número 1 para que la IA no suene robótica.
+> 
+
+Aquí tienes el mapa mental de los documentos necesarios, organizados por esa **prelación** (jerarquía) que mencionas.
+
+---
+
+### NIVEL 1: LA CONSTITUCIÓN (Prelación Absoluta)
+
+*Estos documentos son "La Ley". Son inmutables a corto plazo. Si la IA encuentra una contradicción entre lo que dice un chat antiguo (o internet) y estos documentos, siempre deben ganar estos. Se inyectan como reglas de oro.*
+
+**1. Manual de Identidad Verbal (Tone of Voice)**
+
+- **Qué contiene:**
+    - **Arquetipos:** (ej. "Somos el Sabio Rebelde", no el "Amigo Gracioso").
+    - **La "Lista Negra":** Palabras que *prohibimos* usar (ej. "Nunca decimos 'barato', decimos 'rentable'").
+    - **Reglas de Sintaxis:** ¿Usamos emojis? ¿Frases cortas y tajantes o largas y explicativas?
+    - **Ejemplos "Do's & Don'ts":** "Así respondemos a una queja" vs "Así NO respondemos".
+
+**2. La "Fuente de Verdad" del Producto (Product Source of Truth)**
+
+- **Qué contiene:**
+    - **Diccionario de Features:** Definición técnica exacta de qué hace cada botón.
+    - **La "Anti-Lista":** Qué **NO** hace el producto. (Esto es vital para evitar que la IA alucine y prometa funcionalidades falsas a clientes).
+    - **Pricing Oficial:** Planes, límites y precios actuales.
+
+**3. Los Axiomas del Cliente (ICP & Personas)**
+
+- **Qué contiene:**
+    - **Datos Duros:** Tamaño de empresa, cargo del decisor (CTO, CMO).
+    - **Psicografía:** Sus dolores (*pains*) que no le dejan dormir y sus deseos (*gains*).
+    - **Objeciones Raíz:** Las 5 razones reales por las que dicen "no" (ej. "Es muy caro", "Es difícil de integrar").
+
+**4. El Manifiesto (Propósito)**
+
+- **Qué contiene:** Misión, Visión y "El Enemigo" (contra qué luchamos: la burocracia, el aburrimiento, etc.).
+- **Por qué:** Ayuda a la IA a entender la ética y el rumbo a largo plazo al tomar decisiones.
+
+---
+
+### NIVEL 2: EL CONTEXTO ESTRATÉGICO (Documentos Vivos)
+
+*Tienen Prelación Alta, pero caducan. Son la "verdad de este trimestre". Deben tener una etiqueta de fecha obligatoria.*
+
+**5. Battlecards de Competencia (El Mercado)**
+
+- **Qué contiene:**
+    - Quiénes son los rivales *hoy*.
+    - Tabla comparativa "Nosotros vs. Ellos".
+    - Argumentarios de "Kill Points" (dónde ganamos siempre).
+- **Regla de Actualización:** Este documento caduca rápido. Si tiene más de 6 meses, Gatacca debería avisar para revisarlo.
+
+**6. Narrativas y Campañas del 'Quarter'**
+
+- **Qué contiene:**
+    - El foco actual (ej. "En Q1 solo empujamos el Producto A").
+    - Ofertas vigentes (ej. "Black Friday" o "Promo de Verano").
+- **Por qué:** Evita que la IA ofrezca descuentos de Navidad en agosto.
+
+**7. Playbooks de "Best Practices"**
+
+- **Qué contiene:**
+    - Estructuras de Email en frío que han funcionado antes.
+    - Guiones de ventas probados.
+- **Por qué:** Es la memoria del éxito táctico. "Hazlo como funcionó la última vez".
+
+---
+
+### NIVEL 3: LA MEMORIA EPISÓDICA (Fondo de Armario)
+
+*Tienen Prelación Baja. Son datos brutos. Sirven para extraer patrones o buscar inspiración, pero nunca deben sobrescribir a los niveles superiores.*
+
+**8. El Archivo de Contenidos (Content Library)**
+
+- **Qué contiene:** Blogs antiguos, posts de LinkedIn pasados, newsletters enviadas hace un año.
+- **Riesgo:** Cuidado aquí. Si tu Tone of Voice (Nivel 1) cambió hace un mes, los contenidos de hace un año (Nivel 3) son "tóxicos" para el estilo nuevo. Gatacca debe saber priorizar el estilo nuevo sobre el viejo.
+
+**9. Transcripciones (Raw Data)**
+
+- **Qué contiene:** Llamadas de ventas, tickets de soporte, reuniones internas.
+- **Uso:** Minería de datos. Sirven para detectar nuevos *pains* y pedir al humano que actualice el Nivel 1.
+
+---
+
+### EL "PEGAMENTO": Lo que hará único a Gatacca
+
+Para resolver el problema que mencionas sobre **las actualizaciones**, Gatacca no puede ser solo una carpeta. Necesita generar un **Grafo de Dependencias** (Metadata).
+
+Imagina que Gatacca crea internamente estas conexiones invisibles:
+
+> "El documento 'Landing Page Producto A' (Nivel 3) depende de la 'Fuente de Verdad Producto' (Nivel 1)."
+> 
+
+La magia ocurre en la actualización:
+
+Cuando tú (el humano) cambias el precio en la "Fuente de Verdad" (Nivel 1), Gatacca detecta la relación y te alerta:
+
+> "He visto que has cambiado el precio. Ojo: Tienes 3 Landing Pages y 2 Emails de Secuencia (Nivel 2) que mencionan el precio antiguo. ¿Quieres que redacte las nuevas versiones ahora mismo?"
+> 
+
+Esa capacidad de **propagar los cambios de los documentos pilares hacia abajo** es lo que convierte un simple "Data Lake" en un verdadero **Context Lake Operativo**.
+
+### Tab 7
+
+Me parece el paso lógico. Para que esto no sea "una carpeta más" en la nube, la interfaz debe **comunicar jerarquía y vida**.
+
+### Tab 8: Competitive Analysis — Octave HQ & [Knolli.ai](http://Knolli.ai)
+
+## 🔍 Competitive Research: Context Engineering Platforms
+
+*Research conducted: 11 January 2026*
+
+---
+
+### Octave HQ — "The GTM Context Engine"
+
+**URL:** [octavehq.com](http://octavehq.com)
+
+**Positioning:** *"AI runs on context. GTM AI runs on Octave."*
+
+Octave se posiciona como un **motor de contexto en tiempo real** específicamente para equipos de Go-To-Market (GTM).
+
+### Pain Points que Octave Resuelve
+
+1. **"ICP docs are digital tombstones"** — Los documentos de posicionamiento acumulan polvo mientras el messaging se desvía de la marca. No hay una fuente de verdad para el contexto que hace el outbound verdaderamente relevante.
+2. **"Templates turn precision into Mad Libs"** — Las plantillas estáticas con tags no se adaptan a estrategias cambiantes o señales dinámicas. Señales ricas se convierten en snippets genéricos.
+3. **"Workflows become prompt bottlenecks"** — Cada campaña demanda docenas de prompts frágiles que se rompen cuando el mercado cambia. Estas cadenas frágiles sofocan las mejores ideas de crecimiento.
+
+### Arquitectura de Octave
+
+| Componente | Función | Relevancia para Context Lake |
+| --- | --- | --- |
+| **ICP Library** | Codifica personas, use cases, value props, competidores como "GTM DNA" en un single source of truth | Muy similar a nuestro Tier 1 "Constitution" |
+| **Messaging Playbooks** | Genera narrativas potentes por segmento, función o evento que motiva a los buyers | Equivale a documentos Tier 2 "Operativos" |
+| **AI Agents** | Agentes nativos que investigan, leen webs, scrapean perfiles, y toman decisiones basadas en pain points detectados | Feature adicional que Context Lake podría considerar |
+| **Composable Workflows** | Push scoring, content y emails directo al sequencer, CRM o SEP via API | Integración similar a nuestro CDC pipeline |
+| **"Refine" Feature** | Actualización de ICP y messaging vía chat con la IA | **Insight clave: UI conversacional para mantener contexto fresco** |
+
+### Diferenciador Principal de Octave
+
+*"Real-time playbooks"* — Los cambios de mercado, lanzamientos de producto y señales competitivas fluyen **instantáneamente** a las campañas. El messaging evoluciona junto con el producto, clientes y mercado.
+
+### Integraciones Destacadas
+
+- Clay, Cargo, Instantly, Smartlead, Lemlist, Outreach, Salesloft
+- Gong, Chorus, Salesforce, HubSpot
+- Make, n8n, AirOps
+- Google Drive, Gmail, Office 365, Notion
+- **MCP integration** (mencionado bajo "Seamless Orchestration")
+
+---
+
+### [Knolli.ai](http://Knolli.ai) — "AI Copilot Platform"
+
+**URL:** [knolli.ai](http://knolli.ai)
+
+**Positioning:** *"Skip the Engineering. Launch AI Copilots Fast."*
+
+Knolli es una plataforma **horizontal** para construir copilots/agentes de IA sin código. Menos especializada en GTM que Octave, pero con patrones de arquitectura interesantes.
+
+### Propuesta de Valor de Knolli
+
+- **Unified workflow** — Build, connect, deploy y monetize desde un solo lugar sin hacer malabares con múltiples tools o vendors
+- **No-code creation** — Describe lo que quieres en lenguaje natural, Knolli lo convierte en framework listo para lanzar
+- **Integrated monetization** — Cobrar subscriptions, set pay-per-use rates, o licenciar a enterprises sin plataformas third-party
+- **Enterprise-grade** — Role-based access, encrypted data, compliance-ready infrastructure built-in
+
+### Arquitectura de Knolli
+
+| Componente | Función | Relevancia para Context Lake |
+| --- | --- | --- |
+| **Multi-agent Architecture** | Múltiples agentes especializados dentro de un solo copilot, trabajando en paralelo | Podría inspirar agentes especializados por Tier |
+| **Knowledge Base** | Upload docs, link data sources, integrate workflows securely | Similar al Context Lake pero **sin sistema de jerarquía** |
+| **Workflow Automation** | Encadenar tasks, triggers e integraciones | Comparable al CDC pipeline |
+| **Built-in Monetization** | Subscriptions, pay-per-use, licensing desde la plataforma | Modelo de negocio potencial para Gatacca |
+| **Templates & Pre-built Copilots** | Copilots listos para industrias como finance, marketing, customer support | Acelera time-to-value |
+| **Multi-model Support** | OpenAI, Anthropic, Gemini — switch anytime based on quality, privacy, or cost | Flexibilidad model-agnostic |
+
+### Diferenciador de Knolli
+
+- **White-labeling completo** — Custom domains, logos, interface styling
+- **Monetización integrada** — Go from idea to revenue without third-party platforms
+
+---
+
+### 🧠 Context Engineering: Insights de la Industria
+
+### Definición de Anthropic
+
+> *"Context engineering es el conjunto de estrategias para curar y mantener el set óptimo de tokens durante la inferencia del LLM, incluyendo toda la información que puede llegar ahí más allá de los prompts."*
+> 
+- [Anthropic Engineering Blog](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+
+### Problemas Críticos Identificados
+
+**1. Context Poisoning**
+
+Una alucinación o error entra al contexto del sistema de IA y se referencia repetidamente en respuestas futuras. El equipo de DeepMind identificó este problema construyendo un agente de Pokémon — cuando el agente alucinaba sobre el estado del juego, esta información falsa "envenenaba" la sección de goals del contexto, causando que el agente desarrollara estrategias sin sentido.
+
+- **Solución:** *Context validation and quarantine* — aislar tipos de contexto en threads separados y validar información antes de que se añada a memoria de largo plazo
+- **Aplicación en Context Lake:** El sistema de Prelación ya mitiga esto, pero podríamos añadir **"quarantine zones"** para documentos no validados
+
+**2. Context Distraction**
+
+Cuando el contexto crece demasiado grande (+100k tokens), el modelo empieza a enfocarse demasiado en el historial acumulado en vez de usar lo que aprendió durante el entrenamiento. El agente de Pokémon de Gemini mostró esto — una vez que el contexto crecía más allá de 100,000 tokens, el agente empezaba a repetir acciones de su vasto historial en vez de desarrollar nuevas estrategias.
+
+- **Aplicación en Context Lake:** Justifica aún más el **Time Decay** para Tier 2/3 y la priorización de Tier 1
+
+---
+
+### 📋 Recomendaciones para el PRD de Context Lake
+
+Basado en este análisis competitivo, sugerimos incorporar:
+
+### 1. "Refine via Chat" Feature (inspirado en Octave)
+
+- Permitir que usuarios actualicen documentos Tier 1/2 vía conversación con la IA
+- La IA sugiere cambios, el usuario confirma → se propagan automáticamente
+- **User Story:** "Como CMO, quiero decirle a la IA 'Actualiza nuestro ICP para incluir empresas de 500+ empleados' y que eso se refleje en el documento Pilar"
+
+### 2. Context Quarantine Zone (nuevo)
+
+- Añadir un estado "Unvalidated" antes de que documentos entren al lake
+- Previene context poisoning de información no verificada
+- **Flujo:** Upload → AI Analysis → Quarantine → Human Review → Approved/Rejected
+
+### 3. Agent Specialization por Tier (inspirado en Knolli)
+
+- Context Gardener actual podría dividirse en agentes especializados:
+    - **Tier 1 Guardian** — Protege documentos constitucionales, detecta conflictos con políticas core
+    - **Tier 2 Curator** — Gestiona caducidad y actualizaciones de documentos operativos
+    - **Tier 3 Harvester** — Extrae insights de datos transitorios para sugerir updates a Tier 1/2
+
+### 4. Template Library (inspirado en Knolli)
+
+- Pre-built "Context Packs" para industrias específicas:
+    - SaaS B2B
+    - E-commerce
+    - Financial Services
+- Acelera onboarding de nuevos clientes
+
+---
+
+### 🎯 Competitive Positioning Statement
+
+> *"Mientras Octave se enfoca exclusivamente en GTM y Knolli ofrece copilots genéricos sin jerarquía, Context Lake es el sistema operativo de memoria institucional que garantiza que cualquier modelo de IA — sea para ventas, marketing, operaciones o producto — hable con la verdad autorizada de la empresa."*
+> 
+
+### Matriz de Diferenciación
+
+| Feature | Octave | Knolli | **Context Lake** |
+| --- | --- | --- | --- |
+| Jerarquía documental (Prelación) | ❌ | ❌ | ✅ **Core feature** |
+| Real-time context | ✅ | Parcial | ✅ CDC Pipeline |
+| Dependency graph | ❌ | ❌ | ✅ Ripple Editor |
+| Staleness detection | ❌ | ❌ | ✅ Context Gardener |
+| GTM-specific | ✅ Core focus | ❌ | ✅ Vertical expandible |
+| Model-agnostic | Parcial | ✅ | ✅ Via MCP |
+| Built-in monetization | ❌ | ✅ | 🔜 Roadmap |
+| GraphRAG | ❌ | ❌ | ✅ Phase 4 |
+
+---
+
+### 🔗 Sources
+
+- [Octave HQ](https://www.octavehq.com/)
+- [Octave GTM Context Engine Update](https://www.octavehq.com/post/octaves-gtm-context-engine-gets-souped-up)
+- [Knolli.ai](http://Knolli.ai)
+- [Anthropic: Effective Context Engineering for AI Agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- [DataCamp: Context Engineering Guide](https://www.datacamp.com/blog/context-engineering)
+
+El error de diseño de herramientas como SharePoint o Drive es que visualizan los archivos como listas planas. Tú necesitas visualizar **gravedad** (qué atrae a qué) y **salud** (qué está actualizado).
+
+Aquí tienes mi propuesta de UI/UX (Interfaz de Usuario / Experiencia de Usuario) dividida en **4 Pantallas Clave** que materializan tu visión.
+
+---
+
+### 1. El Dashboard: "El Radar de Contexto" (The Context Radar)
+
+*Objetivo: Que el CMO vea en 3 segundos la salud mental de su marca. Rompemos la metáfora de carpetas por una de sistema solar.*
+
+**Diseño Visual:**
+
+- **Vista Central:** Un gráfico de anillos concéntricos (como un sonar o sistema solar).
+    - **El Núcleo (Sol - Dorado):** Aquí flotan fijos los iconos de tus documentos de **Prelación 1** (Tone of Voice, ICP, Producto). Son grandes, inamovibles y brillan.
+    - **La Órbita Media (Planetas - Azul Neón):** Los documentos de **Prelación 2** (Campañas, Competencia). Giran lentamente alrededor del núcleo.
+        - *Detalle clave:* Tienen una **Barra de Vida (Health Bar)** circular. Si el documento es reciente, el anillo está completo. Si caduca, el anillo se vacía y se pone rojo.
+    - **La Nube Exterior (Polvo - Gris):** Puntos pequeños de fondo. Es el **Nivel 3** (Chats antiguos, raw data).
+- **Barra Lateral Derecha: "El Jardinero" (The Gardener):**
+    - No es un centro de notificaciones, es una lista de tareas de mantenimiento ("Deuda de Contexto").
+    - *Ejemplo:* "⚠️ Tu documento 'Competencia' tiene 6 meses. ¿Quieres actualizarlo?"
+    - *Ejemplo:* "🔗 Conflicto: El 'Email de Bienvenida' (Nivel 2) contradice al nuevo 'Pricing' (Nivel 1)."
+
+---
+
+### 2. La Sala de Triaje (Ingestion Triage)
+
+*Objetivo: Nada entra al lago sin ser etiquetado. Evitamos el "basurero de datos".*
+
+Cuando arrastras un archivo a Gatacca, no se guarda automáticamente. Se abre un **Modal Flotante**:
+
+**El Modal de Ingesta:**
+
+1. **Análisis AI:** "Parece que has subido una *Guía de Estilo*."
+2. **Selector de Gravedad (El Slider de Prelación):**
+    - Un control deslizante vertical.
+    - 🔼 **Nivel 1 (Constitución):** *Warning: Esto sobrescribirá el comportamiento base.*
+    - ⏺ **Nivel 2 (Estratégico):** *Requiere fecha de caducidad.* [Selector de Fecha: "Válido por 3 meses"]
+    - 🔽 **Nivel 3 (Archivo):** *Solo lectura.*
+3. **Etiquetado Relacional:**
+    - "¿A qué productos afecta?" (Para crear los vínculos en el gráfico).
+
+---
+
+### 3. El Editor de Impacto: "El Efecto Onda" (The Ripple Editor)
+
+*Objetivo: La "killer feature". Gestionar la actualización en cascada.*
+
+Esta es la pantalla que usas cuando necesitas cambiar una "verdad" de la empresa (ej. cambiar un precio en el Nivel 1).
+
+**Diseño de Pantalla Dividida (Split Screen):**
+
+- **Panel Izquierdo (Editor Limpio):** Estás editando el documento "Pricing 2024". Cambias "10€" por "15€".
+- **Panel Derecho (Simulador de Impacto):**
+    - Al momento, Gatacca analiza la dependencia y muestra una lista de alerta.
+    - *"⚠️ Cambio Estructural Detectado. Documentos afectados aguas abajo:"*
+        - 📄 *Landing Page Q1 (Nivel 2)* -> Dice "10€".
+        - 📄 *Script de Ventas (Nivel 2)* -> Dice "10€".
+- **Botón de Acción (Hero Button):**
+    - En lugar de "Guardar", el botón dice: **[Propagar Cambios y Actualizar]**.
+    - Al pulsarlo, ves una animación de "onda" que actualiza los documentos hijos automáticamente.
+
+---
+
+### 4. El Playground: "Chat con Rayos X" (X-Ray Mode)
+
+*Objetivo: Generar confianza mostrando el "por qué".*
+
+El chat donde interactúas con los modelos (GPT/Claude) a través de Gatacca, pero con una capa de **transparencia**.
+
+**Interfaz:**
+
+- **Centro:** Chat estándar.
+- **Panel Lateral "Debug":**
+    - Cuando la IA responde, subraya frases clave en colores.
+    - **Sección "Fuentes Activas":**
+        - ✅ *Tono usado: "Rebelde" (Fuente: Tone of Voice - Nivel 1)*.
+        - ✅ *Dato usado: "Feature X" (Fuente: Producto - Nivel 1)*.
+    - **Sección "Contexto Ignorado" (Muy potente):**
+        - ⛔ *Ignorado: "Campaña Navidad 2022" (Razón: Caducado / Contradice Nivel 1)*.
+    - Esto demuestra al usuario que el sistema de prelación **funciona**.
+
+### Resumen Visual (UI Kit)
+
+Para que el diseño se sienta coherente:
+
+1. **Iconografía de Jerarquía:**
+    - **Nivel 1:** Un **Ancla** o un **Sol** (Pesado, Fijo).
+    - **Nivel 2:** Un **Reloj** o un **Ciclo** (Vivo, Temporal).
+    - **Nivel 3:** Una **Hoja** o **Archivo** (Ligero, Histórico).
+2. **Las "Líneas Nerviosas":**
+    - Cuando pasas el ratón por un documento en el Dashboard, deben iluminarse líneas que conectan ese documento con todos sus dependientes. Visualiza la red neuronal de la empresa.
+
+¿Te encaja visualizarlo así? Creo que la metáfora del **Radar/Sistema Solar** es mucho más potente que la de "lago" para la interfaz visual, porque implica que hay un centro de gravedad (tu Nivel 1) que lo ordena todo.

@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical } from 'lucide-react'
+import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Layers, BookOpen, Settings } from 'lucide-react'
 import { useProject } from '@/hooks/useProjects'
 import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
+import { useAgency } from '@/hooks/useAgency'
 import DocumentUpload from '@/components/documents/DocumentUpload'
 import DocumentBulkUpload from '@/components/documents/DocumentBulkUpload'
 import DocumentList from '@/components/documents/DocumentList'
@@ -14,8 +15,11 @@ import FlowSetup from '@/components/flow/FlowSetup'
 import CampaignRunner from '@/components/campaign/CampaignRunner'
 import ProjectVariables from '@/components/project/ProjectVariables'
 import ResearchPromptsEditor from '@/components/project/ResearchPromptsEditor'
+import ContextLakeDashboard from '@/components/context-lake/ContextLakeDashboard'
+import PlaybooksDashboard from '@/components/playbooks/PlaybooksDashboard'
+import APIConfigPanel from '@/components/settings/APIConfigPanel'
 
-type TabType = 'documents' | 'flow' | 'config' | 'campaigns' | 'context' | 'variables'
+type TabType = 'context-lake' | 'playbooks' | 'documents' | 'flow' | 'campaigns' | 'variables' | 'settings'
 
 // Loading Skeleton
 function LoadingSkeleton() {
@@ -58,19 +62,23 @@ export default function ProjectPage({
   params: { projectId: string }
 }) {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<TabType>('documents')
+  const [activeTab, setActiveTab] = useState<TabType>('context-lake')
   const { project, loading: projectLoading, error: projectError } = useProject(params.projectId)
   const { documents, loading: docsLoading, reload: reloadDocs } = useDocuments(params.projectId)
+  const { agency } = useAgency()
   const [editingProjectName, setEditingProjectName] = useState(false)
   const [projectName, setProjectName] = useState('')
   const [savingProjectName, setSavingProjectName] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
 
   const tabs = [
-    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
-    { id: 'variables' as TabType, label: 'Variables', icon: Sliders, description: 'Configuración' },
-    { id: 'flow' as TabType, label: 'Flujo', icon: Workflow, description: 'Pasos y prompts' },
+    { id: 'context-lake' as TabType, label: 'Context Lake', icon: Layers, description: 'Documentos con tiers' },
+    { id: 'playbooks' as TabType, label: 'Playbooks', icon: BookOpen, description: 'Procesos reutilizables' },
+    { id: 'documents' as TabType, label: 'Docs (Legacy)', icon: FileText, description: 'Base de conocimiento' },
+    { id: 'flow' as TabType, label: 'Flujo (Legacy)', icon: Workflow, description: 'Pasos y prompts' },
     { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
+    { id: 'variables' as TabType, label: 'Variables', icon: Sliders, description: 'Configuración' },
+    { id: 'settings' as TabType, label: 'APIs', icon: Settings, description: 'Configuración de APIs' },
   ]
 
   if (projectLoading) {
@@ -332,6 +340,15 @@ export default function ProjectPage({
 
           {/* Tab Content */}
           <div className="p-6">
+            {activeTab === 'context-lake' && (
+              <ContextLakeDashboard clientId={params.projectId} />
+            )}
+            {activeTab === 'playbooks' && agency && (
+              <PlaybooksDashboard
+                agencyId={agency.id}
+                clientId={params.projectId}
+              />
+            )}
             {activeTab === 'documents' && (
               <DocumentsTab
                 projectId={params.projectId}
@@ -364,6 +381,9 @@ export default function ProjectPage({
             )}
             {activeTab === 'campaigns' && (
               <CampaignRunner projectId={params.projectId} project={project} />
+            )}
+            {activeTab === 'settings' && (
+              <APIConfigPanel />
             )}
           </div>
         </div>

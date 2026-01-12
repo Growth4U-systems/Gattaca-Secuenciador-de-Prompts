@@ -501,12 +501,15 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
       if (updatedFlowConfig?.steps) {
         updatedFlowConfig = {
           ...updatedFlowConfig,
-          steps: updatedFlowConfig.steps.map(step => ({
-            ...step,
-            model: step.model === 'gemini-2.0-flash-exp' || step.model === 'gemini-2.0-pro-exp'
-              ? 'gemini-2.5-pro'
-              : step.model
-          }))
+          steps: updatedFlowConfig.steps.map(step => {
+            // Handle legacy model names that may exist in older campaigns
+            const modelStr = step.model as string | undefined
+            const needsUpgrade = modelStr === 'gemini-2.0-flash-exp' || modelStr === 'gemini-2.0-pro-exp'
+            return {
+              ...step,
+              model: needsUpgrade ? 'gemini-2.5-pro' : step.model
+            }
+          })
         }
       }
 
