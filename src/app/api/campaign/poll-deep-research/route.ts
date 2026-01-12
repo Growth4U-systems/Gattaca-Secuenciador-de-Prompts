@@ -219,14 +219,14 @@ export async function POST(request: NextRequest) {
       // Load campaign to update step_outputs
       const { data: campaign, error: campaignError } = await supabase
         .from('ecp_campaigns')
-        .select('step_outputs, flow_config, projects(flow_config)')
+        .select('step_outputs, flow_config, projects_legacy(flow_config)')
         .eq('id', campaign_id)
         .single()
 
       if (!campaignError && campaign) {
         // Find step name from flow config
         // Note: projects is an array from the relation, access first element
-        const flowConfig = campaign.flow_config || (campaign.projects as any)?.[0]?.flow_config
+        const flowConfig = campaign.flow_config || (campaign.projects_legacy as any)?.[0]?.flow_config
         const step = flowConfig?.steps?.find((s: any) => s.id === step_id)
         const stepName = step?.name || step_id
 
