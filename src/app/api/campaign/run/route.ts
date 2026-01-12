@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     // Load campaign and project
     const { data: campaign, error: campaignError } = await supabase
       .from('ecp_campaigns')
-      .select('*, projects(*)')
+      .select('*, projects_legacy(*)')
       .eq('id', campaignId)
       .single()
 
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const project = campaign.projects
+    const project = campaign.projects_legacy
 
     // Use campaign's flow_config if available, otherwise fall back to project's flow_config
     const flowConfig = campaign.flow_config || project.flow_config
