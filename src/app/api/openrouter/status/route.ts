@@ -49,7 +49,8 @@ export async function GET() {
       .eq('user_id', userId)
       .single()
 
-    const agencyData = membership?.agencies as {
+    // Supabase returns the relation as an object when using .single() on the parent
+    const agencyData = membership?.agencies as unknown as {
       id: string
       name: string
       openrouter_api_key: string | null
