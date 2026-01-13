@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2 } from 'lucide-react'
+import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2, Building2 } from 'lucide-react'
 import { useToast, useModal } from '@/components/ui'
 import { useProject } from '@/hooks/useProjects'
 import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
@@ -263,8 +263,11 @@ export default function ProjectPage({
                     </div>
                     <div>
                       <h1 className="text-2xl font-bold text-white">{project.name}</h1>
+                      {project.client?.name && (
+                        <p className="text-blue-200 text-sm font-medium mt-0.5">{project.client.name}</p>
+                      )}
                       {project.description && (
-                        <p className="text-blue-100 mt-1">{project.description}</p>
+                        <p className="text-blue-100 mt-1 text-sm max-w-2xl">{project.description}</p>
                       )}
                     </div>
                   </div>
@@ -327,7 +330,13 @@ export default function ProjectPage({
             </div>
 
             {/* Quick Stats */}
-            <div className="flex flex-wrap gap-4 mt-4">
+            <div className="flex flex-wrap gap-3 mt-4">
+              {project.client?.name && (
+                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
+                  <Building2 className="w-4 h-4 text-blue-200" />
+                  <span className="text-sm text-white">{project.client.name}</span>
+                </div>
+              )}
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
                 <FileText className="w-4 h-4 text-blue-200" />
                 <span className="text-sm text-white">{documents.length} documentos</span>
@@ -335,9 +344,9 @@ export default function ProjectPage({
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
                 <Calendar className="w-4 h-4 text-blue-200" />
                 <span className="text-sm text-white">
-                  {new Date(project.created_at).toLocaleDateString('es-ES', {
+                  Creado {new Date(project.created_at).toLocaleDateString('es-ES', {
                     year: 'numeric',
-                    month: 'short',
+                    month: 'long',
                     day: 'numeric',
                   })}
                 </span>

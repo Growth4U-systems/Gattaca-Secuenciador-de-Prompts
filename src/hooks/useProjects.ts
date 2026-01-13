@@ -3,7 +3,45 @@ import { createClient } from '@/lib/supabase-browser'
 
 type Project = any
 
-export function useProjects() {
+export function useProjects(includeDeleted = false) {
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadProjects = async () => {
+    try {
+      setLoading(true)
+      const supabase = createClient()
+      let query = supabase
+        .from('projects')
+        .select('*, client:clients(id, name)')
+        .order('created_at', { ascending: false })
+
+      // Filter by status unless includeDeleted is true
+      if (!includeDeleted) {
+        query = query.or('status.is.null,status.neq.deleted')
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+
+      setProjects(data || [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadProjects()
+  }, [includeDeleted])
+
+  return { projects, loading, error, reload: loadProjects }
+}
+
+export function useDeletedProjects() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -14,8 +52,9 @@ export function useProjects() {
       const supabase = createClient()
       const { data, error } = await supabase
         .from('projects')
-        .select('*')
-        .order('created_at', { ascending: false })
+        .select('*, client:clients(id, name)')
+        .eq('status', 'deleted')
+        .order('deleted_at', { ascending: false })
 
       if (error) throw error
 
@@ -51,10 +90,10 @@ export function useProject(projectId: string) {
         throw new Error('No authenticated user')
       }
 
-      // Load project data
+      // Load project data with client info
       const { data, error } = await supabase
         .from('projects')
-        .select('*')
+        .select('*, client:clients(id, name)')
         .eq('id', projectId)
         .single()
 
@@ -140,6 +179,38 @@ export async function updateProject(
 
 export async function deleteProject(projectId: string) {
   const supabase = createClient()
+  // Soft delete: update status to 'deleted' and set deleted_at timestamp
+  const { error } = await supabase
+    .from('projects')
+    .update({
+      status: 'deleted',
+      deleted_at: new Date().toISOString()
+    })
+    .eq('id', projectId)
+
+  if (error) throw error
+}
+
+export async function restoreProject(projectId: string) {
+  const supabase = createClient()
+  // Restore: set status back to 'active' and clear deleted_at
+  const { data, error } = await supabase
+    .from('projects')
+    .update({
+      status: 'active',
+      deleted_at: null
+    })
+    .eq('id', projectId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function permanentlyDeleteProject(projectId: string) {
+  const supabase = createClient()
+  // Permanent delete: actually remove from database
   const { error } = await supabase.from('projects').delete().eq('id', projectId)
 
   if (error) throw error

@@ -379,28 +379,26 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
           </div>
         )}
 
-        {/* Save button */}
-        {sortedSteps.length > 0 && (
-          <div className="flex justify-end mt-8 pt-6 border-t border-gray-100">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
-            >
-              {saving ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save size={20} />
-                  Guardar Configuración
-                </>
-              )}
-            </button>
-          </div>
-        )}
+        {/* Save button - always visible */}
+        <div className="flex justify-end mt-8 pt-6 border-t border-gray-100">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
+          >
+            {saving ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              <>
+                <Save size={20} />
+                Guardar Configuración
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Step editor modal */}
