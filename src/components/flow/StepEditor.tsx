@@ -83,9 +83,6 @@ export default function StepEditor({
   const declaredVariables = useMemo(() => {
     const varsSet = new Set<string>()
 
-    // Base campaign variables (always available)
-    ;['ecp_name', 'problem_core', 'country', 'industry'].forEach(v => varsSet.add(v))
-
     // Project-defined variables
     if (Array.isArray(projectVariables)) {
       projectVariables.forEach(v => {
