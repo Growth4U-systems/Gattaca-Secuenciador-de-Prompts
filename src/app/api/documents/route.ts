@@ -63,13 +63,13 @@ export async function GET(request: NextRequest) {
 
 /**
  * PATCH /api/documents
- * Update document properties (campaign assignment, filename)
- * Body: { documentId: string, campaignId?: string | null, filename?: string }
+ * Update document properties (campaign assignment, filename, description)
+ * Body: { documentId: string, campaignId?: string | null, filename?: string, description?: string }
  */
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { documentId, campaignId, filename } = body
+    const { documentId, campaignId, filename, description } = body
 
     if (!documentId) {
       return NextResponse.json(
@@ -102,6 +102,11 @@ export async function PATCH(request: NextRequest) {
         )
       }
       updateData.filename = trimmedFilename
+    }
+
+    // Include description if provided (can be empty string to clear it)
+    if (description !== undefined) {
+      updateData.description = description.trim()
     }
 
     // Check if there's anything to update

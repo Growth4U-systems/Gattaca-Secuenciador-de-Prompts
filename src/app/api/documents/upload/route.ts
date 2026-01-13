@@ -29,13 +29,15 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File
     const projectId = formData.get('projectId') as string
     const category = formData.get('category') as string
+    const description = formData.get('description') as string || ''
 
     console.log('File info:', {
       name: file?.name,
       size: file?.size,
       type: file?.type,
       projectId,
-      category
+      category,
+      description: description.substring(0, 50) + (description.length > 50 ? '...' : '')
     })
 
     if (!file || !projectId || !category) {
@@ -121,6 +123,7 @@ export async function POST(request: NextRequest) {
         project_id: projectId,
         filename: file.name,
         category: category,
+        description: description.trim(),
         extracted_content: extractedContent,
         file_size_bytes: file.size,
         mime_type: file.type,

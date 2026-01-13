@@ -11,9 +11,9 @@ export const maxDuration = 300 // 5 minutes for large files
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { blobUrl, filename, projectId, category, fileSize, mimeType } = body
+    const { blobUrl, filename, projectId, category, description, fileSize, mimeType } = body
 
-    console.log('Processing blob:', { blobUrl, filename, fileSize, projectId, category })
+    console.log('Processing blob:', { blobUrl, filename, fileSize, projectId, category, description: description?.substring(0, 50) })
 
     if (!blobUrl || !filename || !projectId || !category) {
       return NextResponse.json(
@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
         project_id: projectId,
         filename: filename,
         category: category,
+        description: description?.trim() || '',
         extracted_content: extractedContent,
         file_size_bytes: fileSize,
         mime_type: mimeType,
