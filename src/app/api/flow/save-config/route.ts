@@ -88,9 +88,27 @@ export async function POST(request: NextRequest) {
     // Use admin client to bypass auth
     const supabase = getSupabaseAdmin()
 
-    // Save flow config
-    const { data, error } = await supabase
+    // Try to save to projects table first (new schema)
+    const { data: projectData, error: projectError } = await supabase
       .from('projects')
+      .update({
+        legacy_flow_config: flowConfig,
+      })
+      .eq('id', projectId)
+      .select()
+      .single()
+
+    if (!projectError && projectData) {
+      return NextResponse.json({
+        success: true,
+        message: 'Flow configuration saved successfully',
+        project: projectData,
+      })
+    }
+
+    // Fallback to projects_legacy (old schema)
+    const { data, error } = await supabase
+      .from('projects_legacy')
       .update({
         flow_config: flowConfig,
       })
@@ -137,8 +155,23 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    const { data, error } = await supabase
+    // Try projects table first (new schema)
+    const { data: projectData, error: projectError } = await supabase
       .from('projects')
+      .select('legacy_flow_config')
+      .eq('id', projectId)
+      .single()
+
+    if (!projectError && projectData) {
+      return NextResponse.json({
+        success: true,
+        flowConfig: projectData.legacy_flow_config || null,
+      })
+    }
+
+    // Fallback to projects_legacy (old schema)
+    const { data, error } = await supabase
+      .from('projects_legacy')
       .select('flow_config')
       .eq('id', projectId)
       .single()

@@ -2,8 +2,9 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Plus, FolderOpen, Calendar, Search, Layers, Sparkles, ArrowRight, LayoutGrid, List } from 'lucide-react'
-import { useProjects } from '@/hooks/useProjects'
+import { Plus, FolderOpen, Calendar, Search, Layers, Sparkles, ArrowRight, LayoutGrid, List, Trash2, RotateCcw, X, AlertTriangle } from 'lucide-react'
+import { useProjects, useDeletedProjects, restoreProject, permanentlyDeleteProject } from '@/hooks/useProjects'
+import { useToast } from '@/components/ui'
 
 function ProjectCardSkeleton() {
   return (
@@ -24,9 +25,14 @@ function ProjectCardSkeleton() {
 }
 
 export default function HomePage() {
-  const { projects, loading, error } = useProjects()
+  const { projects, loading, error, reload } = useProjects()
+  const { projects: deletedProjects, loading: loadingDeleted, reload: reloadDeleted } = useDeletedProjects()
+  const toast = useToast()
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [showDeletedModal, setShowDeletedModal] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [processingId, setProcessingId] = useState<string | null>(null)
 
   const filteredProjects = useMemo(() => {
     if (!searchQuery.trim()) return projects
@@ -34,7 +40,8 @@ export default function HomePage() {
     return projects.filter(
       (project) =>
         project.name.toLowerCase().includes(query) ||
-        project.description?.toLowerCase().includes(query)
+        project.description?.toLowerCase().includes(query) ||
+        project.client?.name?.toLowerCase().includes(query)
     )
   }, [projects, searchQuery])
 
@@ -46,6 +53,34 @@ export default function HomePage() {
       return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()
     }).length,
   }), [projects])
+
+  const handleRestore = async (projectId: string) => {
+    setProcessingId(projectId)
+    try {
+      await restoreProject(projectId)
+      toast.success('Proyecto restaurado', 'El proyecto ha sido restaurado exitosamente')
+      reloadDeleted()
+      reload()
+    } catch (err) {
+      toast.error('Error', err instanceof Error ? err.message : 'No se pudo restaurar el proyecto')
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  const handlePermanentDelete = async (projectId: string) => {
+    setProcessingId(projectId)
+    try {
+      await permanentlyDeleteProject(projectId)
+      toast.success('Proyecto eliminado', 'El proyecto ha sido eliminado permanentemente')
+      setConfirmDelete(null)
+      reloadDeleted()
+    } catch (err) {
+      toast.error('Error', err instanceof Error ? err.message : 'No se pudo eliminar el proyecto')
+    } finally {
+      setProcessingId(null)
+    }
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
@@ -121,29 +156,41 @@ export default function HomePage() {
                 className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder:text-gray-400"
               />
             </div>
-            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-lg transition-all ${
-                  viewMode === 'grid'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-400 hover:text-gray-600'
-                }`}
-                title="Vista en cuadrícula"
-              >
-                <LayoutGrid size={20} />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-lg transition-all ${
-                  viewMode === 'list'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-400 hover:text-gray-600'
-                }`}
-                title="Vista en lista"
-              >
-                <List size={20} />
-              </button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2 rounded-lg transition-all ${
+                    viewMode === 'grid'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                  title="Vista en cuadrícula"
+                >
+                  <LayoutGrid size={20} />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-2 rounded-lg transition-all ${
+                    viewMode === 'list'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                  title="Vista en lista"
+                >
+                  <List size={20} />
+                </button>
+              </div>
+              {deletedProjects.length > 0 && (
+                <button
+                  onClick={() => setShowDeletedModal(true)}
+                  className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors"
+                  title="Ver proyectos eliminados"
+                >
+                  <Trash2 size={18} />
+                  <span className="text-sm font-medium">{deletedProjects.length}</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -250,6 +297,11 @@ export default function HomePage() {
                     <h3 className="font-semibold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
                       {project.name}
                     </h3>
+                    {project.client?.name && (
+                      <p className="text-xs text-blue-600 font-medium mt-0.5">
+                        {project.client.name}
+                      </p>
+                    )}
                     {project.description && (
                       <p
                         className={`text-sm text-gray-500 mt-1 ${
@@ -283,6 +335,151 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      {/* Deleted Projects Modal */}
+      {showDeletedModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-xl">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-gray-900">Proyectos Eliminados</h2>
+                  <p className="text-sm text-gray-500">{deletedProjects.length} proyecto(s) en papelera</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowDeletedModal(false)
+                  setConfirmDelete(null)
+                }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
+              {loadingDeleted ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-8 h-8 border-2 border-gray-200 border-t-blue-600 rounded-full animate-spin" />
+                </div>
+              ) : deletedProjects.length === 0 ? (
+                <div className="text-center py-8">
+                  <Trash2 size={48} className="mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-600">No hay proyectos eliminados</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {deletedProjects.map((project) => (
+                    <div
+                      key={project.id}
+                      className="p-4 bg-gray-50 rounded-xl border border-gray-100"
+                    >
+                      {confirmDelete === project.id ? (
+                        // Confirmation view
+                        <div className="space-y-3">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 bg-red-100 rounded-lg">
+                              <AlertTriangle className="w-5 h-5 text-red-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                ¿Eliminar permanentemente?
+                              </p>
+                              <p className="text-sm text-gray-600 mt-1">
+                                Esta acción no se puede deshacer. Se eliminarán todos los datos asociados a <span className="font-medium">&quot;{project.name}&quot;</span>.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={() => setConfirmDelete(null)}
+                              disabled={processingId === project.id}
+                              className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={() => handlePermanentDelete(project.id)}
+                              disabled={processingId === project.id}
+                              className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                            >
+                              {processingId === project.id ? (
+                                <>
+                                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                  Eliminando...
+                                </>
+                              ) : (
+                                'Eliminar definitivamente'
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        // Normal view
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="p-2 bg-gray-200 rounded-lg">
+                              <FolderOpen className="w-5 h-5 text-gray-500" />
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="font-medium text-gray-900 truncate">
+                                {project.name}
+                              </h3>
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                {project.client?.name && (
+                                  <span className="text-blue-600">{project.client.name}</span>
+                                )}
+                                {project.deleted_at && (
+                                  <span>
+                                    Eliminado {new Date(project.deleted_at).toLocaleDateString('es-ES', {
+                                      day: 'numeric',
+                                      month: 'short'
+                                    })}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleRestore(project.id)}
+                              disabled={processingId === project.id}
+                              className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              {processingId === project.id ? (
+                                <div className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                              ) : (
+                                <>
+                                  <RotateCcw size={16} />
+                                  Restaurar
+                                </>
+                              )}
+                            </button>
+                            <button
+                              onClick={() => setConfirmDelete(project.id)}
+                              disabled={processingId === project.id}
+                              className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              <Trash2 size={16} />
+                              Eliminar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
