@@ -66,9 +66,10 @@ export default function ProjectPage({
   const [activeTab, setActiveTab] = useState<TabType>('documents')
   const { project, userRole, loading: projectLoading, error: projectError } = useProject(params.projectId)
   const { documents, loading: docsLoading, reload: reloadDocs } = useDocuments(params.projectId)
-  const [editingProjectName, setEditingProjectName] = useState(false)
+  const [editingProject, setEditingProject] = useState(false)
   const [projectName, setProjectName] = useState('')
-  const [savingProjectName, setSavingProjectName] = useState(false)
+  const [projectDescription, setProjectDescription] = useState('')
+  const [savingProject, setSavingProject] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
 
@@ -108,47 +109,52 @@ export default function ProjectPage({
 
   const totalTokens = documents.reduce((sum, doc) => sum + (doc.token_count || 0), 0)
 
-  const handleEditProjectName = () => {
+  const handleEditProject = () => {
     setProjectName(project?.name || '')
-    setEditingProjectName(true)
+    setProjectDescription(project?.description || '')
+    setEditingProject(true)
   }
 
-  const handleSaveProjectName = async () => {
+  const handleSaveProject = async () => {
     if (!projectName.trim()) {
       toast.warning('Nombre requerido', 'El nombre del proyecto no puede estar vacío')
       return
     }
 
-    setSavingProjectName(true)
+    setSavingProject(true)
     try {
       const response = await fetch(`/api/projects/${params.projectId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name: projectName }),
+        body: JSON.stringify({
+          name: projectName,
+          description: projectDescription || null,
+        }),
       })
 
       const data = await response.json()
 
       if (data.success) {
-        toast.success('Guardado', 'Nombre del proyecto actualizado')
-        setEditingProjectName(false)
+        toast.success('Guardado', 'Proyecto actualizado')
+        setEditingProject(false)
         window.location.reload()
       } else {
         throw new Error(data.error || 'Failed to update')
       }
     } catch (error) {
-      console.error('Error updating project name:', error)
+      console.error('Error updating project:', error)
       toast.error('Error', error instanceof Error ? error.message : 'Error desconocido')
     } finally {
-      setSavingProjectName(false)
+      setSavingProject(false)
     }
   }
 
-  const handleCancelEditProjectName = () => {
-    setEditingProjectName(false)
+  const handleCancelEditProject = () => {
+    setEditingProject(false)
     setProjectName('')
+    setProjectDescription('')
   }
 
   const handleDeleteProject = async () => {
@@ -210,33 +216,44 @@ export default function ProjectPage({
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
           <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 px-6 py-5">
             <div className="flex items-start justify-between">
-              {editingProjectName ? (
-                <div className="flex items-center gap-3 flex-1">
-                  <input
-                    type="text"
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    className="flex-1 text-xl font-bold text-gray-900 bg-white border-2 border-blue-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveProjectName()
-                      if (e.key === 'Escape') handleCancelEditProjectName()
-                    }}
+              {editingProject ? (
+                <div className="flex-1 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={projectName}
+                      onChange={(e) => setProjectName(e.target.value)}
+                      placeholder="Nombre del proyecto"
+                      className="flex-1 text-xl font-bold text-gray-900 bg-white border-2 border-blue-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') handleCancelEditProject()
+                      }}
+                    />
+                    <button
+                      onClick={handleSaveProject}
+                      disabled={savingProject}
+                      className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300"
+                      title="Guardar"
+                    >
+                      <Check size={20} />
+                    </button>
+                    <button
+                      onClick={handleCancelEditProject}
+                      disabled={savingProject}
+                      className="p-2 bg-white/20 text-white rounded-lg hover:bg-white/30"
+                      title="Cancelar"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                  <textarea
+                    value={projectDescription}
+                    onChange={(e) => setProjectDescription(e.target.value)}
+                    placeholder="Descripción del proyecto (opcional)"
+                    rows={2}
+                    className="w-full text-sm text-gray-700 bg-white border-2 border-blue-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   />
-                  <button
-                    onClick={handleSaveProjectName}
-                    disabled={savingProjectName}
-                    className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300"
-                  >
-                    <Check size={20} />
-                  </button>
-                  <button
-                    onClick={handleCancelEditProjectName}
-                    disabled={savingProjectName}
-                    className="p-2 bg-white/20 text-white rounded-lg hover:bg-white/30"
-                  >
-                    <X size={20} />
-                  </button>
                 </div>
               ) : (
                 <>
@@ -286,12 +303,12 @@ export default function ProjectPage({
                           <button
                             onClick={() => {
                               setShowMenu(false)
-                              handleEditProjectName()
+                              handleEditProject()
                             }}
                             className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
                           >
                             <Edit2 size={16} />
-                            Editar nombre
+                            Editar proyecto
                           </button>
                           {userRole === 'owner' && (
                             <button

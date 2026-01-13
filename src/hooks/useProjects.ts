@@ -91,20 +91,29 @@ export function useProject(projectId: string) {
 export async function createProject(data: {
   name: string
   description?: string
+  client_id: string
 }) {
   const supabase = createClient()
 
-  // Get current authenticated user
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.user) {
-    throw new Error('No authenticated user')
-  }
+  // Generate slug from name
+  const slug =
+    data.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') +
+    '-' +
+    Date.now().toString(36)
 
   const { data: newProject, error } = await supabase
     .from('projects')
     .insert({
-      ...data,
-      user_id: session.user.id, // Use authenticated user's ID
+      name: data.name,
+      description: data.description,
+      client_id: data.client_id,
+      slug,
+      status: 'active',
+      goals: [],
+      settings: {},
     })
     .select()
     .single()

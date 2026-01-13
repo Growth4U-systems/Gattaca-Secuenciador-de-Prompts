@@ -1,100 +1,200 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
+/**
+ * Encryption utilities for storing sensitive data (API keys)
+ * Uses AES-256-GCM for authenticated encryption
+ */
+
+import crypto from 'crypto'
 
 const ALGORITHM = 'aes-256-gcm'
 const IV_LENGTH = 16
-const AUTH_TAG_LENGTH = 16
+const TAG_LENGTH = 16
+const SALT = 'gattaca-api-keys' // Fixed salt for key derivation
 
-function getEncryptionKey(): Buffer {
+/**
+ * Encrypt a string using AES-256-GCM
+ * @param text - Plain text to encrypt
+ * @param key - Encryption key (from ENCRYPTION_KEY env var)
+ * @returns Encrypted string in format: iv:tag:ciphertext (all base64)
+ */
+export function encrypt(text: string, key: string): string {
+  // Derive a 32-byte key from the provided key
+  const keyBuffer = crypto.scryptSync(key, SALT, 32)
+
+  // Generate random IV
+  const iv = crypto.randomBytes(IV_LENGTH)
+
+  // Create cipher
+  const cipher = crypto.createCipheriv(ALGORITHM, keyBuffer, iv)
+
+  // Encrypt
+  let encrypted = cipher.update(text, 'utf8', 'base64')
+  encrypted += cipher.final('base64')
+
+  // Get auth tag
+  const tag = cipher.getAuthTag()
+
+  // Return combined string: iv:tag:ciphertext
+  return `${iv.toString('base64')}:${tag.toString('base64')}:${encrypted}`
+}
+
+/**
+ * Decrypt a string encrypted with encrypt()
+ * @param encryptedData - Encrypted string in format: iv:tag:ciphertext
+ * @param key - Encryption key (from ENCRYPTION_KEY env var)
+ * @returns Decrypted plain text
+ * @throws Error if decryption fails (invalid key, tampered data, etc.)
+ */
+export function decrypt(encryptedData: string, key: string): string {
+  const parts = encryptedData.split(':')
+
+  if (parts.length !== 3) {
+    throw new Error('Invalid encrypted data format')
+  }
+
+  const [ivB64, tagB64, ciphertext] = parts
+
+  // Derive the same key
+  const keyBuffer = crypto.scryptSync(key, SALT, 32)
+
+  // Parse components
+  const iv = Buffer.from(ivB64, 'base64')
+  const tag = Buffer.from(tagB64, 'base64')
+
+  // Create decipher
+  const decipher = crypto.createDecipheriv(ALGORITHM, keyBuffer, iv)
+  decipher.setAuthTag(tag)
+
+  // Decrypt
+  let decrypted = decipher.update(ciphertext, 'base64', 'utf8')
+  decrypted += decipher.final('utf8')
+
+  return decrypted
+}
+
+/**
+ * Generate a hint for displaying the API key (last 4 chars)
+ * @param apiKey - The full API key
+ * @returns Hint string like "...xyz1"
+ */
+export function generateKeyHint(apiKey: string): string {
+  if (apiKey.length < 4) {
+    return '****'
+  }
+  return '...' + apiKey.slice(-4)
+}
+
+/**
+ * Validate that an encryption key is properly configured
+ * @returns true if ENCRYPTION_KEY is set and valid
+ */
+export function isEncryptionConfigured(): boolean {
+  const key = process.env.ENCRYPTION_KEY
+  return !!key && key.length >= 16
+}
+
+/**
+ * Get the encryption key from environment
+ * @throws Error if ENCRYPTION_KEY is not configured
+ */
+export function getEncryptionKey(): string {
   const key = process.env.ENCRYPTION_KEY
   if (!key) {
     throw new Error('ENCRYPTION_KEY environment variable is not set')
   }
-  if (key.length !== 64) {
-    throw new Error('ENCRYPTION_KEY must be 64 hex characters (32 bytes)')
+  if (key.length < 16) {
+    throw new Error('ENCRYPTION_KEY must be at least 16 characters')
   }
-  return Buffer.from(key, 'hex')
+  return key
 }
 
 /**
- * Encrypts a string using AES-256-GCM
- * Returns: base64(iv + authTag + ciphertext)
+ * Encrypt an API key for storage
+ * @param apiKey - The plain API key
+ * @returns Object with encrypted key and hint
  */
-export function encryptToken(plaintext: string): string {
-  const key = getEncryptionKey()
-  const iv = randomBytes(IV_LENGTH)
-
-  const cipher = createCipheriv(ALGORITHM, key, iv)
-  const encrypted = Buffer.concat([
-    cipher.update(plaintext, 'utf8'),
-    cipher.final()
-  ])
-  const authTag = cipher.getAuthTag()
-
-  // Combine: iv (16) + authTag (16) + ciphertext
-  const combined = Buffer.concat([iv, authTag, encrypted])
-  return combined.toString('base64')
-}
-
-/**
- * Decrypts a string encrypted with encryptToken
- */
-export function decryptToken(encryptedData: string): string {
-  const key = getEncryptionKey()
-  const combined = Buffer.from(encryptedData, 'base64')
-
-  if (combined.length < IV_LENGTH + AUTH_TAG_LENGTH) {
-    throw new Error('Invalid encrypted data: too short')
+export function encryptAPIKey(apiKey: string): { encryptedKey: string; keyHint: string } {
+  const encryptionKey = getEncryptionKey()
+  return {
+    encryptedKey: encrypt(apiKey, encryptionKey),
+    keyHint: generateKeyHint(apiKey),
   }
-
-  const iv = combined.subarray(0, IV_LENGTH)
-  const authTag = combined.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH)
-  const ciphertext = combined.subarray(IV_LENGTH + AUTH_TAG_LENGTH)
-
-  const decipher = createDecipheriv(ALGORITHM, key, iv)
-  decipher.setAuthTag(authTag)
-
-  const decrypted = Buffer.concat([
-    decipher.update(ciphertext),
-    decipher.final()
-  ])
-
-  return decrypted.toString('utf8')
 }
 
 /**
- * Generates a cryptographically secure random string for PKCE code_verifier
- * Returns 43-128 character URL-safe base64 string (RFC 7636)
+ * Decrypt a stored API key
+ * @param encryptedKey - The encrypted API key
+ * @returns The plain API key
+ */
+export function decryptAPIKey(encryptedKey: string): string {
+  const encryptionKey = getEncryptionKey()
+  return decrypt(encryptedKey, encryptionKey)
+}
+
+// ============================================================================
+// PKCE (Proof Key for Code Exchange) Utilities for OAuth
+// ============================================================================
+
+/**
+ * Generate a cryptographically secure code verifier for PKCE
+ * @returns A base64url encoded random string (43-128 chars)
  */
 export function generateCodeVerifier(): string {
-  // 32 bytes = 43 base64url characters
-  return randomBytes(32)
-    .toString('base64url')
+  return crypto.randomBytes(32).toString('base64url')
 }
 
 /**
- * Generates SHA256 hash of code_verifier for PKCE code_challenge
+ * Generate a code challenge from a code verifier using SHA-256
+ * @param verifier - The code verifier
+ * @returns A base64url encoded SHA-256 hash of the verifier
  */
 export async function generateCodeChallenge(verifier: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(verifier)
-  const hash = await crypto.subtle.digest('SHA-256', data)
-  return Buffer.from(hash).toString('base64url')
+  const hash = crypto.createHash('sha256').update(verifier).digest()
+  return hash.toString('base64url')
 }
 
 /**
- * Generates a random state parameter for CSRF protection
+ * Generate a random state parameter for OAuth
+ * @returns A random 16-byte hex string
  */
 export function generateState(): string {
-  return randomBytes(16).toString('hex')
+  return crypto.randomBytes(16).toString('hex')
 }
 
 /**
- * Extracts prefix from OpenRouter API key for display
- * e.g., "sk-or-v1-abc123..." -> "sk-or-v1-abc..."
+ * Generate key prefix for display (first chars after sk-or-)
+ * @param apiKey - The full API key
+ * @returns Prefix string like "sk-or-v1-xxx..."
+ */
+export function generateKeyPrefix(apiKey: string): string {
+  if (apiKey.length < 20) {
+    return apiKey.slice(0, 8) + '...'
+  }
+  return apiKey.slice(0, 15) + '...'
+}
+
+// ============================================================================
+// Aliases for backward compatibility with existing code
+// ============================================================================
+
+/**
+ * Alias for encrypt() - used by OpenRouter token storage
+ */
+export function encryptToken(plaintext: string): string {
+  const encryptionKey = getEncryptionKey()
+  return encrypt(plaintext, encryptionKey)
+}
+
+/**
+ * Alias for decrypt() - used by OpenRouter token storage
+ */
+export function decryptToken(encryptedData: string): string {
+  const encryptionKey = getEncryptionKey()
+  return decrypt(encryptedData, encryptionKey)
+}
+
+/**
+ * Alias for generateKeyPrefix() - used by some components
  */
 export function getKeyPrefix(apiKey: string): string {
-  if (!apiKey || apiKey.length < 15) {
-    return apiKey
-  }
-  return apiKey.substring(0, 15) + '...'
+  return generateKeyPrefix(apiKey)
 }
