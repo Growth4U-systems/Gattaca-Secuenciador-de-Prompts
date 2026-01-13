@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase-server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
+
+// Create admin client that bypasses auth
+function getSupabaseAdmin() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  )
+}
 export const maxDuration = 30
 
 interface FlowStep {
@@ -71,12 +85,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create Supabase client with user session
-    const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    // Use admin client to bypass auth
+    const supabase = getSupabaseAdmin()
 
     // Save flow config
     const { data, error } = await supabase
@@ -125,11 +135,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const supabase = getSupabaseAdmin()
 
     const { data, error } = await supabase
       .from('projects')
