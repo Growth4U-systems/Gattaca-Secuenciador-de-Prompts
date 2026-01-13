@@ -230,16 +230,12 @@ export function usePromptValidator({
     // ==========================================
     const unusedVariables = normalizedDeclared.filter(v => !usedVariables.has(v))
     for (const unused of unusedVariables) {
-      // Skip base variables as they might be used in other steps
-      const baseVariables = ['ecp_name', 'problem_core', 'country', 'industry']
-      if (!baseVariables.includes(unused)) {
-        issues.push({
-          type: 'unused_variable',
-          severity: 'info',
-          message: `Variable "{{${unused}}}" está declarada pero no se usa en este prompt`,
-          variable: unused
-        })
-      }
+      issues.push({
+        type: 'unused_variable',
+        severity: 'info',
+        message: `Variable "{{${unused}}}" está declarada pero no se usa en este prompt`,
+        variable: unused
+      })
     }
 
     // ==========================================
