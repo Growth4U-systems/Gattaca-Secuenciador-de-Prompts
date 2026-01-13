@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database, Building2 } from 'lucide-react'
+import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database, Building2, Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { createProject } from '@/hooks/useProjects'
 import { useToast } from '@/components/ui'
@@ -24,32 +24,86 @@ export default function NewProjectPage() {
     description: '',
     client_id: '',
   })
+  const [showNewClientForm, setShowNewClientForm] = useState(false)
+  const [newClientName, setNewClientName] = useState('')
+  const [creatingClient, setCreatingClient] = useState(false)
+
+  // Load clients function
+  const loadClients = async (selectClientId?: string) => {
+    try {
+      setLoadingClients(true)
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('clients')
+        .select('id, name')
+        .order('name', { ascending: true })
+
+      if (error) throw error
+      setClients(data || [])
+
+      // Select specific client or first one
+      if (selectClientId) {
+        setFormData(prev => ({ ...prev, client_id: selectClientId }))
+      } else if (data && data.length > 0 && !formData.client_id) {
+        setFormData(prev => ({ ...prev, client_id: data[0].id }))
+      }
+    } catch (err) {
+      console.error('Error loading clients:', err)
+      toast.error('Error', 'No se pudieron cargar los clientes')
+    } finally {
+      setLoadingClients(false)
+    }
+  }
 
   // Load clients on mount
   useEffect(() => {
-    async function loadClients() {
-      try {
-        const supabase = createClient()
-        const { data, error } = await supabase
-          .from('clients')
-          .select('id, name')
-          .order('name', { ascending: true })
-
-        if (error) throw error
-        setClients(data || [])
-        // Auto-select first client if available
-        if (data && data.length > 0) {
-          setFormData(prev => ({ ...prev, client_id: data[0].id }))
-        }
-      } catch (err) {
-        console.error('Error loading clients:', err)
-        toast.error('Error', 'No se pudieron cargar los clientes')
-      } finally {
-        setLoadingClients(false)
-      }
-    }
     loadClients()
   }, [])
+
+  // Create new client
+  const handleCreateClient = async () => {
+    if (!newClientName.trim()) {
+      toast.warning('Nombre requerido', 'Ingresa un nombre para el cliente')
+      return
+    }
+
+    setCreatingClient(true)
+    try {
+      const supabase = createClient()
+
+      // Generate slug from name
+      const slug = newClientName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') +
+        '-' +
+        Date.now().toString(36)
+
+      const { data, error } = await supabase
+        .from('clients')
+        .insert({
+          name: newClientName.trim(),
+          slug,
+          status: 'active',
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      toast.success('Cliente creado', `"${newClientName}" creado exitosamente`)
+      setNewClientName('')
+      setShowNewClientForm(false)
+
+      // Reload clients and select the new one
+      await loadClients(data.id)
+    } catch (err) {
+      console.error('Error creating client:', err)
+      toast.error('Error', err instanceof Error ? err.message : 'No se pudo crear el cliente')
+    } finally {
+      setCreatingClient(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -128,30 +182,103 @@ export default function NewProjectPage() {
                       <span className="text-red-500">*</span>
                     </span>
                   </label>
-                  {loadingClients ? (
+
+                  {showNewClientForm ? (
+                    <div className="space-y-3 p-4 border border-blue-200 rounded-xl bg-blue-50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-blue-800">Nuevo Cliente</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowNewClientForm(false)
+                            setNewClientName('')
+                          }}
+                          className="p-1 text-blue-600 hover:text-blue-800"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={newClientName}
+                        onChange={(e) => setNewClientName(e.target.value)}
+                        placeholder="Nombre del cliente"
+                        className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleCreateClient()
+                          }
+                          if (e.key === 'Escape') {
+                            setShowNewClientForm(false)
+                            setNewClientName('')
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateClient}
+                        disabled={creatingClient || !newClientName.trim()}
+                        className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                      >
+                        {creatingClient ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Creando...
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={16} />
+                            Crear Cliente
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : loadingClients ? (
                     <div className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-400">
                       Cargando clientes...
                     </div>
                   ) : clients.length === 0 ? (
-                    <div className="w-full px-4 py-3 border border-amber-200 rounded-xl bg-amber-50 text-amber-700 text-sm">
-                      No hay clientes disponibles. <Link href="/clients" className="underline font-medium">Crea uno primero</Link>.
+                    <div className="space-y-3">
+                      <div className="w-full px-4 py-3 border border-amber-200 rounded-xl bg-amber-50 text-amber-700 text-sm">
+                        No hay clientes disponibles.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowNewClientForm(true)}
+                        className="w-full px-4 py-2 border-2 border-dashed border-blue-300 text-blue-600 rounded-xl hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Plus size={16} />
+                        Crear primer cliente
+                      </button>
                     </div>
                   ) : (
-                    <select
-                      id="client"
-                      required
-                      value={formData.client_id}
-                      onChange={(e) =>
-                        setFormData({ ...formData, client_id: e.target.value })
-                      }
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all"
-                    >
-                      {clients.map((client) => (
-                        <option key={client.id} value={client.id}>
-                          {client.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex gap-2">
+                      <select
+                        id="client"
+                        required
+                        value={formData.client_id}
+                        onChange={(e) =>
+                          setFormData({ ...formData, client_id: e.target.value })
+                        }
+                        className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all"
+                      >
+                        {clients.map((client) => (
+                          <option key={client.id} value={client.id}>
+                            {client.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowNewClientForm(true)}
+                        className="px-3 py-3 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition-colors"
+                        title="Agregar nuevo cliente"
+                      >
+                        <Plus size={20} />
+                      </button>
+                    </div>
                   )}
                 </div>
 

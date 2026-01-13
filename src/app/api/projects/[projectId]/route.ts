@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase-server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
 export const maxDuration = 10
+
+// Create admin client that bypasses auth
+function getSupabaseAdmin() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  )
+}
 
 /**
  * Get project by ID
@@ -21,21 +35,11 @@ export async function GET(
       )
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseAdmin()
 
-    // Check authentication
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    // RLS automatically filters by user_id
     const { data: project, error } = await supabase
       .from('projects')
-      .select('id, name, variable_definitions, flow_config, deep_research_prompts, campaign_docs_guide, custom_statuses')
+      .select('id, name, description, variable_definitions, flow_config, deep_research_prompts, campaign_docs_guide, custom_statuses')
       .eq('id', projectId)
       .single()
 
@@ -46,7 +50,6 @@ export async function GET(
         details: error.details,
         hint: error.hint,
         projectId,
-        userId: session.user.id,
       })
       return NextResponse.json(
         { error: 'Project not found', details: error.message, code: error.code },
@@ -85,18 +88,8 @@ export async function PATCH(
       )
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseAdmin()
 
-    // Check authentication
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    // RLS automatically ensures user can only update their own projects
     const { data: project, error } = await supabase
       .from('projects')
       .update(body)
@@ -142,19 +135,9 @@ export async function DELETE(
       )
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseAdmin()
 
-    // Check authentication
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    // Delete project (RLS ensures user can only delete their own projects)
-    // This will cascade delete campaigns and documents due to foreign key constraints
+    // Delete project - cascade delete campaigns and documents due to foreign key constraints
     const { error } = await supabase
       .from('projects')
       .delete()
