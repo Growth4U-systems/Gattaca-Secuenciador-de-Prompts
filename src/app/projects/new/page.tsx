@@ -6,7 +6,6 @@ import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Setti
 import Link from 'next/link'
 import { createProject } from '@/hooks/useProjects'
 import { useToast } from '@/components/ui'
-import { createClient } from '@/lib/supabase-browser'
 
 type Client = {
   id: string
@@ -32,14 +31,12 @@ export default function NewProjectPage() {
   const loadClients = async (selectClientId?: string) => {
     try {
       setLoadingClients(true)
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('clients')
-        .select('id, name')
-        .order('name', { ascending: true })
+      const response = await fetch('/api/v2/clients')
+      const result = await response.json()
 
-      if (error) throw error
-      setClients(data || [])
+      if (!result.success) throw new Error(result.error || 'Failed to load clients')
+      const data = result.clients || []
+      setClients(data)
 
       // Select specific client or first one
       if (selectClientId) {
@@ -69,34 +66,28 @@ export default function NewProjectPage() {
 
     setCreatingClient(true)
     try {
-      const supabase = createClient()
-
-      // Generate slug from name
-      const slug = newClientName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '') +
-        '-' +
-        Date.now().toString(36)
-
-      const { data, error } = await supabase
-        .from('clients')
-        .insert({
+      const response = await fetch('/api/v2/clients', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           name: newClientName.trim(),
-          slug,
-          status: 'active',
-        })
-        .select()
-        .single()
+        }),
+      })
 
-      if (error) throw error
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error || 'No se pudo crear el cliente')
+      }
 
       toast.success('Cliente creado', `"${newClientName}" creado exitosamente`)
       setNewClientName('')
       setShowNewClientForm(false)
 
       // Reload clients and select the new one
-      await loadClients(data.id)
+      await loadClients(result.client.id)
     } catch (err) {
       console.error('Error creating client:', err)
       toast.error('Error', err instanceof Error ? err.message : 'No se pudo crear el cliente')

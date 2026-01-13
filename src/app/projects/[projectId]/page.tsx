@@ -288,18 +288,16 @@ export default function ProjectPage({
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
                         <div className="dropdown-menu fixed w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-visible z-50">
-                          {userRole === 'owner' && (
-                            <button
-                              onClick={() => {
-                                setShowMenu(false)
-                                setShowShareModal(true)
-                              }}
-                              className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
-                            >
-                              <Share2 size={16} />
-                              Compartir proyecto
-                            </button>
-                          )}
+                          <button
+                            onClick={() => {
+                              setShowMenu(false)
+                              setShowShareModal(true)
+                            }}
+                            className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+                          >
+                            <Share2 size={16} />
+                            Compartir proyecto
+                          </button>
                           <button
                             onClick={() => {
                               setShowMenu(false)
@@ -310,18 +308,16 @@ export default function ProjectPage({
                             <Edit2 size={16} />
                             Editar proyecto
                           </button>
-                          {userRole === 'owner' && (
-                            <button
-                              onClick={() => {
-                                setShowMenu(false)
-                                handleDeleteProject()
-                              }}
-                              className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
-                            >
-                              <Trash2 size={16} />
-                              Eliminar proyecto
-                            </button>
-                          )}
+                          <button
+                            onClick={() => {
+                              setShowMenu(false)
+                              handleDeleteProject()
+                            }}
+                            className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
+                          >
+                            <Trash2 size={16} />
+                            Eliminar proyecto
+                          </button>
                         </div>
                       </>
                     )}
