@@ -1,18 +1,51 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database } from 'lucide-react'
+import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database, Building2 } from 'lucide-react'
 import Link from 'next/link'
 import { createProject } from '@/hooks/useProjects'
+import { supabase } from '@/lib/supabase'
+
+type Client = {
+  id: string
+  name: string
+}
 
 export default function NewProjectPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [clients, setClients] = useState<Client[]>([])
+  const [loadingClients, setLoadingClients] = useState(true)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    client_id: '',
   })
+
+  // Load clients on mount
+  useEffect(() => {
+    async function loadClients() {
+      try {
+        const { data, error } = await supabase
+          .from('clients')
+          .select('id, name')
+          .order('name', { ascending: true })
+
+        if (error) throw error
+        setClients(data || [])
+        // Auto-select first client if available
+        if (data && data.length > 0) {
+          setFormData(prev => ({ ...prev, client_id: data[0].id }))
+        }
+      } catch (err) {
+        console.error('Error loading clients:', err)
+      } finally {
+        setLoadingClients(false)
+      }
+    }
+    loadClients()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,6 +55,7 @@ export default function NewProjectPage() {
       const newProject = await createProject({
         name: formData.name,
         description: formData.description || undefined,
+        client_id: formData.client_id,
       })
 
       console.log('Project created:', newProject)
@@ -80,6 +114,44 @@ export default function NewProjectPage() {
               <form onSubmit={handleSubmit} className="p-8 space-y-6">
                 <div>
                   <label
+                    htmlFor="client"
+                    className="block text-sm font-semibold text-gray-700 mb-2"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Building2 size={16} />
+                      Cliente
+                      <span className="text-red-500">*</span>
+                    </span>
+                  </label>
+                  {loadingClients ? (
+                    <div className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-400">
+                      Cargando clientes...
+                    </div>
+                  ) : clients.length === 0 ? (
+                    <div className="w-full px-4 py-3 border border-amber-200 rounded-xl bg-amber-50 text-amber-700 text-sm">
+                      No hay clientes disponibles. <Link href="/clients" className="underline font-medium">Crea uno primero</Link>.
+                    </div>
+                  ) : (
+                    <select
+                      id="client"
+                      required
+                      value={formData.client_id}
+                      onChange={(e) =>
+                        setFormData({ ...formData, client_id: e.target.value })
+                      }
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all"
+                    >
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div>
+                  <label
                     htmlFor="name"
                     className="block text-sm font-semibold text-gray-700 mb-2"
                   >
@@ -123,7 +195,7 @@ export default function NewProjectPage() {
                 <div className="flex gap-3 pt-4">
                   <button
                     type="submit"
-                    disabled={loading || !formData.name.trim()}
+                    disabled={loading || !formData.name.trim() || !formData.client_id}
                     className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-600/25 hover:shadow-xl hover:shadow-blue-600/30 inline-flex items-center justify-center gap-2 group"
                   >
                     {loading ? (
