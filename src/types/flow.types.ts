@@ -33,6 +33,15 @@ export interface FallbackConfig {
   max_retries?: number  // Reintentos por modelo (default: 2)
 }
 
+// Documento requerido por un paso (para matching inteligente)
+export interface RequiredDocument {
+  id: string                    // UUID generado
+  name: string                  // Nombre/descripción del documento requerido
+  required: boolean             // true = obligatorio, false = opcional
+  matchedDocId?: string         // ID del documento asignado (si hay match)
+  matchConfidence?: number      // 0-1, confianza del match
+}
+
 export interface FlowStep {
   id: string
   name: string
@@ -44,6 +53,9 @@ export interface FlowStep {
 
   // Documentos base (ya subidos) que se usan en este step
   base_doc_ids: string[]
+
+  // Documentos requeridos por el paso (para matching inteligente)
+  required_documents?: RequiredDocument[]
 
   // IDs de steps previos cuyos outputs se incluyen automáticamente
   auto_receive_from: string[]

@@ -10,6 +10,7 @@ interface Document {
   id: string
   filename: string
   category: DocCategory
+  description?: string
   token_count: number | null
   file_size_bytes: number | null
   created_at: string
@@ -29,6 +30,7 @@ interface DocumentListProps {
   onView: (doc: Document) => void
   onCampaignChange?: (docId: string, campaignId: string | null) => void
   onRename?: (docId: string, newName: string) => Promise<void>
+  onUpdateDescription?: (docId: string, description: string) => Promise<void>
 }
 
 const CATEGORY_STYLES: Record<string, { bg: string; text: string; icon: string }> = {
@@ -45,6 +47,7 @@ export default function DocumentList({
   onView,
   onCampaignChange,
   onRename,
+  onUpdateDescription,
 }: DocumentListProps) {
   const modal = useModal()
 
@@ -58,6 +61,11 @@ export default function DocumentList({
   const [editingDocId, setEditingDocId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [savingName, setSavingName] = useState(false)
+
+  // State for description editing
+  const [editingDescDocId, setEditingDescDocId] = useState<string | null>(null)
+  const [editingDescription, setEditingDescription] = useState('')
+  const [savingDescription, setSavingDescription] = useState(false)
 
   // Get unique categories
   const categories = useMemo(() => {
@@ -153,6 +161,44 @@ export default function DocumentList({
       handleSaveName(docId)
     } else if (e.key === 'Escape') {
       handleCancelEdit()
+    }
+  }
+
+  // Handle starting description edit
+  const handleStartDescEdit = (doc: Document) => {
+    setEditingDescDocId(doc.id)
+    setEditingDescription(doc.description || '')
+  }
+
+  // Handle canceling description edit
+  const handleCancelDescEdit = () => {
+    setEditingDescDocId(null)
+    setEditingDescription('')
+  }
+
+  // Handle saving description
+  const handleSaveDescription = async (docId: string) => {
+    if (!onUpdateDescription) return
+
+    setSavingDescription(true)
+    try {
+      await onUpdateDescription(docId, editingDescription.trim())
+      setEditingDescDocId(null)
+      setEditingDescription('')
+    } catch (error) {
+      console.error('Error updating description:', error)
+    } finally {
+      setSavingDescription(false)
+    }
+  }
+
+  // Handle key press in description textarea
+  const handleDescKeyDown = (e: React.KeyboardEvent, docId: string) => {
+    if (e.key === 'Enter' && e.metaKey) {
+      e.preventDefault()
+      handleSaveDescription(docId)
+    } else if (e.key === 'Escape') {
+      handleCancelDescEdit()
     }
   }
 
@@ -385,6 +431,66 @@ export default function DocumentList({
                       </div>
                     </div>
                   </div>
+
+                  {/* Document Description */}
+                  {editingDescDocId === doc.id ? (
+                    <div className="mt-2 space-y-2">
+                      <textarea
+                        value={editingDescription}
+                        onChange={(e) => setEditingDescription(e.target.value)}
+                        onKeyDown={(e) => handleDescKeyDown(e, doc.id)}
+                        placeholder="Describe el contenido del documento para facilitar su busqueda y asignacion automatica..."
+                        rows={2}
+                        className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 resize-none"
+                        autoFocus
+                        disabled={savingDescription}
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleSaveDescription(doc.id)}
+                          disabled={savingDescription}
+                          className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1"
+                        >
+                          {savingDescription ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <Check size={12} />
+                          )}
+                          Guardar
+                        </button>
+                        <button
+                          onClick={handleCancelDescEdit}
+                          disabled={savingDescription}
+                          className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+                        >
+                          Cancelar
+                        </button>
+                        <span className="text-xs text-gray-400 ml-auto">Cmd+Enter para guardar</span>
+                      </div>
+                    </div>
+                  ) : doc.description ? (
+                    <div className="mt-2 group/desc">
+                      <p className="text-sm text-gray-600 italic">
+                        {doc.description}
+                        {onUpdateDescription && (
+                          <button
+                            onClick={() => handleStartDescEdit(doc)}
+                            className="ml-2 text-gray-400 hover:text-blue-600 opacity-0 group-hover/desc:opacity-100 transition-opacity"
+                            title="Editar descripcion"
+                          >
+                            <Edit2 size={12} className="inline" />
+                          </button>
+                        )}
+                      </p>
+                    </div>
+                  ) : onUpdateDescription ? (
+                    <button
+                      onClick={() => handleStartDescEdit(doc)}
+                      className="mt-2 text-xs text-gray-400 hover:text-blue-600 hover:underline"
+                    >
+                      + Agregar descripcion
+                    </button>
+                  ) : null}
 
                   {/* Content match snippet */}
                   {searchInContent && searchQuery && (() => {

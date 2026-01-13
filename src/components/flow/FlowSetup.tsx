@@ -194,6 +194,50 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
     }))
   }
 
+  // Add a new variable to the project
+  const handleAddProjectVariable = async (variable: {
+    name: string
+    default_value: string
+    description?: string
+  }) => {
+    try {
+      // Add to existing variables
+      const newVariables = [
+        ...projectVariables,
+        {
+          name: variable.name,
+          default_value: variable.default_value || '',
+          required: false,
+          description: variable.description || '',
+        },
+      ]
+
+      // Save to API
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          variable_definitions: newVariables,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to add variable')
+      }
+
+      // Update local state
+      setProjectVariables(newVariables)
+      toast.success('Variable agregada', `Variable "{{ ${variable.name} }}" agregada al proyecto`)
+    } catch (error) {
+      console.error('Error adding project variable:', error)
+      toast.error('Error', error instanceof Error ? error.message : 'Error al agregar variable')
+      throw error // Re-throw so UI can handle it
+    }
+  }
+
   if (loading) {
     return (
       <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-8">
@@ -410,6 +454,7 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
           projectVariables={projectVariables}
           onSave={handleStepUpdate}
           onCancel={() => setEditingStep(null)}
+          onAddProjectVariable={handleAddProjectVariable}
         />
       )}
     </div>

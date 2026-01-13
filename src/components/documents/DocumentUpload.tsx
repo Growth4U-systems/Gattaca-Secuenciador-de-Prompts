@@ -29,6 +29,7 @@ export default function DocumentUpload({
   const [category, setCategory] = useState<DocCategory>('product')
   const [customCategory, setCustomCategory] = useState('')
   const [useCustomCategory, setUseCustomCategory] = useState(false)
+  const [description, setDescription] = useState('')
   const [extractionResult, setExtractionResult] = useState<{
     text: string
     tokens: number
@@ -130,6 +131,7 @@ export default function DocumentUpload({
             filename: selectedFile.name,
             projectId: projectId,
             category: effectiveCategory,
+            description: description.trim(),
             fileSize: selectedFile.size,
             mimeType: selectedFile.type,
           }),
@@ -150,6 +152,7 @@ export default function DocumentUpload({
         formData.append('file', selectedFile)
         formData.append('projectId', projectId)
         formData.append('category', effectiveCategory)
+        formData.append('description', description.trim())
 
         const response = await fetch('/api/documents/upload', {
           method: 'POST',
@@ -193,6 +196,7 @@ export default function DocumentUpload({
     setUseCustomCategory(false)
     setCustomCategory('')
     setCategory('product')
+    setDescription('')
     setError(null)
     setDragActive(false)
   }
@@ -383,6 +387,23 @@ export default function DocumentUpload({
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                   />
                 )}
+              </div>
+
+              {/* Document Description */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Descripcion del documento <span className="text-gray-400 font-normal">(opcional)</span>
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Describe brevemente el contenido del documento para facilitar su busqueda y asignacion automatica..."
+                  rows={2}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 text-sm resize-none"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Esta descripcion ayuda al sistema a sugerir este documento automaticamente en los pasos del flujo.
+                </p>
               </div>
 
               {/* Token Warning */}

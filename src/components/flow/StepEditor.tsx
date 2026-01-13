@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { X, Eye, Code, Copy, Check, FileText, ArrowRight, Hash, MessageSquare, Sparkles, Info, Cpu, Search } from 'lucide-react'
-import { FlowStep, OutputFormat, LLMModel } from '@/types/flow.types'
+import { X, Eye, Code, Copy, Check, FileText, ArrowRight, Hash, MessageSquare, Sparkles, Info, Cpu, Search, Plus, AlertTriangle, Loader2, Trash2 } from 'lucide-react'
+import { FlowStep, OutputFormat, LLMModel, RequiredDocument } from '@/types/flow.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { usePromptValidator } from '@/hooks/usePromptValidator'
+import { findMatchingDocument, getConfidenceLabel } from '@/lib/documentMatcher'
 import PromptValidationPanel, { ValidationBadge } from './PromptValidationPanel'
 import { OpenRouterModelSelector } from '@/components/openrouter'
 
@@ -16,6 +17,7 @@ interface StepEditorProps {
   campaignVariables?: Record<string, string> // Variables reales de la campaña
   onSave: (step: FlowStep) => void
   onCancel: () => void
+  onAddProjectVariable?: (variable: { name: string; default_value: string; description?: string }) => Promise<void>
 }
 
 const OUTPUT_FORMATS: { value: OutputFormat; label: string; description: string }[] = [
@@ -66,6 +68,7 @@ export default function StepEditor({
   campaignVariables = {},
   onSave,
   onCancel,
+  onAddProjectVariable,
 }: StepEditorProps) {
   const [editedStep, setEditedStep] = useState<FlowStep>({ ...step })
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
@@ -78,6 +81,12 @@ export default function StepEditor({
   const [autocompleteFilter, setAutocompleteFilter] = useState('')
   const [autocompleteIndex, setAutocompleteIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [addingVariable, setAddingVariable] = useState<string | null>(null)
+  const [addingAllVariables, setAddingAllVariables] = useState(false)
+
+  // Required documents state
+  const [requiredDocsInput, setRequiredDocsInput] = useState('')
+  const [showRequiredDocsInput, setShowRequiredDocsInput] = useState(false)
 
   // Get declared variables (for validation) - only from project and campaign config
   const declaredVariables = useMemo(() => {
@@ -133,6 +142,166 @@ export default function StepEditor({
     const newPrompt = editedStep.prompt.replace(regex, `{{ ${suggestion} }}`)
     setEditedStep(prev => ({ ...prev, prompt: newPrompt }))
   }, [editedStep.prompt])
+
+  // Get undeclared variables from validation
+  const undeclaredVariables = useMemo(() => {
+    return validation.issues
+      .filter(issue => issue.type === 'undeclared_variable' && issue.variable)
+      .map(issue => issue.variable as string)
+  }, [validation.issues])
+
+  // Handle adding a single variable to the project
+  const handleAddVariable = async (varName: string) => {
+    if (!onAddProjectVariable) return
+    setAddingVariable(varName)
+    try {
+      await onAddProjectVariable({
+        name: varName,
+        default_value: '',
+        description: '',
+      })
+    } catch (error) {
+      console.error('Error adding variable:', error)
+    } finally {
+      setAddingVariable(null)
+    }
+  }
+
+  // Handle adding all undeclared variables to the project
+  const handleAddAllVariables = async () => {
+    if (!onAddProjectVariable || undeclaredVariables.length === 0) return
+    setAddingAllVariables(true)
+    try {
+      for (const varName of undeclaredVariables) {
+        await onAddProjectVariable({
+          name: varName,
+          default_value: '',
+          description: '',
+        })
+      }
+    } catch (error) {
+      console.error('Error adding variables:', error)
+    } finally {
+      setAddingAllVariables(false)
+    }
+  }
+
+  // Add a required document
+  const handleAddRequiredDoc = (name: string) => {
+    const newDoc: RequiredDocument = {
+      id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: name.trim(),
+      required: true,
+    }
+
+    // Try to find a match
+    const match = findMatchingDocument(name, documents.map(d => ({
+      id: d.id,
+      filename: d.filename,
+      description: d.description || '',
+    })))
+
+    if (match) {
+      newDoc.matchedDocId = match.doc.id
+      newDoc.matchConfidence = match.confidence
+      // Also add to base_doc_ids if not already there
+      if (!editedStep.base_doc_ids.includes(match.doc.id)) {
+        setEditedStep(prev => ({
+          ...prev,
+          base_doc_ids: [...prev.base_doc_ids, match.doc.id],
+        }))
+      }
+    }
+
+    setEditedStep(prev => ({
+      ...prev,
+      required_documents: [...(prev.required_documents || []), newDoc],
+    }))
+  }
+
+  // Process bulk required documents input
+  const handleProcessRequiredDocsInput = () => {
+    const lines = requiredDocsInput.split('\n').filter(line => line.trim())
+    lines.forEach(line => handleAddRequiredDoc(line))
+    setRequiredDocsInput('')
+    setShowRequiredDocsInput(false)
+  }
+
+  // Remove a required document
+  const handleRemoveRequiredDoc = (docId: string) => {
+    const doc = editedStep.required_documents?.find(d => d.id === docId)
+    setEditedStep(prev => ({
+      ...prev,
+      required_documents: (prev.required_documents || []).filter(d => d.id !== docId),
+      // Also remove from base_doc_ids if it was matched
+      base_doc_ids: doc?.matchedDocId
+        ? prev.base_doc_ids.filter(id => id !== doc.matchedDocId)
+        : prev.base_doc_ids,
+    }))
+  }
+
+  // Toggle required flag
+  const handleToggleRequired = (docId: string) => {
+    setEditedStep(prev => ({
+      ...prev,
+      required_documents: (prev.required_documents || []).map(d =>
+        d.id === docId ? { ...d, required: !d.required } : d
+      ),
+    }))
+  }
+
+  // Accept a suggested match
+  const handleAcceptMatch = (reqDocId: string, matchedDocId: string) => {
+    setEditedStep(prev => ({
+      ...prev,
+      required_documents: (prev.required_documents || []).map(d =>
+        d.id === reqDocId ? { ...d, matchedDocId } : d
+      ),
+      base_doc_ids: prev.base_doc_ids.includes(matchedDocId)
+        ? prev.base_doc_ids
+        : [...prev.base_doc_ids, matchedDocId],
+    }))
+  }
+
+  // Reject a suggested match
+  const handleRejectMatch = (reqDocId: string) => {
+    const doc = editedStep.required_documents?.find(d => d.id === reqDocId)
+    setEditedStep(prev => ({
+      ...prev,
+      required_documents: (prev.required_documents || []).map(d =>
+        d.id === reqDocId ? { ...d, matchedDocId: undefined, matchConfidence: undefined } : d
+      ),
+      // Remove from base_doc_ids if it was there
+      base_doc_ids: doc?.matchedDocId
+        ? prev.base_doc_ids.filter(id => id !== doc.matchedDocId)
+        : prev.base_doc_ids,
+    }))
+  }
+
+  // Re-run matching for a required document
+  const handleRetryMatch = (reqDocId: string) => {
+    const reqDoc = editedStep.required_documents?.find(d => d.id === reqDocId)
+    if (!reqDoc) return
+
+    const match = findMatchingDocument(reqDoc.name, documents.map(d => ({
+      id: d.id,
+      filename: d.filename,
+      description: d.description || '',
+    })))
+
+    if (match) {
+      setEditedStep(prev => ({
+        ...prev,
+        required_documents: (prev.required_documents || []).map(d =>
+          d.id === reqDocId ? {
+            ...d,
+            matchedDocId: match.doc.id,
+            matchConfidence: match.confidence,
+          } : d
+        ),
+      }))
+    }
+  }
 
   // Filter variables for autocomplete
   const filteredVariables = allVariables.filter((v: string) =>
@@ -400,6 +569,160 @@ export default function StepEditor({
                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 transition-all"
               />
             </div>
+          </div>
+
+          {/* Required Documents Section */}
+          <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <FileText size={18} className="text-amber-500" />
+                Documentos Requeridos
+                {editedStep.required_documents && editedStep.required_documents.length > 0 && (
+                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                    {editedStep.required_documents.length}
+                  </span>
+                )}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowRequiredDocsInput(!showRequiredDocsInput)}
+                className="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 inline-flex items-center gap-1.5 font-medium transition-colors"
+              >
+                <Plus size={14} />
+                {showRequiredDocsInput ? 'Cancelar' : 'Cargar lista'}
+              </button>
+            </div>
+
+            {/* Bulk input textarea */}
+            {showRequiredDocsInput && (
+              <div className="mb-4 p-4 bg-white rounded-xl border border-amber-200">
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Pega una lista de documentos requeridos (uno por linea)
+                </label>
+                <textarea
+                  value={requiredDocsInput}
+                  onChange={(e) => setRequiredDocsInput(e.target.value)}
+                  placeholder="Manual de producto&#10;Guia de marca&#10;Analisis de competencia&#10;..."
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 resize-none font-mono"
+                />
+                <div className="flex items-center justify-between mt-3">
+                  <p className="text-xs text-gray-500">
+                    El sistema buscara coincidencias automaticamente
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleProcessRequiredDocsInput}
+                    disabled={!requiredDocsInput.trim()}
+                    className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 font-medium transition-colors"
+                  >
+                    <Check size={16} />
+                    Procesar lista
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Required documents list */}
+            {editedStep.required_documents && editedStep.required_documents.length > 0 ? (
+              <div className="space-y-3">
+                {editedStep.required_documents.map((reqDoc) => {
+                  const matchedDoc = reqDoc.matchedDocId
+                    ? documents.find(d => d.id === reqDoc.matchedDocId)
+                    : null
+                  const confidenceInfo = reqDoc.matchConfidence
+                    ? getConfidenceLabel(reqDoc.matchConfidence)
+                    : null
+
+                  return (
+                    <div
+                      key={reqDoc.id}
+                      className="p-3 bg-white rounded-xl border border-amber-100"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-medium text-gray-900">{reqDoc.name}</span>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={reqDoc.required}
+                                onChange={() => handleToggleRequired(reqDoc.id)}
+                                className="w-3.5 h-3.5 text-amber-600 rounded border-gray-300 focus:ring-amber-500"
+                              />
+                              <span className={`text-xs ${reqDoc.required ? 'text-amber-700 font-medium' : 'text-gray-500'}`}>
+                                Obligatorio
+                              </span>
+                            </label>
+                          </div>
+
+                          {matchedDoc ? (
+                            <div className="flex items-center gap-2 text-sm">
+                              <Check size={14} className="text-green-500" />
+                              <span className="text-green-700">
+                                Asignado: <span className="font-medium">{matchedDoc.filename}</span>
+                              </span>
+                              {confidenceInfo && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${confidenceInfo.color}`}>
+                                  {Math.round(reqDoc.matchConfidence! * 100)}% match
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 text-sm text-gray-500">
+                              <AlertTriangle size={14} className="text-amber-500" />
+                              <span>Sin asignar</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRetryMatch(reqDoc.id)}
+                                className="text-xs text-amber-600 hover:text-amber-700 hover:underline"
+                              >
+                                Buscar coincidencias
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          {matchedDoc && (
+                            <button
+                              type="button"
+                              onClick={() => handleRejectMatch(reqDoc.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Desasignar documento"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveRequiredDoc(reqDoc.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Eliminar requerimiento"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-6 bg-white rounded-xl border-2 border-dashed border-amber-200">
+                <FileText size={24} className="mx-auto mb-2 text-amber-300" />
+                <p className="text-sm text-gray-500">
+                  No hay documentos requeridos definidos
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Usa "Cargar lista" para agregar documentos que este paso necesita
+                </p>
+              </div>
+            )}
+
+            <p className="text-xs text-amber-600 mt-3">
+              Define que documentos necesita este paso. El sistema buscara coincidencias en los documentos del proyecto.
+            </p>
           </div>
 
           {/* Base Documents Section */}
@@ -810,6 +1133,69 @@ export default function StepEditor({
                 onApplySuggestion={handleApplySuggestion}
               />
             </div>
+
+            {/* Undeclared Variables - Add to Project */}
+            {onAddProjectVariable && undeclaredVariables.length > 0 && (
+              <div className="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-200">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium text-amber-800 flex items-center gap-2">
+                    <AlertTriangle size={16} />
+                    Variables detectadas no declaradas ({undeclaredVariables.length})
+                  </p>
+                  {undeclaredVariables.length > 1 && (
+                    <button
+                      onClick={handleAddAllVariables}
+                      disabled={addingAllVariables}
+                      className="px-3 py-1.5 text-xs bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5 font-medium transition-colors"
+                    >
+                      {addingAllVariables ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" />
+                          Agregando...
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={12} />
+                          Agregar todas al proyecto
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {undeclaredVariables.map((varName) => (
+                    <div
+                      key={varName}
+                      className="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100"
+                    >
+                      <code className="text-sm font-mono text-amber-700">
+                        {'{{ '}{varName}{' }}'}
+                      </code>
+                      <button
+                        onClick={() => handleAddVariable(varName)}
+                        disabled={addingVariable === varName || addingAllVariables}
+                        className="px-3 py-1 text-xs bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1 font-medium transition-colors"
+                      >
+                        {addingVariable === varName ? (
+                          <>
+                            <Loader2 size={12} className="animate-spin" />
+                            Agregando...
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={12} />
+                            Agregar al proyecto
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-amber-600 mt-3">
+                  Agrega estas variables al proyecto para que esten disponibles en todas las campanas.
+                </p>
+              </div>
+            )}
 
             {/* Available Variables Section */}
             <div className="mt-4 p-4 bg-white/70 rounded-xl border border-indigo-100">

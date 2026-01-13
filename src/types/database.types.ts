@@ -100,6 +100,7 @@ export interface Database {
           filename: string
           category: DocCategory
           extracted_content: string
+          description: string
           file_size_bytes: number | null
           token_count: number | null
           mime_type: string | null
@@ -111,6 +112,7 @@ export interface Database {
           filename: string
           category: DocCategory
           extracted_content: string
+          description?: string
           file_size_bytes?: number | null
           token_count?: number | null
           mime_type?: string | null
@@ -122,6 +124,7 @@ export interface Database {
           filename?: string
           category?: DocCategory
           extracted_content?: string
+          description?: string
           file_size_bytes?: number | null
           token_count?: number | null
           mime_type?: string | null
