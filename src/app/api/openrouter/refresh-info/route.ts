@@ -35,39 +35,55 @@ export async function POST() {
     // Decrypt the API key
     const apiKey = decryptToken(tokenRecord.encrypted_api_key)
 
-    // Fetch current key info from OpenRouter
+    // Fetch key info from OpenRouter
     console.log('[OpenRouter Refresh] Fetching key info from OpenRouter API')
-    const response = await fetch('https://openrouter.ai/api/v1/auth/key', {
+    const keyResponse = await fetch('https://openrouter.ai/api/v1/auth/key', {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('[OpenRouter Refresh] API error:', response.status, errorText)
+    if (!keyResponse.ok) {
+      const errorText = await keyResponse.text()
+      console.error('[OpenRouter Refresh] Key API error:', keyResponse.status, errorText)
       return NextResponse.json(
-        { error: `OpenRouter API error: ${response.status}` },
-        { status: response.status }
+        { error: `OpenRouter API error: ${keyResponse.status}` },
+        { status: keyResponse.status }
       )
     }
 
-    const keyData = await response.json()
-    console.log('[OpenRouter Refresh] Received key data from OpenRouter:', {
-      hasData: !!keyData.data,
-      allKeys: keyData.data ? Object.keys(keyData.data) : [],
-      fullData: keyData
+    const keyData = await keyResponse.json()
+    console.log('[OpenRouter Refresh] Key data:', JSON.stringify(keyData))
+
+    // Also fetch credits endpoint for accurate usage
+    console.log('[OpenRouter Refresh] Fetching credits from OpenRouter API')
+    const creditsResponse = await fetch('https://openrouter.ai/api/v1/credits', {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
     })
+
+    let creditsData = null
+    if (creditsResponse.ok) {
+      creditsData = await creditsResponse.json()
+      console.log('[OpenRouter Refresh] Credits data:', JSON.stringify(creditsData))
+    } else {
+      console.warn('[OpenRouter Refresh] Credits API failed, using key data only')
+    }
 
     // The response structure is { data: { ... } }
     const data = keyData.data
 
-    // Update the database with the latest information
-    // Note: OpenRouter returns usage in a different scale, we need to check the actual value
-    // The limit and limit_remaining are typically in dollars
-    // Log the raw values to debug
-    console.log('[OpenRouter Refresh] Raw values from API:', {
-      usage: data.usage,
+    // Credits endpoint returns: { data: { total_credits, total_usage } }
+    // Usage is the difference: total_credits - remaining = used
+    // Or directly from credits.data.total_usage
+    const totalUsage = creditsData?.data?.total_usage ?? data.usage ?? null
+
+    console.log('[OpenRouter Refresh] Raw values:', {
+      keyUsage: data.usage,
+      creditsUsage: creditsData?.data?.total_usage,
+      totalCredits: creditsData?.data?.total_credits,
+      finalUsage: totalUsage,
       limit: data.limit,
       limit_remaining: data.limit_remaining,
     })
@@ -76,8 +92,8 @@ export async function POST() {
       expires_at: data.expires_at || null,
       credit_limit: data.limit !== undefined ? data.limit : null,
       limit_remaining: data.limit_remaining !== undefined ? data.limit_remaining : null,
-      // Usage from OpenRouter - store as-is, the actual value should match their dashboard
-      usage: data.usage !== undefined ? data.usage : null,
+      // Use credits endpoint usage (more accurate) or fall back to key usage
+      usage: totalUsage,
       last_used_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
