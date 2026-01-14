@@ -89,14 +89,36 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
     }
   }
 
-  const handleStepUpdate = (updatedStep: FlowStep) => {
-    setFlowConfig((prev) => ({
-      ...prev,
-      steps: prev.steps.map((step) =>
+  const handleStepUpdate = async (updatedStep: FlowStep) => {
+    // Update local state
+    const newConfig = {
+      ...flowConfig,
+      steps: flowConfig.steps.map((step) =>
         step.id === updatedStep.id ? updatedStep : step
       ),
-    }))
+    }
+    setFlowConfig(newConfig)
     setEditingStep(null)
+
+    // Auto-save to API
+    try {
+      const response = await fetch('/api/flow/save-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, flowConfig: newConfig }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast.success('Guardado', 'Paso guardado automáticamente')
+      } else {
+        throw new Error(data.error || 'Failed to save')
+      }
+    } catch (error) {
+      console.error('Auto-save error:', error)
+      toast.error('Error al guardar', 'No se pudo guardar automáticamente. Usa el botón Guardar.')
+    }
   }
 
   const handleDeleteStep = async (stepId: string, stepName: string) => {

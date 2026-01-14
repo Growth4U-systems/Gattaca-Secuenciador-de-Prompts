@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     // Validate each step
     for (const step of flowConfig.steps) {
-      if (!step.id || !step.name || !step.prompt || step.order === undefined) {
+      if (!step.id || !step.name || step.order === undefined) {
         return NextResponse.json(
           { error: `Invalid step: ${step.name || 'unknown'} - missing required fields` },
           { status: 400 }
