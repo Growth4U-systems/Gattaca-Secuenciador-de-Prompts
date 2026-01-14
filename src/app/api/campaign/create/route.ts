@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     // Load project to copy flow_config
     const { data: project, error: projectError } = await supabase
       .from('projects')
-      .select('flow_config')
+      .select('legacy_flow_config')
       .eq('id', projectId)
       .single()
 
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     // Create campaign with copied flow_config
     // Use provided flow_config if present (for duplicates), otherwise use project's
-    const campaignFlowConfig = flow_config || project.flow_config || null
+    const campaignFlowConfig = flow_config || project.legacy_flow_config || null
 
     let insertData: any = {
       project_id: projectId,
