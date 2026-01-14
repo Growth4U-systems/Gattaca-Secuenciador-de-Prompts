@@ -61,6 +61,7 @@ export const DEFAULT_STATUSES: CustomStatus[] = [
   { id: 'draft', name: 'Borrador', color: 'gray', icon: 'clock', isDefault: true },
   { id: 'in_progress', name: 'En progreso', color: 'blue', icon: 'play' },
   { id: 'review', name: 'En revision', color: 'yellow', icon: 'eye' },
+  { id: 'ready_to_present', name: 'Para presentar', color: 'purple', icon: 'star' },
   { id: 'completed', name: 'Completado', color: 'green', icon: 'check' },
   { id: 'error', name: 'Error', color: 'red', icon: 'alert' },
 ]

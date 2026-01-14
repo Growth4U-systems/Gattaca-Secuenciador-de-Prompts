@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useOpenRouter } from '@/lib/openrouter-context'
+import { supabase } from '@/lib/supabase'
 import { X, Zap, Shield, CreditCard, ExternalLink, Loader2, Link2Off, CheckCircle2, Clock, AlertCircle, DollarSign } from 'lucide-react'
 
 interface OpenRouterAuthModalProps {
@@ -16,6 +17,29 @@ export default function OpenRouterAuthModal({ isOpen, onClose, trigger = 'action
   const [disconnecting, setDisconnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [refreshingBalance, setRefreshingBalance] = useState(false)
+  const [realUsage, setRealUsage] = useState<number | null>(null)
+
+  // Fetch real usage from our logs (more accurate than OpenRouter's API)
+  useEffect(() => {
+    async function fetchRealUsage() {
+      if (!isOpen || !isConnected) return
+
+      try {
+        const { data, error } = await supabase
+          .from('openrouter_usage_logs')
+          .select('cost_usd')
+
+        if (!error && data) {
+          const totalCost = data.reduce((sum, log) => sum + (Number(log.cost_usd) || 0), 0)
+          setRealUsage(totalCost)
+        }
+      } catch (err) {
+        console.error('Error fetching real usage:', err)
+      }
+    }
+
+    fetchRealUsage()
+  }, [isOpen, isConnected])
 
   // Refresh balance from OpenRouter when modal opens and user is connected
   useEffect(() => {
@@ -219,11 +243,14 @@ export default function OpenRouterAuthModal({ isOpen, onClose, trigger = 'action
                   </div>
                 )}
 
-                {/* Usage Information */}
-                {tokenInfo?.usage !== null && tokenInfo?.usage !== undefined && tokenInfo.usage > 0 && (
+                {/* Usage Information - Show real usage from our logs */}
+                {(realUsage !== null || (tokenInfo?.usage !== null && tokenInfo?.usage !== undefined && tokenInfo.usage > 0)) && (
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <CreditCard className="w-4 h-4 text-gray-400" />
-                    <span>Usado: ${tokenInfo.usage.toFixed(4)}</span>
+                    <span>
+                      Usado: ${realUsage !== null ? realUsage.toFixed(2) : tokenInfo?.usage?.toFixed(4)}
+                      {realUsage !== null && <span className="text-xs text-gray-400 ml-1">(en Gattaca)</span>}
+                    </span>
                   </div>
                 )}
               </div>

@@ -63,10 +63,20 @@ export async function POST() {
     const data = keyData.data
 
     // Update the database with the latest information
+    // Note: OpenRouter returns usage in a different scale, we need to check the actual value
+    // The limit and limit_remaining are typically in dollars
+    // Log the raw values to debug
+    console.log('[OpenRouter Refresh] Raw values from API:', {
+      usage: data.usage,
+      limit: data.limit,
+      limit_remaining: data.limit_remaining,
+    })
+
     const updateData: any = {
       expires_at: data.expires_at || null,
       credit_limit: data.limit !== undefined ? data.limit : null,
       limit_remaining: data.limit_remaining !== undefined ? data.limit_remaining : null,
+      // Usage from OpenRouter - store as-is, the actual value should match their dashboard
       usage: data.usage !== undefined ? data.usage : null,
       last_used_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
