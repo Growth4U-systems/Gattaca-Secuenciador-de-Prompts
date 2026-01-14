@@ -118,21 +118,62 @@ async function parseAndSaveFindPlace(supabase: any, campaign: Campaign): Promise
 
 /**
  * Extrae scores de competidores de los headers y valores de una fila
+ * Maneja varios formatos de headers:
+ * - "Qonto Score"
+ * - "BBVA Score"
+ * - "Public Utility (CIRCE) Score"
+ * - "Traditional Banks Score"
+ * - Columnas numericas sin texto "Score" si estan entre criterio y analysis
  */
 function extractCompetitorScores(headers: string[], row: string[]): Record<string, { score: number | string }> {
   const scores: Record<string, { score: number | string }> = {}
 
-  headers.forEach((header, index) => {
-    // Detectar columnas de score (ej: "Qonto Score", "BBVA Score", "Public Utility (CIRCE) Score")
-    const scoreMatch = header.match(/(.+?)\s*(?:\(.*?\))?\s*Score/i)
-    if (scoreMatch && row[index]) {
-      const competitorName = scoreMatch[1].trim()
-      const scoreValue = row[index].trim()
+  // Encontrar indices de columnas que NO son scores
+  const excludePatterns = [
+    /evaluation/i,
+    /criteria/i,
+    /criterion/i,
+    /analysis/i,
+    /opportunity/i,
+    /relevance/i,
+    /justification/i
+  ]
 
-      // Intentar parsear como numero, si no, guardar como string
-      const numericScore = parseInt(scoreValue, 10)
+  headers.forEach((header, index) => {
+    // Saltar columnas que sabemos que no son scores
+    if (excludePatterns.some(p => p.test(header))) {
+      return
+    }
+
+    const cellValue = row[index]?.trim()
+    if (!cellValue) return
+
+    // Patron 1: "Competidor Score" - formato explicito
+    const scoreMatch = header.match(/^(.+?)\s+Score$/i)
+    if (scoreMatch) {
+      // Limpiar nombre del competidor (remover parentesis si hay)
+      let competitorName = scoreMatch[1].trim()
+      // Manejar formato "Public Utility (CIRCE)" -> "CIRCE"
+      const parenMatch = competitorName.match(/\(([^)]+)\)/)
+      if (parenMatch) {
+        competitorName = parenMatch[1]
+      }
+
+      const numericScore = parseInt(cellValue, 10)
       scores[competitorName] = {
-        score: isNaN(numericScore) ? scoreValue : numericScore
+        score: isNaN(numericScore) ? cellValue : numericScore
+      }
+      return
+    }
+
+    // Patron 2: Header es solo nombre de competidor y el valor es numerico
+    // Esto aplica cuando el header no contiene "Score" pero el valor es un numero 1-5
+    const numericValue = parseInt(cellValue, 10)
+    if (!isNaN(numericValue) && numericValue >= 1 && numericValue <= 5) {
+      // El header es el nombre del competidor
+      const competitorName = header.trim()
+      if (competitorName.length > 0 && competitorName.length < 50) {
+        scores[competitorName] = { score: numericValue }
       }
     }
   })
@@ -290,40 +331,74 @@ async function parseAndSaveUspUvp(supabase: any, campaign: Campaign): Promise<nu
 }
 
 /**
- * Sincroniza todas las campanas de un proyecto
+ * Steps ECP requeridos para considerar una campana como completada
+ */
+const REQUIRED_ECP_STEPS = [
+  'step-4-find-place',
+  'step-5-select-assets',
+  'step-6-proof-points',
+  'step-7-final-output'
+]
+
+/**
+ * Verifica si una campana tiene todos los pasos requeridos completados
+ */
+function isCampaignComplete(stepOutputs: Record<string, { output?: string }> | null): boolean {
+  if (!stepOutputs) return false
+
+  return REQUIRED_ECP_STEPS.every(stepId => {
+    const step = stepOutputs[stepId]
+    return step && step.output && step.output.length > 0
+  })
+}
+
+/**
+ * Sincroniza todas las campanas completadas de un proyecto
+ * Solo procesa campanas que tienen todos los steps ECP ejecutados
  */
 export async function syncProjectExportData(projectId: string): Promise<{
   campaignsProcessed: number
+  campaignsSkipped: number
   totalFindPlace: number
   totalProveLegit: number
   totalUspUvp: number
 }> {
   const supabase = await createClient()
 
-  // Obtener todas las campanas del proyecto
+  // Obtener todas las campanas del proyecto con sus step_outputs
   const { data: campaigns, error } = await supabase
     .from('ecp_campaigns')
-    .select('id')
+    .select('id, step_outputs')
     .eq('project_id', projectId)
 
   if (error || !campaigns) {
     console.error('Error fetching campaigns:', error)
-    return { campaignsProcessed: 0, totalFindPlace: 0, totalProveLegit: 0, totalUspUvp: 0 }
+    return { campaignsProcessed: 0, campaignsSkipped: 0, totalFindPlace: 0, totalProveLegit: 0, totalUspUvp: 0 }
   }
 
   let totalFindPlace = 0
   let totalProveLegit = 0
   let totalUspUvp = 0
+  let campaignsProcessed = 0
+  let campaignsSkipped = 0
 
   for (const campaign of campaigns) {
+    // Solo procesar campanas con todos los steps completados
+    if (!isCampaignComplete(campaign.step_outputs as Record<string, { output?: string }> | null)) {
+      campaignsSkipped++
+      continue
+    }
+
     const results = await populateExportTables(campaign.id)
     totalFindPlace += results.findPlace
     totalProveLegit += results.proveLegit
     totalUspUvp += results.uspUvp
+    campaignsProcessed++
   }
 
   return {
-    campaignsProcessed: campaigns.length,
+    campaignsProcessed,
+    campaignsSkipped,
     totalFindPlace,
     totalProveLegit,
     totalUspUvp

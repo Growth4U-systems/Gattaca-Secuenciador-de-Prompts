@@ -17,11 +17,18 @@ export async function POST(
 
     const results = await syncProjectExportData(projectId)
 
+    // Construir mensaje informativo
+    let message = `Sincronizadas ${results.campaignsProcessed} campanas completadas`
+    if (results.campaignsSkipped > 0) {
+      message += ` (${results.campaignsSkipped} incompletas omitidas)`
+    }
+
     return NextResponse.json({
       success: true,
-      message: `Sincronizadas ${results.campaignsProcessed} campanas`,
+      message,
       details: {
-        campaigns: results.campaignsProcessed,
+        campaignsProcessed: results.campaignsProcessed,
+        campaignsSkipped: results.campaignsSkipped,
         findPlace: results.totalFindPlace,
         proveLegit: results.totalProveLegit,
         uspUvp: results.totalUspUvp
