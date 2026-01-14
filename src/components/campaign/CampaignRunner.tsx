@@ -372,16 +372,23 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   }, [projectId, projectProp])
 
   // Check for ongoing Deep Research on page load and restore polling state
-  const checkOngoingDeepResearch = async (campaignId: string) => {
+  const checkOngoingDeepResearch = async (campaignId: string, flowConfig: FlowConfig | null | undefined) => {
     try {
       const response = await fetch(`/api/campaign/check-deep-research?campaign_id=${campaignId}`)
       if (!response.ok) return null
 
       const data = await response.json()
       if (data.has_ongoing && data.interaction_id) {
+        // Find step_id from flow_config using step_name
+        let stepId = data.step_id
+        if (!stepId && flowConfig?.steps && data.step_name) {
+          const step = flowConfig.steps.find(s => s.name === data.step_name)
+          stepId = step?.id || null
+        }
+
         return {
           campaignId: campaignId,
-          stepId: data.step_id,
+          stepId: stepId,
           stepName: data.step_name,
           interactionId: data.interaction_id,
           logId: data.log_id
@@ -402,8 +409,10 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
 
       // Check each campaign for ongoing Deep Research
       for (const campaign of campaigns) {
-        const ongoingResearch = await checkOngoingDeepResearch(campaign.id)
-        if (ongoingResearch) {
+        // Get flow_config from campaign or project
+        const flowConfig = campaign.flow_config || project?.flow_config
+        const ongoingResearch = await checkOngoingDeepResearch(campaign.id, flowConfig)
+        if (ongoingResearch && ongoingResearch.stepId) {
           console.log('[Deep Research] Restoring polling state for campaign:', campaign.ecp_name)
           setDeepResearchPolling(ongoingResearch)
           setRunningStep({ campaignId: campaign.id, stepId: ongoingResearch.stepId })
@@ -415,7 +424,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     }
 
     restoreDeepResearchState()
-  }, [campaigns, loading])
+  }, [campaigns, loading, project])
 
   const loadProject = async () => {
     try {
