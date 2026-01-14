@@ -32,22 +32,44 @@ export async function POST(request: NextRequest) {
     }
 
     // Load project to copy flow_config
-    const { data: project, error: projectError } = await supabase
-      .from('projects')
-      .select('legacy_flow_config')
+    // Try projects_legacy first (production schema), then projects (new schema)
+    let project: any = null
+    let projectError: any = null
+
+    // Try projects_legacy first (this is what ecp_campaigns FK references in production)
+    const { data: legacyProject, error: legacyError } = await supabase
+      .from('projects_legacy')
+      .select('flow_config')
       .eq('id', projectId)
       .single()
 
-    if (projectError) {
+    if (!legacyError && legacyProject) {
+      project = legacyProject
+    } else {
+      // Fallback to projects table (new schema)
+      const { data: newProject, error: newError } = await supabase
+        .from('projects')
+        .select('legacy_flow_config')
+        .eq('id', projectId)
+        .single()
+
+      if (newError) {
+        projectError = newError
+      } else {
+        project = { flow_config: newProject?.legacy_flow_config }
+      }
+    }
+
+    if (projectError || !project) {
       return NextResponse.json(
-        { error: 'Failed to load project', details: projectError.message },
+        { error: 'Failed to load project', details: projectError?.message || 'Project not found' },
         { status: 500 }
       )
     }
 
     // Create campaign with copied flow_config
     // Use provided flow_config if present (for duplicates), otherwise use project's
-    const campaignFlowConfig = flow_config || project.legacy_flow_config || null
+    const campaignFlowConfig = flow_config || project.flow_config || null
 
     let insertData: any = {
       project_id: projectId,
