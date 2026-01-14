@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, MapPin, Building2, FileText, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { GeneratedReport, FlowStep } from '@/types/flow.types'
-import MarkdownRenderer from '@/components/ui/MarkdownRenderer'
+import MarkdownRenderer from '@/components/common/MarkdownRenderer'
 
 interface ReportPreviewProps {
   report: GeneratedReport
