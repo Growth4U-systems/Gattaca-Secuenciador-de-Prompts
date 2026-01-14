@@ -62,21 +62,46 @@ export async function POST(request: NextRequest) {
     }
 
     // Load project to copy flow_config
-    const { data: project, error: projectError } = await supabase
-      .from('projects')
-      .select('legacy_flow_config, variable_definitions')
+    // Try projects_legacy first (production schema), then projects (new schema)
+    let project: any = null
+    let projectError: any = null
+
+    // Try projects_legacy first (this is what ecp_campaigns FK references in production)
+    const { data: legacyProject, error: legacyError } = await supabase
+      .from('projects_legacy')
+      .select('flow_config, variable_definitions')
       .eq('id', projectId)
       .single()
 
-    if (projectError) {
+    if (!legacyError && legacyProject) {
+      project = legacyProject
+    } else {
+      // Fallback to projects table (new schema)
+      const { data: newProject, error: newError } = await supabase
+        .from('projects')
+        .select('legacy_flow_config, variable_definitions')
+        .eq('id', projectId)
+        .single()
+
+      if (newError) {
+        projectError = newError
+      } else {
+        project = {
+          flow_config: newProject?.legacy_flow_config,
+          variable_definitions: newProject?.variable_definitions
+        }
+      }
+    }
+
+    if (projectError || !project) {
       return NextResponse.json(
-        { error: 'Failed to load project', details: projectError.message },
+        { error: 'Failed to load project', details: projectError?.message || 'Project not found' },
         { status: 500 }
       )
     }
 
     // Get flow_config from project
-    const campaignFlowConfig = project.legacy_flow_config || null
+    const campaignFlowConfig = project.flow_config || null
 
     // Reserved fields that go into dedicated columns
     const reservedFields = ['ecp_name', 'problem_core', 'country', 'industry', 'prompt_research']
