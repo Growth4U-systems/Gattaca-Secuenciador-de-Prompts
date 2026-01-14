@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useOpenRouter } from '@/lib/openrouter-context'
-import { ChevronDown, Loader2, Search, Zap, DollarSign, AlertCircle } from 'lucide-react'
+import { ChevronDown, Loader2, Search, Zap, DollarSign, AlertCircle, FlaskConical, Clock } from 'lucide-react'
 
 interface Model {
   id: string
@@ -15,6 +15,19 @@ interface Model {
     output: number
   }
   description?: string
+  isSpecial?: boolean // For special models like Deep Research
+}
+
+// Deep Research model - uses Google API directly, not OpenRouter
+const DEEP_RESEARCH_MODEL: Model = {
+  id: 'deep-research-pro-preview-12-2025',
+  name: 'Deep Research Pro',
+  provider: 'Google (Direct)',
+  contextLength: 1000000,
+  maxOutputTokens: 65536,
+  pricing: { input: 0, output: 0 }, // Special pricing
+  description: 'Investigacion profunda con busqueda web automatica. Tarda 5-20 minutos.',
+  isSpecial: true,
 }
 
 interface OpenRouterModelSelectorProps {
@@ -92,8 +105,13 @@ export default function OpenRouterModelSelector({
     return filtered
   }, [groupedModels, searchQuery])
 
-  // Get selected model info
-  const selectedModel = models.find((m) => m.id === value)
+  // Check if Deep Research is selected
+  const isDeepResearchSelected = value?.startsWith('deep-research')
+
+  // Get selected model info (check Deep Research first, then OpenRouter models)
+  const selectedModel = isDeepResearchSelected
+    ? DEEP_RESEARCH_MODEL
+    : models.find((m) => m.id === value)
 
   // Calculate dropdown position when opening
   const openDropdown = () => {
@@ -154,12 +172,22 @@ export default function OpenRouterModelSelector({
             </>
           ) : selectedModel ? (
             <>
-              <span className="text-xs font-medium px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded flex-shrink-0">
-                {selectedModel.provider}
+              <span className={`text-xs font-medium px-1.5 py-0.5 rounded flex-shrink-0 ${
+                isDeepResearchSelected
+                  ? 'bg-purple-100 text-purple-700'
+                  : 'bg-indigo-100 text-indigo-700'
+              }`}>
+                {isDeepResearchSelected ? 'Deep Research' : selectedModel.provider}
               </span>
               <span className="text-sm font-medium text-gray-900 truncate">
                 {selectedModel.name}
               </span>
+              {isDeepResearchSelected && (
+                <span className="flex items-center gap-0.5 text-xs text-purple-600 flex-shrink-0">
+                  <Clock className="w-3 h-3" />
+                  5-20min
+                </span>
+              )}
             </>
           ) : value ? (
             <span className="text-sm text-gray-700 truncate">{value}</span>
@@ -205,13 +233,64 @@ export default function OpenRouterModelSelector({
 
             {/* Models List */}
             <div className="overflow-y-auto max-h-[340px]">
+              {/* Deep Research Section - Always shown first if matches search */}
+              {(!searchQuery.trim() ||
+                'deep research'.includes(searchQuery.toLowerCase()) ||
+                DEEP_RESEARCH_MODEL.name.toLowerCase().includes(searchQuery.toLowerCase())
+              ) && (
+                <div>
+                  {/* Deep Research Header */}
+                  <div className="px-3 py-1.5 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100">
+                    <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide flex items-center gap-1.5">
+                      <FlaskConical className="w-3.5 h-3.5" />
+                      Deep Research (Google API)
+                    </span>
+                  </div>
+
+                  {/* Deep Research Model */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange(DEEP_RESEARCH_MODEL.id)
+                      setIsOpen(false)
+                      setSearchQuery('')
+                    }}
+                    className={`w-full px-3 py-2.5 text-left hover:bg-purple-50 transition-colors ${
+                      isDeepResearchSelected ? 'bg-purple-50' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-sm font-medium ${isDeepResearchSelected ? 'text-purple-700' : 'text-gray-900'}`}>
+                        {DEEP_RESEARCH_MODEL.name}
+                      </span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="flex items-center gap-0.5 text-xs text-purple-600" title="Tiempo estimado">
+                          <Clock className="w-3 h-3" />
+                          5-20min
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {DEEP_RESEARCH_MODEL.description}
+                    </p>
+                    <p className="text-xs text-purple-600 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      Requiere GEMINI_API_KEY en servidor
+                    </p>
+                  </button>
+
+                  {/* Separator */}
+                  <div className="h-px bg-gray-200 my-1" />
+                </div>
+              )}
+
               {error ? (
                 <div className="px-3 py-4 text-center text-sm text-red-600">
                   {error}
                 </div>
-              ) : Object.keys(filteredGroups).length === 0 ? (
+              ) : Object.keys(filteredGroups).length === 0 && searchQuery.trim() ? (
                 <div className="px-3 py-4 text-center text-sm text-gray-500">
-                  {searchQuery ? 'No se encontraron modelos' : 'No hay modelos disponibles'}
+                  No se encontraron modelos en OpenRouter
                 </div>
               ) : (
                 Object.entries(filteredGroups).map(([provider, providerModels]) => (

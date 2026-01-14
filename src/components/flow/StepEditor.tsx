@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { X, Eye, Code, Copy, Check, FileText, ArrowRight, Hash, MessageSquare, Sparkles, Info, Cpu, Search, Plus, AlertTriangle, Loader2, Trash2, Database, Zap, DollarSign } from 'lucide-react'
+import { X, Eye, Code, Copy, Check, FileText, ArrowRight, Hash, MessageSquare, Sparkles, Info, Cpu, Search, Plus, AlertTriangle, Loader2, Trash2, Database, Zap, DollarSign, FlaskConical, Clock } from 'lucide-react'
 import { FlowStep, OutputFormat, LLMModel, RequiredDocument, RetrievalMode, MODEL_PRICING } from '@/types/flow.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { usePromptValidator } from '@/hooks/usePromptValidator'
@@ -484,6 +484,9 @@ export default function StepEditor({
   const selectedDocsTokens = documents
     .filter((doc) => editedStep.base_doc_ids.includes(doc.id))
     .reduce((sum, doc) => sum + (doc.token_count || 0), 0)
+
+  // Check if Deep Research is selected
+  const isDeepResearch = editedStep.model?.startsWith('deep-research')
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -977,50 +980,82 @@ export default function StepEditor({
                 </p>
               </div>
 
-              {/* Temperature and Max Tokens */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Temperature: {editedStep.temperature ?? 0.7}
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={editedStep.temperature ?? 0.7}
-                    onChange={(e) =>
-                      setEditedStep((prev) => ({ ...prev, temperature: parseFloat(e.target.value) }))
-                    }
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                  />
-                  <div className="flex justify-between text-xs text-gray-400 mt-1">
-                    <span>Preciso</span>
-                    <span>Creativo</span>
+              {/* Deep Research Warning */}
+              {isDeepResearch && (
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <FlaskConical className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-purple-900 flex items-center gap-2">
+                        Deep Research - Modo Especial
+                        <span className="flex items-center gap-1 text-xs font-normal bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                          <Clock className="w-3 h-3" />
+                          5-20 min
+                        </span>
+                      </h4>
+                      <p className="text-sm text-purple-800 mt-1">
+                        Este modelo realiza investigacion autonoma con busqueda web.
+                      </p>
+                      <ul className="text-xs text-purple-700 mt-2 space-y-1">
+                        <li>• No soporta control de temperatura</li>
+                        <li>• No soporta limite de tokens</li>
+                        <li>• El modo RAG no aplica (hace su propia busqueda)</li>
+                        <li>• Requiere GEMINI_API_KEY en el servidor</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Max Tokens
-                  </label>
-                  <input
-                    type="number"
-                    min="1000"
-                    max="32000"
-                    step="1000"
-                    value={editedStep.max_tokens ?? 8192}
-                    onChange={(e) =>
-                      setEditedStep((prev) => ({ ...prev, max_tokens: parseInt(e.target.value) || 8192 }))
-                    }
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-900"
-                  />
+              {/* Temperature and Max Tokens - Hidden for Deep Research */}
+              {!isDeepResearch && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                      Temperature: {editedStep.temperature ?? 0.7}
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={editedStep.temperature ?? 0.7}
+                      onChange={(e) =>
+                        setEditedStep((prev) => ({ ...prev, temperature: parseFloat(e.target.value) }))
+                      }
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>Preciso</span>
+                      <span>Creativo</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                      Max Tokens
+                    </label>
+                    <input
+                      type="number"
+                      min="1000"
+                      max="32000"
+                      step="1000"
+                      value={editedStep.max_tokens ?? 8192}
+                      onChange={(e) =>
+                        setEditedStep((prev) => ({ ...prev, max_tokens: parseInt(e.target.value) || 8192 }))
+                      }
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-900"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* Document Retrieval Mode - RAG vs Full */}
+          {/* Document Retrieval Mode - RAG vs Full - Hidden for Deep Research */}
+          {!isDeepResearch && (
           <div className="bg-gradient-to-br from-cyan-50 to-white border border-cyan-200 rounded-xl p-5">
             <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Database size={18} className="text-cyan-500" />
@@ -1244,6 +1279,7 @@ export default function StepEditor({
               </p>
             </div>
           </div>
+          )}
 
           {/* Prompt Section */}
           <div className="bg-gradient-to-br from-indigo-50 to-white border border-indigo-200 rounded-xl p-5">
