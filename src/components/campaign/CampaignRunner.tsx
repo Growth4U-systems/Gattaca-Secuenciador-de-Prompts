@@ -962,6 +962,37 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     return 'pending'
   }
 
+  // Check if a step's output is stale (a previous step was re-executed after this step)
+  const isStepStale = (campaign: Campaign, step: FlowStep, steps: FlowStep[]) => {
+    if (!campaign.step_outputs || !campaign.step_outputs[step.id]) {
+      return false // No output yet, can't be stale
+    }
+
+    const currentStepOutput = campaign.step_outputs[step.id]
+    const currentCompletedAt = currentStepOutput.completed_at
+      ? new Date(currentStepOutput.completed_at).getTime()
+      : null
+
+    if (!currentCompletedAt) return false
+
+    // Check all previous steps (lower order numbers)
+    for (const prevStep of steps) {
+      if (prevStep.order >= step.order) continue // Only check previous steps
+
+      const prevStepOutput = campaign.step_outputs[prevStep.id]
+      if (!prevStepOutput?.completed_at) continue
+
+      const prevCompletedAt = new Date(prevStepOutput.completed_at).getTime()
+
+      // If any previous step was completed AFTER this step, this step is stale
+      if (prevCompletedAt > currentCompletedAt) {
+        return true
+      }
+    }
+
+    return false
+  }
+
   const isStepRunning = (campaignId: string, stepId: string) => {
     return runningStep?.campaignId === campaignId && runningStep?.stepId === stepId
   }
@@ -1816,6 +1847,8 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                                   const stepStatus = getStepStatus(campaign, step.id)
                                   const stepRunning = isStepRunning(campaign.id, step.id)
                                   const stepOutput = campaign.step_outputs?.[step.id]
+                                  const allSteps = campaign.flow_config?.steps || project?.flow_config?.steps || []
+                                  const isStale = stepStatus === 'completed' && isStepStale(campaign, step, allSteps)
 
                                   const isDeepResearchStep = step.model?.includes('deep-research')
 
@@ -1823,7 +1856,9 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                                     <div key={step.id} className="space-y-2">
                                       <div
                                         className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-                                          stepStatus === 'completed'
+                                          isStale
+                                            ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-300'
+                                            : stepStatus === 'completed'
                                             ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
                                             : stepRunning
                                             ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
@@ -1832,13 +1867,17 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                                       >
                                         <div className="flex items-center gap-4">
                                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold ${
-                                            stepStatus === 'completed'
+                                            isStale
+                                              ? 'bg-amber-500 text-white'
+                                              : stepStatus === 'completed'
                                               ? 'bg-green-600 text-white'
                                               : stepRunning
                                               ? 'bg-blue-600 text-white'
                                               : 'bg-gray-200 text-gray-600'
                                           }`}>
-                                            {stepStatus === 'completed' ? (
+                                            {isStale ? (
+                                              <RefreshCw size={16} />
+                                            ) : stepStatus === 'completed' ? (
                                               <Check size={16} />
                                             ) : stepRunning ? (
                                               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1847,10 +1886,16 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                                             )}
                                           </div>
                                           <div className="flex flex-col">
-                                            <span className={`text-sm font-medium ${stepStatus === 'completed' ? 'text-green-800' : 'text-gray-700'}`}>
+                                            <span className={`text-sm font-medium ${isStale ? 'text-amber-800' : stepStatus === 'completed' ? 'text-green-800' : 'text-gray-700'}`}>
                                               {step.name}
                                             </span>
-                                            {isDeepResearchStep && (
+                                            {isStale && (
+                                              <span className="text-xs text-amber-600 flex items-center gap-1">
+                                                <AlertCircle size={10} />
+                                                Desactualizado - un paso anterior fue re-ejecutado
+                                              </span>
+                                            )}
+                                            {isDeepResearchStep && !isStale && (
                                               <span className="text-xs text-purple-600">Deep Research</span>
                                             )}
                                           </div>
