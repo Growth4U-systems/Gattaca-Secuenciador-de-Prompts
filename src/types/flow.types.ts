@@ -169,3 +169,68 @@ export interface ExecutionResponse {
   duration_ms?: number
   error?: string
 }
+
+// ============================================
+// REPORT GENERATION TYPES
+// ============================================
+
+// Resultado de detección de inconsistencias
+export interface InconsistencyResult {
+  id: string
+  type: 'numeric' | 'factual' | 'missing'
+  field: string                    // Ej: "número de empleados"
+  description: string              // Descripción legible
+  campaigns: {
+    campaignId: string
+    campaignName: string
+    value: string
+    stepId: string
+    stepName: string
+  }[]
+  severity: 'high' | 'medium' | 'low'
+  suggestedResolution?: string
+  resolved?: boolean
+  resolvedValue?: string
+}
+
+// Configuración de exportación de reporte
+export interface ReportExportConfig {
+  format: 'markdown' | 'pdf' | 'pptx' | 'notion' | 'json'
+  includeExecutiveSummary: boolean
+  includeCampaignDetails: boolean
+  includeInconsistencyReport: boolean
+  includeRecommendations: boolean
+  customTitle?: string
+  notionParentPageId?: string      // Para exportación a Notion
+}
+
+// Datos de reporte generado
+export interface GeneratedReport {
+  id: string
+  projectId: string
+  projectName: string
+  generatedAt: string
+  campaigns: {
+    id: string
+    name: string
+    country: string
+    industry: string
+    customVariables: Record<string, string>
+    stepOutputs: {
+      stepId: string
+      stepName: string
+      output: string
+    }[]
+  }[]
+  selectedStepIds: string[]
+  inconsistencies: InconsistencyResult[]
+  executiveSummary?: string        // Generado por LLM
+  recommendations?: string[]       // Generado por LLM
+}
+
+// Estado del selector de campañas
+export interface CampaignSelectionState {
+  selectedCampaignIds: string[]
+  selectedStepIds: string[]
+  statusFilter: 'all' | 'ready_to_present' | string
+}
