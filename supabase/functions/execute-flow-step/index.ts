@@ -1095,10 +1095,12 @@ serve(async (req) => {
       console.log(`[OpenRouter] Token query:`, {
         found: !!tokenRecord?.encrypted_api_key,
         keyLength: tokenRecord?.encrypted_api_key?.length || 0,
+        isPending: tokenRecord?.encrypted_api_key === 'PENDING',
         error: tokenError?.message || null
       })
 
-      if (tokenRecord?.encrypted_api_key) {
+      // Skip if token is 'PENDING' (OAuth not completed)
+      if (tokenRecord?.encrypted_api_key && tokenRecord.encrypted_api_key !== 'PENDING') {
         try {
           userOpenRouterKey = await decryptToken(tokenRecord.encrypted_api_key)
           keySource = 'user'
