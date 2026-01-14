@@ -33,6 +33,32 @@ export interface FallbackConfig {
   max_retries?: number  // Reintentos por modelo (default: 2)
 }
 
+// Modo de recuperación de documentos
+export type RetrievalMode = 'full' | 'rag'
+
+// Configuración de RAG
+export interface RAGConfig {
+  top_k: number       // Número de chunks a recuperar (default: 10)
+  min_score: number   // Score mínimo de similitud (default: 0.7)
+}
+
+// Precios de modelos para estimación de costos (USD por millón de tokens)
+export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'gemini-2.5-pro': { input: 1.25, output: 10.0 },
+  'gemini-2.5-flash': { input: 0.30, output: 2.50 },
+  'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
+  'gemini-3.0-pro-preview': { input: 2.00, output: 12.00 },
+  'google/gemini-2.5-pro': { input: 1.25, output: 10.0 },
+  'google/gemini-2.5-flash': { input: 0.30, output: 2.50 },
+  'google/gemini-3-pro-preview': { input: 2.00, output: 12.00 },
+  'gpt-4o': { input: 2.50, output: 10.0 },
+  'gpt-4o-mini': { input: 0.15, output: 0.60 },
+  'claude-4.5-sonnet': { input: 3.00, output: 15.0 },
+  'claude-4.5-opus': { input: 15.00, output: 75.0 },
+  // Default para modelos desconocidos
+  'default': { input: 1.00, output: 5.00 },
+}
+
 // Documento requerido por un paso (para matching inteligente)
 export interface RequiredDocument {
   id: string                    // UUID generado
@@ -71,6 +97,10 @@ export interface FlowStep {
 
   // Configuración de fallback (opcional)
   fallback?: FallbackConfig
+
+  // Modo de recuperación de documentos
+  retrieval_mode?: RetrievalMode  // Default: 'full'
+  rag_config?: RAGConfig
 }
 
 export interface FlowConfig {
