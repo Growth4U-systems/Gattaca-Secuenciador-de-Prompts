@@ -29,12 +29,23 @@ export default function OpenRouterAuthModal({ isOpen, onClose, trigger = 'action
           .from('openrouter_usage_logs')
           .select('cost_usd')
 
-        if (!error && data) {
+        console.log('[OpenRouter Usage] Query result:', { data, error, count: data?.length })
+
+        if (error) {
+          console.error('[OpenRouter Usage] Query error:', error)
+          return
+        }
+
+        if (data && data.length > 0) {
           const totalCost = data.reduce((sum, log) => sum + (Number(log.cost_usd) || 0), 0)
+          console.log('[OpenRouter Usage] Total cost calculated:', totalCost)
           setRealUsage(totalCost)
+        } else {
+          console.log('[OpenRouter Usage] No logs found, table may be empty')
+          setRealUsage(null) // Keep null to show OpenRouter's value instead
         }
       } catch (err) {
-        console.error('Error fetching real usage:', err)
+        console.error('[OpenRouter Usage] Error fetching:', err)
       }
     }
 
@@ -243,16 +254,22 @@ export default function OpenRouterAuthModal({ isOpen, onClose, trigger = 'action
                   </div>
                 )}
 
-                {/* Usage Information - Show real usage from our logs */}
-                {(realUsage !== null || (tokenInfo?.usage !== null && tokenInfo?.usage !== undefined && tokenInfo.usage > 0)) && (
+                {/* Usage Information - Show real usage from our logs or OpenRouter's value */}
+                {(realUsage !== null && realUsage > 0) ? (
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <CreditCard className="w-4 h-4 text-gray-400" />
                     <span>
-                      Usado: ${realUsage !== null ? realUsage.toFixed(2) : tokenInfo?.usage?.toFixed(4)}
-                      {realUsage !== null && <span className="text-xs text-gray-400 ml-1">(en Gattaca)</span>}
+                      Usado en Gattaca: ${realUsage.toFixed(2)}
                     </span>
                   </div>
-                )}
+                ) : tokenInfo?.usage !== null && tokenInfo?.usage !== undefined && tokenInfo.usage > 0 ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <CreditCard className="w-4 h-4 text-gray-400" />
+                    <span>
+                      Usado (OpenRouter): ${tokenInfo.usage.toFixed(4)}
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex gap-3">

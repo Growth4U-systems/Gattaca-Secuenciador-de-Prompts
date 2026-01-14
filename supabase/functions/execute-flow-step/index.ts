@@ -803,43 +803,83 @@ async function handleInteractionResponse(
     if (statusData.state === 'COMPLETED') {
       let resultText = ''
 
-      // Debug: log response structure
-      console.log(`[Deep Research] COMPLETED - Response structure:`, JSON.stringify({
-        hasResponse: !!statusData.response,
-        responseText: statusData.response?.text?.substring(0, 200),
-        outputsCount: statusData.outputs?.length || 0,
-        lastOutputType: statusData.outputs?.[statusData.outputs.length - 1]?.type,
-        lastOutputHasText: !!statusData.outputs?.[statusData.outputs.length - 1]?.text
-      }))
+      // Debug: log full response for analysis
+      console.log(`[Deep Research] COMPLETED - Full response:`, JSON.stringify(statusData, null, 2).substring(0, 5000))
 
-      // Try multiple extraction methods
+      // Try multiple extraction methods in order of priority
+      // 1. response.text (original format)
       if (statusData.response?.text) {
         resultText = statusData.response.text
         console.log(`[Deep Research] Result from response.text: ${resultText.length} chars`)
-      } else if (statusData.outputs && statusData.outputs.length > 0) {
-        // Look for 'report' or 'response' type outputs first
+      }
+      // 2. Direct text field on statusData
+      else if ((statusData as any).text) {
+        resultText = (statusData as any).text
+        console.log(`[Deep Research] Result from direct text: ${resultText.length} chars`)
+      }
+      // 3. result.text or result.content (newer format)
+      else if ((statusData as any).result?.text) {
+        resultText = (statusData as any).result.text
+        console.log(`[Deep Research] Result from result.text: ${resultText.length} chars`)
+      }
+      else if ((statusData as any).result?.content) {
+        resultText = (statusData as any).result.content
+        console.log(`[Deep Research] Result from result.content: ${resultText.length} chars`)
+      }
+      // 4. output.text or output.content (alternative format)
+      else if ((statusData as any).output?.text) {
+        resultText = (statusData as any).output.text
+        console.log(`[Deep Research] Result from output.text: ${resultText.length} chars`)
+      }
+      else if ((statusData as any).output?.content) {
+        resultText = (statusData as any).output.content
+        console.log(`[Deep Research] Result from output.content: ${resultText.length} chars`)
+      }
+      // 5. candidates array (generateContent style)
+      else if ((statusData as any).candidates?.[0]?.content?.parts?.[0]?.text) {
+        resultText = (statusData as any).candidates[0].content.parts[0].text
+        console.log(`[Deep Research] Result from candidates: ${resultText.length} chars`)
+      }
+      // 6. outputs array
+      else if (statusData.outputs && statusData.outputs.length > 0) {
+        // Look for 'report', 'response', 'result', or 'text' type outputs first
         for (const output of statusData.outputs) {
-          if ((output.type === 'report' || output.type === 'response') && output.text) {
+          if ((output.type === 'report' || output.type === 'response' || output.type === 'result' || output.type === 'text') && output.text) {
             resultText = output.text
             console.log(`[Deep Research] Result from output type=${output.type}: ${resultText.length} chars`)
             break
           }
+          // Also try content field
+          if ((output.type === 'report' || output.type === 'response' || output.type === 'result' || output.type === 'text') && (output as any).content) {
+            resultText = (output as any).content
+            console.log(`[Deep Research] Result from output content type=${output.type}: ${resultText.length} chars`)
+            break
+          }
         }
-        // Fallback to last output with text
+        // Fallback: find the longest text output that isn't thought/search/plan
         if (!resultText) {
-          for (let i = statusData.outputs.length - 1; i >= 0; i--) {
-            if (statusData.outputs[i].text && statusData.outputs[i].type !== 'thought' && statusData.outputs[i].type !== 'search') {
-              resultText = statusData.outputs[i].text!
-              console.log(`[Deep Research] Result from output[${i}] type=${statusData.outputs[i].type}: ${resultText.length} chars`)
-              break
+          let longestText = ''
+          let longestIndex = -1
+          for (let i = 0; i < statusData.outputs.length; i++) {
+            const output = statusData.outputs[i]
+            const text = output.text || (output as any).content || ''
+            if (text && output.type !== 'thought' && output.type !== 'search' && output.type !== 'plan') {
+              if (text.length > longestText.length) {
+                longestText = text
+                longestIndex = i
+              }
             }
+          }
+          if (longestText) {
+            resultText = longestText
+            console.log(`[Deep Research] Result from longest output[${longestIndex}]: ${resultText.length} chars`)
           }
         }
       }
 
-      // If still no result, log full response for debugging
+      // If still no result, log warning
       if (!resultText) {
-        console.log(`[Deep Research] WARNING: No result text found. Full response:`, JSON.stringify(statusData, null, 2))
+        console.log(`[Deep Research] WARNING: No result text found in any field. Keys:`, Object.keys(statusData))
       }
 
       const duration = (Date.now() - startTime) / 1000
@@ -1439,7 +1479,7 @@ serve(async (req) => {
         agencyId = membership.agency_id
       }
 
-      await supabase
+      const { error: usageLogError } = await supabase
         .from('openrouter_usage_logs')
         .insert({
           user_id: user_id,
@@ -1455,10 +1495,14 @@ serve(async (req) => {
           cache_discount: 0, // TODO: Extract from OpenRouter response if available
           retrieval_mode: retrievalMode,
           duration_ms: duration,
-          status: 'success',
+          status: 'completed',
         })
 
-      console.log(`[Cost Log] Model: ${modelUsed}, Tokens: ${inputTokensFinal}/${outputTokensFinal}, Cost: $${totalCost.toFixed(6)}`)
+      if (usageLogError) {
+        console.error(`[Cost Log] Insert error:`, usageLogError)
+      } else {
+        console.log(`[Cost Log] Model: ${modelUsed}, Tokens: ${inputTokensFinal}/${outputTokensFinal}, Cost: $${totalCost.toFixed(6)}`)
+      }
     } catch (costLogError) {
       // Don't fail the request if cost logging fails
       console.warn('[Cost Log] Failed to log cost:', costLogError)
