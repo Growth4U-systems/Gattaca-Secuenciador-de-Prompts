@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { useRouter, usePathname } from 'next/navigation'
-import { LogOut, Sparkles, Loader2, ChevronDown, Dna } from 'lucide-react'
+import { LogOut, Sparkles, Loader2, ChevronDown, Dna, HelpCircle } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import NotificationBell from '@/components/notifications/NotificationBell'
@@ -190,6 +190,15 @@ export default function Header() {
             {/* User Menu */}
             {user && (
               <div className="flex items-center gap-3">
+                {/* Help Guide Link */}
+                <Link
+                  href="/guide"
+                  className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="Instructivo Gattaca"
+                >
+                  <HelpCircle className="w-5 h-5" />
+                </Link>
+
                 {/* OpenRouter Status */}
                 <OpenRouterStatusBadge onClick={handleOpenRouterBadgeClick} />
 
