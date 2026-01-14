@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2, Building2 } from 'lucide-react'
+import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2, Building2, Table2 } from 'lucide-react'
 import { useToast, useModal } from '@/components/ui'
 import { useProject } from '@/hooks/useProjects'
 import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
@@ -16,8 +16,9 @@ import CampaignRunner from '@/components/campaign/CampaignRunner'
 import ProjectVariables from '@/components/project/ProjectVariables'
 import ResearchPromptsEditor from '@/components/project/ResearchPromptsEditor'
 import ShareProjectModal from '@/components/project/ShareProjectModal'
+import ExportDataTab from '@/components/project/ExportDataTab'
 
-type TabType = 'documents' | 'flow' | 'config' | 'campaigns' | 'context' | 'variables'
+type TabType = 'documents' | 'flow' | 'config' | 'campaigns' | 'context' | 'variables' | 'export'
 
 // Loading Skeleton
 function LoadingSkeleton() {
@@ -78,6 +79,7 @@ export default function ProjectPage({
     { id: 'variables' as TabType, label: 'Variables', icon: Sliders, description: 'Configuración' },
     { id: 'flow' as TabType, label: 'Flujo', icon: Workflow, description: 'Pasos y prompts' },
     { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
+    { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' },
   ]
 
   if (projectLoading) {
@@ -422,6 +424,9 @@ export default function ProjectPage({
             )}
             {activeTab === 'campaigns' && (
               <CampaignRunner projectId={params.projectId} project={project} />
+            )}
+            {activeTab === 'export' && (
+              <ExportDataTab projectId={params.projectId} />
             )}
           </div>
         </div>
