@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { RefreshCw, Download, Table2, Shield, MessageSquare, Filter, Columns3, X } from 'lucide-react'
+import { RefreshCw, Download, Table2, Shield, MessageSquare, Filter, X, GripVertical } from 'lucide-react'
 import { useToast } from '@/components/ui'
 
 type SubTab = 'find-place' | 'prove-legit' | 'usp-uvp'
-type ColumnWidth = 'compact' | 'normal' | 'wide'
+type ColumnWidth = 'auto' | 'compact' | 'normal' | 'wide'
 
 interface FindPlaceRow {
   id: string
@@ -44,10 +44,15 @@ interface ColumnFilters {
   [columnKey: string]: string[]
 }
 
-const widthConfig = {
-  compact: { className: 'max-w-[150px]', textClass: 'text-xs' },
-  normal: { className: 'max-w-[250px]', textClass: 'text-sm' },
-  wide: { className: 'max-w-[400px]', textClass: 'text-sm' },
+interface ColumnWidths {
+  [columnKey: string]: ColumnWidth
+}
+
+const widthConfig: Record<ColumnWidth, { className: string; label: string }> = {
+  auto: { className: '', label: 'Auto' },
+  compact: { className: 'max-w-[120px]', label: 'S' },
+  normal: { className: 'max-w-[200px]', label: 'M' },
+  wide: { className: 'max-w-[350px]', label: 'L' },
 }
 
 export default function ExportDataTab({ projectId }: { projectId: string }) {
@@ -55,7 +60,6 @@ export default function ExportDataTab({ projectId }: { projectId: string }) {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('find-place')
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [columnWidth, setColumnWidth] = useState<ColumnWidth>('normal')
 
   // Datos de las 3 tablas
   const [findPlaceData, setFindPlaceData] = useState<FindPlaceRow[]>([])
@@ -144,21 +148,6 @@ export default function ExportDataTab({ projectId }: { projectId: string }) {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Selector de ancho de columnas */}
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-            <Columns3 size={14} className="text-gray-500 ml-2" />
-            {(['compact', 'normal', 'wide'] as ColumnWidth[]).map((width) => (
-              <button
-                key={width}
-                onClick={() => setColumnWidth(width)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  columnWidth === width ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {width === 'compact' ? 'Compacto' : width === 'normal' ? 'Normal' : 'Ancho'}
-              </button>
-            ))}
-          </div>
           <button
             onClick={handleSync}
             disabled={syncing}
@@ -217,15 +206,69 @@ export default function ExportDataTab({ projectId }: { projectId: string }) {
       ) : (
         <>
           {activeSubTab === 'find-place' && (
-            <FindPlaceTable data={findPlaceData} columnWidth={columnWidth} />
+            <FindPlaceTable data={findPlaceData} />
           )}
           {activeSubTab === 'prove-legit' && (
-            <ProveLegitTable data={proveLegitData} columnWidth={columnWidth} />
+            <ProveLegitTable data={proveLegitData} />
           )}
           {activeSubTab === 'usp-uvp' && (
-            <UspUvpTable data={uspUvpData} columnWidth={columnWidth} />
+            <UspUvpTable data={uspUvpData} />
           )}
         </>
+      )}
+    </div>
+  )
+}
+
+// Selector de ancho de columna individual
+function ColumnWidthSelector({
+  width,
+  onChange,
+}: {
+  width: ColumnWidth
+  onChange: (width: ColumnWidth) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const widths: ColumnWidth[] = ['auto', 'compact', 'normal', 'wide']
+
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="p-0.5 rounded hover:bg-gray-300 transition-colors text-gray-400 hover:text-gray-600"
+        title="Ajustar ancho de columna"
+      >
+        <GripVertical size={10} />
+      </button>
+      {open && (
+        <div className="absolute left-0 z-30 mt-1 bg-white border border-gray-200 rounded shadow-lg py-1 min-w-[60px]">
+          {widths.map(w => (
+            <button
+              key={w}
+              onClick={() => {
+                onChange(w)
+                setOpen(false)
+              }}
+              className={`w-full px-2 py-1 text-xs text-left hover:bg-gray-100 ${
+                width === w ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+              }`}
+            >
+              {widthConfig[w].label}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   )
@@ -246,7 +289,6 @@ function FilterDropdown({
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Cerrar al hacer click fuera
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -316,38 +358,54 @@ function getUniqueValues<T>(data: T[], columnKey: keyof T): string[] {
   return Array.from(values).sort()
 }
 
-// Header con filtro integrado
-function FilterableHeader({
+// Header con filtro y selector de ancho integrado
+function ResizableHeader({
   label,
+  columnKey,
   values,
-  selected,
-  onChange,
-  className = ''
+  filterSelected,
+  onFilterChange,
+  width,
+  onWidthChange,
+  showFilter = true,
 }: {
   label: string
-  values: string[]
-  selected: string[]
-  onChange: (selected: string[]) => void
-  className?: string
+  columnKey: string
+  values?: string[]
+  filterSelected?: string[]
+  onFilterChange?: (selected: string[]) => void
+  width: ColumnWidth
+  onWidthChange: (width: ColumnWidth) => void
+  showFilter?: boolean
 }) {
   return (
-    <th className={`px-2 py-2 text-left font-semibold text-gray-700 ${className}`}>
+    <th className={`px-2 py-2 text-left font-semibold text-gray-700 ${widthConfig[width].className}`}>
       <div className="flex items-center gap-1">
-        <span className="whitespace-nowrap">{label}</span>
-        <FilterDropdown
-          values={values}
-          selected={selected}
-          onChange={onChange}
-          label={label}
-        />
+        <ColumnWidthSelector width={width} onChange={onWidthChange} />
+        <span className="whitespace-nowrap truncate">{label}</span>
+        {showFilter && values && onFilterChange && (
+          <FilterDropdown
+            values={values}
+            selected={filterSelected || []}
+            onChange={onFilterChange}
+            label={label}
+          />
+        )}
       </div>
     </th>
   )
 }
 
-// Tabla para Find Your Place con filtros y sticky header
-function FindPlaceTable({ data, columnWidth }: { data: FindPlaceRow[], columnWidth: ColumnWidth }) {
+// Tabla para Find Your Place con filtros, sticky header y anchos por columna
+function FindPlaceTable({ data }: { data: FindPlaceRow[] }) {
   const [filters, setFilters] = useState<ColumnFilters>({})
+  const [columnWidths, setColumnWidths] = useState<ColumnWidths>({
+    ecp_name: 'normal',
+    evaluation_criterion: 'normal',
+    relevance: 'auto',
+    justification: 'wide',
+    analysis_opportunity: 'wide',
+  })
 
   if (data.length === 0) {
     return <EmptyState message="No hay datos. Haz click en 'Sincronizar' para parsear las campanas." />
@@ -377,7 +435,10 @@ function FindPlaceTable({ data, columnWidth }: { data: FindPlaceRow[], columnWid
     setFilters(prev => ({ ...prev, [key]: values }))
   }
 
-  const { className: widthClass, textClass } = widthConfig[columnWidth]
+  const updateWidth = (key: string, width: ColumnWidth) => {
+    setColumnWidths(prev => ({ ...prev, [key]: width }))
+  }
+
   const activeFiltersCount = Object.values(filters).filter(v => v.length > 0).length
 
   return (
@@ -396,45 +457,72 @@ function FindPlaceTable({ data, columnWidth }: { data: FindPlaceRow[], columnWid
       )}
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <div className="max-h-[600px] overflow-y-auto">
-          <table className={`min-w-full divide-y divide-gray-200 ${textClass}`}>
+          <table className="min-w-full divide-y divide-gray-200 text-xs">
             <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
-                <FilterableHeader
+                <ResizableHeader
                   label="ECP"
+                  columnKey="ecp_name"
                   values={getUniqueValues(data, 'ecp_name')}
-                  selected={filters['ecp_name'] || []}
-                  onChange={(v) => updateFilter('ecp_name', v)}
+                  filterSelected={filters['ecp_name']}
+                  onFilterChange={(v) => updateFilter('ecp_name', v)}
+                  width={columnWidths['ecp_name'] || 'normal'}
+                  onWidthChange={(w) => updateWidth('ecp_name', w)}
                 />
-                <FilterableHeader
+                <ResizableHeader
                   label="Evaluation Criterion"
+                  columnKey="evaluation_criterion"
                   values={getUniqueValues(data, 'evaluation_criterion')}
-                  selected={filters['evaluation_criterion'] || []}
-                  onChange={(v) => updateFilter('evaluation_criterion', v)}
+                  filterSelected={filters['evaluation_criterion']}
+                  onFilterChange={(v) => updateFilter('evaluation_criterion', v)}
+                  width={columnWidths['evaluation_criterion'] || 'normal'}
+                  onWidthChange={(w) => updateWidth('evaluation_criterion', w)}
                 />
-                <FilterableHeader
+                <ResizableHeader
                   label="Relevance"
+                  columnKey="relevance"
                   values={getUniqueValues(data, 'relevance')}
-                  selected={filters['relevance'] || []}
-                  onChange={(v) => updateFilter('relevance', v)}
+                  filterSelected={filters['relevance']}
+                  onFilterChange={(v) => updateFilter('relevance', v)}
+                  width={columnWidths['relevance'] || 'auto'}
+                  onWidthChange={(w) => updateWidth('relevance', w)}
                 />
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Justification</th>
+                <ResizableHeader
+                  label="Justification"
+                  columnKey="justification"
+                  width={columnWidths['justification'] || 'wide'}
+                  onWidthChange={(w) => updateWidth('justification', w)}
+                  showFilter={false}
+                />
                 {competitors.map(comp => (
                   <th key={comp} className="px-2 py-2 text-center font-semibold text-gray-700 whitespace-nowrap">
                     {comp}
                   </th>
                 ))}
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Analysis & Opportunity</th>
+                <ResizableHeader
+                  label="Analysis & Opportunity"
+                  columnKey="analysis_opportunity"
+                  width={columnWidths['analysis_opportunity'] || 'wide'}
+                  onWidthChange={(w) => updateWidth('analysis_opportunity', w)}
+                  showFilter={false}
+                />
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredData.map((row, idx) => (
                 <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className={`px-2 py-2 text-gray-900 ${widthClass} whitespace-normal`}>{row.ecp_name}</td>
-                  <td className={`px-2 py-2 text-gray-700 ${widthClass} whitespace-normal`}>{row.evaluation_criterion}</td>
+                  <td className={`px-2 py-2 text-gray-900 ${widthConfig[columnWidths['ecp_name'] || 'normal'].className} whitespace-normal`}>
+                    {row.ecp_name}
+                  </td>
+                  <td className={`px-2 py-2 text-gray-700 ${widthConfig[columnWidths['evaluation_criterion'] || 'normal'].className} whitespace-normal`}>
+                    {row.evaluation_criterion}
+                  </td>
                   <td className="px-2 py-2">
                     <RelevanceBadge value={row.relevance} />
                   </td>
-                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.justification || '-'}</td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthConfig[columnWidths['justification'] || 'wide'].className} whitespace-normal`}>
+                    {row.justification || '-'}
+                  </td>
                   {competitors.map(comp => {
                     const score = row.competitor_scores?.[comp]?.score
                     return (
@@ -449,7 +537,9 @@ function FindPlaceTable({ data, columnWidth }: { data: FindPlaceRow[], columnWid
                       </td>
                     )
                   })}
-                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.analysis_opportunity || '-'}</td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthConfig[columnWidths['analysis_opportunity'] || 'wide'].className} whitespace-normal`}>
+                    {row.analysis_opportunity || '-'}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -460,9 +550,19 @@ function FindPlaceTable({ data, columnWidth }: { data: FindPlaceRow[], columnWid
   )
 }
 
-// Tabla para Prove Legit con filtros y sticky header
-function ProveLegitTable({ data, columnWidth }: { data: ProveLegitRow[], columnWidth: ColumnWidth }) {
+// Tabla para Prove Legit con filtros, sticky header y anchos por columna
+function ProveLegitTable({ data }: { data: ProveLegitRow[] }) {
   const [filters, setFilters] = useState<ColumnFilters>({})
+  const [columnWidths, setColumnWidths] = useState<ColumnWidths>({
+    ecp_name: 'normal',
+    asset_name: 'normal',
+    value_criteria: 'normal',
+    category: 'auto',
+    justification_differentiation: 'wide',
+    competitive_advantage: 'wide',
+    benefit_for_user: 'wide',
+    proof: 'wide',
+  })
 
   if (data.length === 0) {
     return <EmptyState message="No hay datos. Haz click en 'Sincronizar' para parsear las campanas." />
@@ -482,7 +582,10 @@ function ProveLegitTable({ data, columnWidth }: { data: ProveLegitRow[], columnW
     setFilters(prev => ({ ...prev, [key]: values }))
   }
 
-  const { className: widthClass, textClass } = widthConfig[columnWidth]
+  const updateWidth = (key: string, width: ColumnWidth) => {
+    setColumnWidths(prev => ({ ...prev, [key]: width }))
+  }
+
   const activeFiltersCount = Object.values(filters).filter(v => v.length > 0).length
 
   return (
@@ -501,47 +604,100 @@ function ProveLegitTable({ data, columnWidth }: { data: ProveLegitRow[], columnW
       )}
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <div className="max-h-[600px] overflow-y-auto">
-          <table className={`min-w-full divide-y divide-gray-200 ${textClass}`}>
+          <table className="min-w-full divide-y divide-gray-200 text-xs">
             <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
-                <FilterableHeader
+                <ResizableHeader
                   label="ECP"
+                  columnKey="ecp_name"
                   values={getUniqueValues(data, 'ecp_name')}
-                  selected={filters['ecp_name'] || []}
-                  onChange={(v) => updateFilter('ecp_name', v)}
+                  filterSelected={filters['ecp_name']}
+                  onFilterChange={(v) => updateFilter('ecp_name', v)}
+                  width={columnWidths['ecp_name'] || 'normal'}
+                  onWidthChange={(w) => updateWidth('ecp_name', w)}
                 />
-                <FilterableHeader
+                <ResizableHeader
                   label="Asset"
+                  columnKey="asset_name"
                   values={getUniqueValues(data, 'asset_name')}
-                  selected={filters['asset_name'] || []}
-                  onChange={(v) => updateFilter('asset_name', v)}
+                  filterSelected={filters['asset_name']}
+                  onFilterChange={(v) => updateFilter('asset_name', v)}
+                  width={columnWidths['asset_name'] || 'normal'}
+                  onWidthChange={(w) => updateWidth('asset_name', w)}
                 />
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Value Criteria</th>
-                <FilterableHeader
+                <ResizableHeader
+                  label="Value Criteria"
+                  columnKey="value_criteria"
+                  width={columnWidths['value_criteria'] || 'normal'}
+                  onWidthChange={(w) => updateWidth('value_criteria', w)}
+                  showFilter={false}
+                />
+                <ResizableHeader
                   label="Category"
+                  columnKey="category"
                   values={getUniqueValues(data, 'category')}
-                  selected={filters['category'] || []}
-                  onChange={(v) => updateFilter('category', v)}
+                  filterSelected={filters['category']}
+                  onFilterChange={(v) => updateFilter('category', v)}
+                  width={columnWidths['category'] || 'auto'}
+                  onWidthChange={(w) => updateWidth('category', w)}
                 />
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Justification for Differentiation</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Competitive Advantage</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Benefit for User</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Proof</th>
+                <ResizableHeader
+                  label="Justification"
+                  columnKey="justification_differentiation"
+                  width={columnWidths['justification_differentiation'] || 'wide'}
+                  onWidthChange={(w) => updateWidth('justification_differentiation', w)}
+                  showFilter={false}
+                />
+                <ResizableHeader
+                  label="Competitive Advantage"
+                  columnKey="competitive_advantage"
+                  width={columnWidths['competitive_advantage'] || 'wide'}
+                  onWidthChange={(w) => updateWidth('competitive_advantage', w)}
+                  showFilter={false}
+                />
+                <ResizableHeader
+                  label="Benefit for User"
+                  columnKey="benefit_for_user"
+                  width={columnWidths['benefit_for_user'] || 'wide'}
+                  onWidthChange={(w) => updateWidth('benefit_for_user', w)}
+                  showFilter={false}
+                />
+                <ResizableHeader
+                  label="Proof"
+                  columnKey="proof"
+                  width={columnWidths['proof'] || 'wide'}
+                  onWidthChange={(w) => updateWidth('proof', w)}
+                  showFilter={false}
+                />
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredData.map((row, idx) => (
                 <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className={`px-2 py-2 text-gray-900 ${widthClass} whitespace-normal`}>{row.ecp_name}</td>
-                  <td className={`px-2 py-2 text-gray-700 ${widthClass} whitespace-normal`}>{row.asset_name}</td>
-                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.value_criteria || '-'}</td>
+                  <td className={`px-2 py-2 text-gray-900 ${widthConfig[columnWidths['ecp_name'] || 'normal'].className} whitespace-normal`}>
+                    {row.ecp_name}
+                  </td>
+                  <td className={`px-2 py-2 text-gray-700 ${widthConfig[columnWidths['asset_name'] || 'normal'].className} whitespace-normal`}>
+                    {row.asset_name}
+                  </td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthConfig[columnWidths['value_criteria'] || 'normal'].className} whitespace-normal`}>
+                    {row.value_criteria || '-'}
+                  </td>
                   <td className="px-2 py-2">
                     <CategoryBadge value={row.category} />
                   </td>
-                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.justification_differentiation || '-'}</td>
-                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.competitive_advantage || '-'}</td>
-                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.benefit_for_user || '-'}</td>
-                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.proof || '-'}</td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthConfig[columnWidths['justification_differentiation'] || 'wide'].className} whitespace-normal`}>
+                    {row.justification_differentiation || '-'}
+                  </td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthConfig[columnWidths['competitive_advantage'] || 'wide'].className} whitespace-normal`}>
+                    {row.competitive_advantage || '-'}
+                  </td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthConfig[columnWidths['benefit_for_user'] || 'wide'].className} whitespace-normal`}>
+                    {row.benefit_for_user || '-'}
+                  </td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthConfig[columnWidths['proof'] || 'wide'].className} whitespace-normal`}>
+                    {row.proof || '-'}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -552,9 +708,18 @@ function ProveLegitTable({ data, columnWidth }: { data: ProveLegitRow[], columnW
   )
 }
 
-// Tabla para USP & UVP con filtros y sticky header
-function UspUvpTable({ data, columnWidth }: { data: UspUvpRow[], columnWidth: ColumnWidth }) {
+// Tabla para USP & UVP con filtros, sticky header y anchos por columna
+function UspUvpTable({ data }: { data: UspUvpRow[] }) {
   const [filters, setFilters] = useState<ColumnFilters>({})
+  const [columnWidths, setColumnWidths] = useState<ColumnWidths>({
+    ecp_name: 'normal',
+    message_category: 'normal',
+    hypothesis: 'wide',
+    value_criteria: 'normal',
+    objective: 'normal',
+    message_en: 'wide',
+    message_es: 'wide',
+  })
 
   if (data.length === 0) {
     return <EmptyState message="No hay datos. Haz click en 'Sincronizar' para parsear las campanas." />
@@ -574,7 +739,10 @@ function UspUvpTable({ data, columnWidth }: { data: UspUvpRow[], columnWidth: Co
     setFilters(prev => ({ ...prev, [key]: values }))
   }
 
-  const { className: widthClass, textClass } = widthConfig[columnWidth]
+  const updateWidth = (key: string, width: ColumnWidth) => {
+    setColumnWidths(prev => ({ ...prev, [key]: width }))
+  }
+
   const activeFiltersCount = Object.values(filters).filter(v => v.length > 0).length
 
   return (
@@ -593,38 +761,88 @@ function UspUvpTable({ data, columnWidth }: { data: UspUvpRow[], columnWidth: Co
       )}
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <div className="max-h-[600px] overflow-y-auto">
-          <table className={`min-w-full divide-y divide-gray-200 ${textClass}`}>
+          <table className="min-w-full divide-y divide-gray-200 text-xs">
             <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
-                <FilterableHeader
+                <ResizableHeader
                   label="ECP"
+                  columnKey="ecp_name"
                   values={getUniqueValues(data, 'ecp_name')}
-                  selected={filters['ecp_name'] || []}
-                  onChange={(v) => updateFilter('ecp_name', v)}
+                  filterSelected={filters['ecp_name']}
+                  onFilterChange={(v) => updateFilter('ecp_name', v)}
+                  width={columnWidths['ecp_name'] || 'normal'}
+                  onWidthChange={(w) => updateWidth('ecp_name', w)}
                 />
-                <FilterableHeader
+                <ResizableHeader
                   label="Message Category"
+                  columnKey="message_category"
                   values={getUniqueValues(data, 'message_category')}
-                  selected={filters['message_category'] || []}
-                  onChange={(v) => updateFilter('message_category', v)}
+                  filterSelected={filters['message_category']}
+                  onFilterChange={(v) => updateFilter('message_category', v)}
+                  width={columnWidths['message_category'] || 'normal'}
+                  onWidthChange={(w) => updateWidth('message_category', w)}
                 />
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Hypothesis</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Value Criteria</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Objective</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Message (EN)</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Message (ES)</th>
+                <ResizableHeader
+                  label="Hypothesis"
+                  columnKey="hypothesis"
+                  width={columnWidths['hypothesis'] || 'wide'}
+                  onWidthChange={(w) => updateWidth('hypothesis', w)}
+                  showFilter={false}
+                />
+                <ResizableHeader
+                  label="Value Criteria"
+                  columnKey="value_criteria"
+                  width={columnWidths['value_criteria'] || 'normal'}
+                  onWidthChange={(w) => updateWidth('value_criteria', w)}
+                  showFilter={false}
+                />
+                <ResizableHeader
+                  label="Objective"
+                  columnKey="objective"
+                  width={columnWidths['objective'] || 'normal'}
+                  onWidthChange={(w) => updateWidth('objective', w)}
+                  showFilter={false}
+                />
+                <ResizableHeader
+                  label="Message (EN)"
+                  columnKey="message_en"
+                  width={columnWidths['message_en'] || 'wide'}
+                  onWidthChange={(w) => updateWidth('message_en', w)}
+                  showFilter={false}
+                />
+                <ResizableHeader
+                  label="Message (ES)"
+                  columnKey="message_es"
+                  width={columnWidths['message_es'] || 'wide'}
+                  onWidthChange={(w) => updateWidth('message_es', w)}
+                  showFilter={false}
+                />
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredData.map((row, idx) => (
                 <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className={`px-2 py-2 text-gray-900 ${widthClass} whitespace-normal`}>{row.ecp_name}</td>
-                  <td className={`px-2 py-2 text-gray-700 ${widthClass} whitespace-normal`}>{row.message_category}</td>
-                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.hypothesis || '-'}</td>
-                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.value_criteria || '-'}</td>
-                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.objective || '-'}</td>
-                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.message_en || '-'}</td>
-                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.message_es || '-'}</td>
+                  <td className={`px-2 py-2 text-gray-900 ${widthConfig[columnWidths['ecp_name'] || 'normal'].className} whitespace-normal`}>
+                    {row.ecp_name}
+                  </td>
+                  <td className={`px-2 py-2 text-gray-700 ${widthConfig[columnWidths['message_category'] || 'normal'].className} whitespace-normal`}>
+                    {row.message_category}
+                  </td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthConfig[columnWidths['hypothesis'] || 'wide'].className} whitespace-normal`}>
+                    {row.hypothesis || '-'}
+                  </td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthConfig[columnWidths['value_criteria'] || 'normal'].className} whitespace-normal`}>
+                    {row.value_criteria || '-'}
+                  </td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthConfig[columnWidths['objective'] || 'normal'].className} whitespace-normal`}>
+                    {row.objective || '-'}
+                  </td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthConfig[columnWidths['message_en'] || 'wide'].className} whitespace-normal`}>
+                    {row.message_en || '-'}
+                  </td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthConfig[columnWidths['message_es'] || 'wide'].className} whitespace-normal`}>
+                    {row.message_es || '-'}
+                  </td>
                 </tr>
               ))}
             </tbody>
