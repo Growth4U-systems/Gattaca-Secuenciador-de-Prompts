@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     // Load project to copy flow_config
     const { data: project, error: projectError } = await supabase
       .from('projects')
-      .select('flow_config, variable_definitions')
+      .select('legacy_flow_config, variable_definitions')
       .eq('id', projectId)
       .single()
 
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get flow_config from project
-    const campaignFlowConfig = project.flow_config || null
+    const campaignFlowConfig = project.legacy_flow_config || null
 
     // Reserved fields that go into dedicated columns
     const reservedFields = ['ecp_name', 'problem_core', 'country', 'industry', 'prompt_research']
