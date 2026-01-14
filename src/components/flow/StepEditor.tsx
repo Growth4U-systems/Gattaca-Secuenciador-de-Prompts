@@ -1422,49 +1422,44 @@ export default function StepEditor({
               </div>
             )}
 
-            {/* Available Variables Section */}
-            <div className="mt-4 p-4 bg-white/70 rounded-xl border border-indigo-100">
-              <p className="text-sm font-medium text-indigo-800 mb-3 flex items-center gap-2">
-                <Sparkles size={16} />
-                Variables declaradas ({declaredVariables.length})
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {allVariables.map((varName: string) => {
-                  const isDeclared = declaredVariables.includes(varName)
-                  return (
-                  <code
-                    key={varName}
-                    className={`text-xs px-2.5 py-1.5 rounded-lg border cursor-pointer transition-colors ${
-                      isDeclared
-                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
-                        : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
-                    }`}
-                    onClick={() => {
-                      const textarea = textareaRef.current
-                      if (textarea && !showRealValues) {
-                        const start = textarea.selectionStart
-                        const end = textarea.selectionEnd
-                        const text = editedStep.prompt
-                        const newText = text.substring(0, start) + `{{ ${varName} }}` + text.substring(end)
-                        setEditedStep(prev => ({ ...prev, prompt: newText }))
-                        setTimeout(() => {
-                          const newPos = start + `{{ ${varName} }}`.length
-                          textarea.focus()
-                          textarea.setSelectionRange(newPos, newPos)
-                        }, 0)
-                      }
-                    }}
-                    title={isDeclared ? 'Variable declarada - Click para insertar' : 'Variable NO declarada - Agrégala en configuración de variables'}
-                  >
-                    {`{{ ${varName} }}`}
-                  </code>
-                )}
-                )}
+            {/* Available Variables Section - Only show if there are declared variables */}
+            {declaredVariables.length > 0 && (
+              <div className="mt-4 p-4 bg-white/70 rounded-xl border border-indigo-100">
+                <p className="text-sm font-medium text-indigo-800 mb-3 flex items-center gap-2">
+                  <Sparkles size={16} />
+                  Variables del proyecto ({declaredVariables.length})
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {declaredVariables.map((varName: string) => (
+                    <code
+                      key={varName}
+                      className="text-xs px-2.5 py-1.5 rounded-lg border cursor-pointer transition-colors bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+                      onClick={() => {
+                        const textarea = textareaRef.current
+                        if (textarea && !showRealValues) {
+                          const start = textarea.selectionStart
+                          const end = textarea.selectionEnd
+                          const text = editedStep.prompt
+                          const newText = text.substring(0, start) + `{{ ${varName} }}` + text.substring(end)
+                          setEditedStep(prev => ({ ...prev, prompt: newText }))
+                          setTimeout(() => {
+                            const newPos = start + `{{ ${varName} }}`.length
+                            textarea.focus()
+                            textarea.setSelectionRange(newPos, newPos)
+                          }, 0)
+                        }
+                      }}
+                      title="Click para insertar en el prompt"
+                    >
+                      {`{{ ${varName} }}`}
+                    </code>
+                  ))}
+                </div>
+                <p className="text-xs text-indigo-600 mt-3">
+                  Haz clic en una variable para insertarla en el prompt
+                </p>
               </div>
-              <p className="text-xs text-indigo-600 mt-3">
-                Haz clic en una variable para insertarla en el prompt
-              </p>
-            </div>
+            )}
           </div>
         </div>
 
