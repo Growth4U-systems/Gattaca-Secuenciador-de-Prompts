@@ -13,6 +13,26 @@ interface DeepResearchInteraction {
   response?: {
     text: string
   }
+  // Direct result field (newer API versions)
+  result?: {
+    text?: string
+    content?: string
+  }
+  // Output field (alternative structure)
+  output?: {
+    text?: string
+    content?: string
+  }
+  // Text field directly on the object
+  text?: string
+  // Content array (generateContent style)
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string
+      }>
+    }
+  }>
   error?: {
     message: string
     code: string
@@ -185,35 +205,55 @@ export async function POST(request: NextRequest) {
     if (isCompleted) {
       let resultText = ''
 
-      // Try multiple extraction methods
-      if (statusData.response?.text) {
-        resultText = statusData.response.text
-        console.log(`[Deep Research Poll] Result from response.text: ${resultText.length} chars`)
-      } else if (statusData.outputs && statusData.outputs.length > 0) {
-        // Look for 'report' or 'response' type outputs first
-        for (const output of statusData.outputs) {
-          if ((output.type === 'report' || output.type === 'response' || output.type === 'result') && output.text) {
-            resultText = output.text
-            console.log(`[Deep Research Poll] Result from output type=${output.type}: ${resultText.length} chars`)
-            break
-          }
+      // Log full response for debugging when completed
+      console.log(`[Deep Research Poll] COMPLETED - Full response:`, JSON.stringify(statusData, null, 2).substring(0, 5000))
+
+      // According to Google documentation, the final report is in outputs[-1].text
+      // The last element of the outputs array contains the complete research report
+      if (statusData.outputs && statusData.outputs.length > 0) {
+        // Get the LAST output - this is where the final report is according to docs
+        const lastOutput = statusData.outputs[statusData.outputs.length - 1]
+        if (lastOutput.text) {
+          resultText = lastOutput.text
+          console.log(`[Deep Research Poll] Result from outputs[-1].text (last output): ${resultText.length} chars`)
+        } else if (lastOutput.content) {
+          resultText = lastOutput.content
+          console.log(`[Deep Research Poll] Result from outputs[-1].content (last output): ${resultText.length} chars`)
         }
-        // Fallback to last output with text
-        if (!resultText) {
-          for (let i = statusData.outputs.length - 1; i >= 0; i--) {
-            const output = statusData.outputs[i]
-            if (output.text && output.type !== 'thought' && output.type !== 'search') {
-              resultText = output.text
-              console.log(`[Deep Research Poll] Result from output[${i}]: ${resultText.length} chars`)
-              break
-            }
-          }
+      }
+
+      // Fallback: try other fields if outputs[-1] didn't work
+      if (!resultText) {
+        // 1. response.text (original format)
+        if (statusData.response?.text) {
+          resultText = statusData.response.text
+          console.log(`[Deep Research Poll] Result from response.text: ${resultText.length} chars`)
+        }
+        // 2. result.text or result.content (newer format)
+        else if (statusData.result?.text) {
+          resultText = statusData.result.text
+          console.log(`[Deep Research Poll] Result from result.text: ${resultText.length} chars`)
+        }
+        else if (statusData.result?.content) {
+          resultText = statusData.result.content
+          console.log(`[Deep Research Poll] Result from result.content: ${resultText.length} chars`)
+        }
+        // 3. Direct text field
+        else if (statusData.text) {
+          resultText = statusData.text
+          console.log(`[Deep Research Poll] Result from direct text: ${resultText.length} chars`)
+        }
+        // 4. candidates array (generateContent style)
+        else if (statusData.candidates?.[0]?.content?.parts?.[0]?.text) {
+          resultText = statusData.candidates[0].content.parts[0].text
+          console.log(`[Deep Research Poll] Result from candidates: ${resultText.length} chars`)
         }
       }
 
       if (!resultText) {
-        console.log(`[Deep Research Poll] WARNING: No result text found`)
-        console.log(`[Deep Research Poll] Full response:`, JSON.stringify(statusData, null, 2))
+        console.log(`[Deep Research Poll] WARNING: No result text found in any field`)
+        console.log(`[Deep Research Poll] Available fields:`, Object.keys(statusData))
+        console.log(`[Deep Research Poll] Outputs array:`, JSON.stringify(statusData.outputs, null, 2))
       }
 
       // Load campaign to update step_outputs
