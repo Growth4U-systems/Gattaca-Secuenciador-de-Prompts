@@ -74,13 +74,18 @@ export default function ProjectPage({
   const [showMenu, setShowMenu] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
 
-  const tabs = [
+  // Base tabs available for all projects
+  const baseTabs = [
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
     { id: 'variables' as TabType, label: 'Variables', icon: Sliders, description: 'Configuración' },
     { id: 'flow' as TabType, label: 'Flujo', icon: Workflow, description: 'Pasos y prompts' },
     { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
-    { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' },
   ]
+
+  // Add Export tab only for ECP projects
+  const tabs = project?.playbook_type === 'ecp'
+    ? [...baseTabs, { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' }]
+    : baseTabs
 
   if (projectLoading) {
     return <LoadingSkeleton />
