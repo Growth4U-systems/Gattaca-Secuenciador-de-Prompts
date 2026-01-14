@@ -44,6 +44,13 @@ export async function populateExportTables(campaignId: string): Promise<{
 }
 
 /**
+ * Normaliza un criterio para hacer matching entre tablas
+ */
+function normalizeCriterion(criterion: string): string {
+  return criterion.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+/**
  * Parsea Step 4 (Find Your Place to Win) y guarda en export_find_place
  */
 async function parseAndSaveFindPlace(supabase: any, campaign: Campaign): Promise<number> {
@@ -61,19 +68,32 @@ async function parseAndSaveFindPlace(supabase: any, campaign: Campaign): Promise
 
   if (!criteriaTable || !positioningTable) return 0
 
-  // Construir filas combinando ambas tablas
+  // Crear mapa de criterio normalizado -> fila de posicionamiento
+  // Esto permite hacer match por nombre de criterio, no por indice
+  const positioningMap = new Map<string, string[]>()
+  for (const row of positioningTable.rows) {
+    const criterion = getColumnValue(positioningTable, row, 'Criteria') ||
+                     getColumnValue(positioningTable, row, 'Criterion') ||
+                     row[0] || ''
+    if (criterion) {
+      positioningMap.set(normalizeCriterion(criterion), row)
+    }
+  }
+
+  // Construir filas combinando ambas tablas por nombre de criterio
   const rows = []
 
-  for (let i = 0; i < criteriaTable.rows.length; i++) {
-    const criteriaRow = criteriaTable.rows[i]
-    const positioningRow = positioningTable.rows[i] || []
-
+  for (const criteriaRow of criteriaTable.rows) {
     // Extraer criterio y datos de la primera tabla
     const criterion = getColumnValue(criteriaTable, criteriaRow, 'Criteria') ||
                      getColumnValue(criteriaTable, criteriaRow, 'Criterion') ||
                      criteriaRow[0] || ''
     const relevance = getColumnValue(criteriaTable, criteriaRow, 'Relevance') || criteriaRow[1] || ''
     const justification = getColumnValue(criteriaTable, criteriaRow, 'Justification') || criteriaRow[2] || ''
+
+    // CORRECCION: Buscar fila de scores por nombre de criterio, no por indice
+    const normalizedCriterion = normalizeCriterion(criterion)
+    const positioningRow = positioningMap.get(normalizedCriterion) || []
 
     // Extraer scores de competidores de la segunda tabla
     const competitorScores = extractCompetitorScores(positioningTable.headers, positioningRow)
@@ -89,7 +109,7 @@ async function parseAndSaveFindPlace(supabase: any, campaign: Campaign): Promise
         project_id: campaign.project_id,
         campaign_id: campaign.id,
         ecp_name: campaign.ecp_name,
-        evaluation_criterion: criterion.substring(0, 500), // Limitar longitud
+        evaluation_criterion: criterion.substring(0, 500),
         relevance: relevance.substring(0, 50),
         justification: justification.substring(0, 2000),
         competitor_scores: competitorScores,

@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { RefreshCw, Download, Table2, Shield, MessageSquare } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { RefreshCw, Download, Table2, Shield, MessageSquare, Filter, Columns3, X } from 'lucide-react'
 import { useToast } from '@/components/ui'
 
 type SubTab = 'find-place' | 'prove-legit' | 'usp-uvp'
+type ColumnWidth = 'compact' | 'normal' | 'wide'
 
 interface FindPlaceRow {
   id: string
@@ -39,11 +40,22 @@ interface UspUvpRow {
   message_es: string
 }
 
+interface ColumnFilters {
+  [columnKey: string]: string[]
+}
+
+const widthConfig = {
+  compact: { className: 'max-w-[150px]', textClass: 'text-xs' },
+  normal: { className: 'max-w-[250px]', textClass: 'text-sm' },
+  wide: { className: 'max-w-[400px]', textClass: 'text-sm' },
+}
+
 export default function ExportDataTab({ projectId }: { projectId: string }) {
   const toast = useToast()
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('find-place')
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [columnWidth, setColumnWidth] = useState<ColumnWidth>('normal')
 
   // Datos de las 3 tablas
   const [findPlaceData, setFindPlaceData] = useState<FindPlaceRow[]>([])
@@ -131,7 +143,22 @@ export default function ExportDataTab({ projectId }: { projectId: string }) {
             Visualiza y exporta los datos parseados de todas las campanas ({totalCount} registros)
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          {/* Selector de ancho de columnas */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            <Columns3 size={14} className="text-gray-500 ml-2" />
+            {(['compact', 'normal', 'wide'] as ColumnWidth[]).map((width) => (
+              <button
+                key={width}
+                onClick={() => setColumnWidth(width)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  columnWidth === width ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {width === 'compact' ? 'Compacto' : width === 'normal' ? 'Normal' : 'Ancho'}
+              </button>
+            ))}
+          </div>
           <button
             onClick={handleSync}
             disabled={syncing}
@@ -190,13 +217,13 @@ export default function ExportDataTab({ projectId }: { projectId: string }) {
       ) : (
         <>
           {activeSubTab === 'find-place' && (
-            <FindPlaceTable data={findPlaceData} />
+            <FindPlaceTable data={findPlaceData} columnWidth={columnWidth} />
           )}
           {activeSubTab === 'prove-legit' && (
-            <ProveLegitTable data={proveLegitData} />
+            <ProveLegitTable data={proveLegitData} columnWidth={columnWidth} />
           )}
           {activeSubTab === 'usp-uvp' && (
-            <UspUvpTable data={uspUvpData} />
+            <UspUvpTable data={uspUvpData} columnWidth={columnWidth} />
           )}
         </>
       )}
@@ -204,8 +231,124 @@ export default function ExportDataTab({ projectId }: { projectId: string }) {
   )
 }
 
-// Tabla PLANA para Find Your Place - SIN TOGGLE, todas las columnas visibles
-function FindPlaceTable({ data }: { data: FindPlaceRow[] }) {
+// Componente de filtro dropdown
+function FilterDropdown({
+  values,
+  selected,
+  onChange,
+  label
+}: {
+  values: string[]
+  selected: string[]
+  onChange: (selected: string[]) => void
+  label: string
+}) {
+  const [open, setOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Cerrar al hacer click fuera
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  if (values.length === 0) return null
+
+  return (
+    <div className="relative inline-block" ref={dropdownRef}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`p-1 rounded hover:bg-gray-200 transition-colors ${selected.length > 0 ? 'text-blue-600' : 'text-gray-400'}`}
+        title={`Filtrar por ${label}`}
+      >
+        <Filter size={12} />
+      </button>
+      {open && (
+        <div className="absolute left-0 z-20 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 min-w-[180px] max-w-[250px]">
+          <div className="max-h-[200px] overflow-y-auto">
+            {values.map(value => (
+              <label key={value} className="flex items-center gap-2 py-1 px-2 hover:bg-gray-50 rounded cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(value)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      onChange([...selected, value])
+                    } else {
+                      onChange(selected.filter(v => v !== value))
+                    }
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-xs text-gray-700 truncate">{value}</span>
+              </label>
+            ))}
+          </div>
+          {selected.length > 0 && (
+            <button
+              className="w-full mt-2 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded flex items-center justify-center gap-1"
+              onClick={() => onChange([])}
+            >
+              <X size={12} />
+              Limpiar filtro
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Funcion para extraer valores unicos de una columna
+function getUniqueValues<T>(data: T[], columnKey: keyof T): string[] {
+  const values = new Set<string>()
+  data.forEach(row => {
+    const value = row[columnKey]
+    if (value !== null && value !== undefined && value !== '') {
+      values.add(String(value))
+    }
+  })
+  return Array.from(values).sort()
+}
+
+// Header con filtro integrado
+function FilterableHeader({
+  label,
+  values,
+  selected,
+  onChange,
+  className = ''
+}: {
+  label: string
+  values: string[]
+  selected: string[]
+  onChange: (selected: string[]) => void
+  className?: string
+}) {
+  return (
+    <th className={`px-2 py-2 text-left font-semibold text-gray-700 ${className}`}>
+      <div className="flex items-center gap-1">
+        <span className="whitespace-nowrap">{label}</span>
+        <FilterDropdown
+          values={values}
+          selected={selected}
+          onChange={onChange}
+          label={label}
+        />
+      </div>
+    </th>
+  )
+}
+
+// Tabla para Find Your Place con filtros y sticky header
+function FindPlaceTable({ data, columnWidth }: { data: FindPlaceRow[], columnWidth: ColumnWidth }) {
+  const [filters, setFilters] = useState<ColumnFilters>({})
+
   if (data.length === 0) {
     return <EmptyState message="No hay datos. Haz click en 'Sincronizar' para parsear las campanas." />
   }
@@ -219,131 +362,275 @@ function FindPlaceTable({ data }: { data: FindPlaceRow[] }) {
   })
   const competitors = Array.from(allCompetitors).sort()
 
+  // Filtrar datos
+  const filteredData = useMemo(() => {
+    return data.filter(row => {
+      return Object.entries(filters).every(([key, selectedValues]) => {
+        if (selectedValues.length === 0) return true
+        const value = String(row[key as keyof FindPlaceRow] || '')
+        return selectedValues.includes(value)
+      })
+    })
+  }, [data, filters])
+
+  const updateFilter = (key: string, values: string[]) => {
+    setFilters(prev => ({ ...prev, [key]: values }))
+  }
+
+  const { className: widthClass, textClass } = widthConfig[columnWidth]
+  const activeFiltersCount = Object.values(filters).filter(v => v.length > 0).length
+
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200">
-      <table className="min-w-full divide-y divide-gray-200 text-xs">
-        <thead className="bg-gray-50 sticky top-0">
-          <tr>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">ECP</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Evaluation Criterion</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Relevance</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Justification</th>
-            {competitors.map(comp => (
-              <th key={comp} className="px-2 py-2 text-center font-semibold text-gray-700 whitespace-nowrap">
-                {comp}
-              </th>
-            ))}
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Analysis & Opportunity</th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {data.map((row, idx) => (
-            <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-              <td className="px-2 py-2 text-gray-900 whitespace-nowrap">{row.ecp_name}</td>
-              <td className="px-2 py-2 text-gray-700 max-w-[200px]">{row.evaluation_criterion}</td>
-              <td className="px-2 py-2">
-                <RelevanceBadge value={row.relevance} />
-              </td>
-              <td className="px-2 py-2 text-gray-600 max-w-[300px]">{row.justification || '-'}</td>
-              {competitors.map(comp => {
-                const score = row.competitor_scores?.[comp]?.score
-                return (
-                  <td key={comp} className="px-2 py-2 text-center">
-                    {score !== undefined ? (
-                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${getScoreColor(score)}`}>
-                        {score}
-                      </span>
-                    ) : (
-                      <span className="text-gray-300">-</span>
-                    )}
+    <div className="space-y-2">
+      {activeFiltersCount > 0 && (
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <span>{filteredData.length} de {data.length} registros</span>
+          <button
+            onClick={() => setFilters({})}
+            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+          >
+            <X size={14} />
+            Limpiar filtros
+          </button>
+        </div>
+      )}
+      <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <div className="max-h-[600px] overflow-y-auto">
+          <table className={`min-w-full divide-y divide-gray-200 ${textClass}`}>
+            <thead className="bg-gray-50 sticky top-0 z-10">
+              <tr>
+                <FilterableHeader
+                  label="ECP"
+                  values={getUniqueValues(data, 'ecp_name')}
+                  selected={filters['ecp_name'] || []}
+                  onChange={(v) => updateFilter('ecp_name', v)}
+                />
+                <FilterableHeader
+                  label="Evaluation Criterion"
+                  values={getUniqueValues(data, 'evaluation_criterion')}
+                  selected={filters['evaluation_criterion'] || []}
+                  onChange={(v) => updateFilter('evaluation_criterion', v)}
+                />
+                <FilterableHeader
+                  label="Relevance"
+                  values={getUniqueValues(data, 'relevance')}
+                  selected={filters['relevance'] || []}
+                  onChange={(v) => updateFilter('relevance', v)}
+                />
+                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Justification</th>
+                {competitors.map(comp => (
+                  <th key={comp} className="px-2 py-2 text-center font-semibold text-gray-700 whitespace-nowrap">
+                    {comp}
+                  </th>
+                ))}
+                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Analysis & Opportunity</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredData.map((row, idx) => (
+                <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className={`px-2 py-2 text-gray-900 ${widthClass} whitespace-normal`}>{row.ecp_name}</td>
+                  <td className={`px-2 py-2 text-gray-700 ${widthClass} whitespace-normal`}>{row.evaluation_criterion}</td>
+                  <td className="px-2 py-2">
+                    <RelevanceBadge value={row.relevance} />
                   </td>
-                )
-              })}
-              <td className="px-2 py-2 text-gray-600 max-w-[300px]">{row.analysis_opportunity || '-'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.justification || '-'}</td>
+                  {competitors.map(comp => {
+                    const score = row.competitor_scores?.[comp]?.score
+                    return (
+                      <td key={comp} className="px-2 py-2 text-center">
+                        {score !== undefined ? (
+                          <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${getScoreColor(score)}`}>
+                            {score}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
+                    )
+                  })}
+                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.analysis_opportunity || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
 
-// Tabla PLANA para Prove Legit - SIN TOGGLE, todas las columnas visibles
-function ProveLegitTable({ data }: { data: ProveLegitRow[] }) {
+// Tabla para Prove Legit con filtros y sticky header
+function ProveLegitTable({ data, columnWidth }: { data: ProveLegitRow[], columnWidth: ColumnWidth }) {
+  const [filters, setFilters] = useState<ColumnFilters>({})
+
   if (data.length === 0) {
     return <EmptyState message="No hay datos. Haz click en 'Sincronizar' para parsear las campanas." />
   }
 
+  const filteredData = useMemo(() => {
+    return data.filter(row => {
+      return Object.entries(filters).every(([key, selectedValues]) => {
+        if (selectedValues.length === 0) return true
+        const value = String(row[key as keyof ProveLegitRow] || '')
+        return selectedValues.includes(value)
+      })
+    })
+  }, [data, filters])
+
+  const updateFilter = (key: string, values: string[]) => {
+    setFilters(prev => ({ ...prev, [key]: values }))
+  }
+
+  const { className: widthClass, textClass } = widthConfig[columnWidth]
+  const activeFiltersCount = Object.values(filters).filter(v => v.length > 0).length
+
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200">
-      <table className="min-w-full divide-y divide-gray-200 text-xs">
-        <thead className="bg-gray-50 sticky top-0">
-          <tr>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">ECP</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Asset</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Value Criteria</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Category</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Justification for Differentiation</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Competitive Advantage</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Benefit for User</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Proof</th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {data.map((row, idx) => (
-            <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-              <td className="px-2 py-2 text-gray-900 whitespace-nowrap">{row.ecp_name}</td>
-              <td className="px-2 py-2 text-gray-700 max-w-[150px]">{row.asset_name}</td>
-              <td className="px-2 py-2 text-gray-600 max-w-[150px]">{row.value_criteria || '-'}</td>
-              <td className="px-2 py-2">
-                <CategoryBadge value={row.category} />
-              </td>
-              <td className="px-2 py-2 text-gray-600 max-w-[200px]">{row.justification_differentiation || '-'}</td>
-              <td className="px-2 py-2 text-gray-600 max-w-[200px]">{row.competitive_advantage || '-'}</td>
-              <td className="px-2 py-2 text-gray-600 max-w-[200px]">{row.benefit_for_user || '-'}</td>
-              <td className="px-2 py-2 text-gray-600 max-w-[250px]">{row.proof || '-'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      {activeFiltersCount > 0 && (
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <span>{filteredData.length} de {data.length} registros</span>
+          <button
+            onClick={() => setFilters({})}
+            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+          >
+            <X size={14} />
+            Limpiar filtros
+          </button>
+        </div>
+      )}
+      <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <div className="max-h-[600px] overflow-y-auto">
+          <table className={`min-w-full divide-y divide-gray-200 ${textClass}`}>
+            <thead className="bg-gray-50 sticky top-0 z-10">
+              <tr>
+                <FilterableHeader
+                  label="ECP"
+                  values={getUniqueValues(data, 'ecp_name')}
+                  selected={filters['ecp_name'] || []}
+                  onChange={(v) => updateFilter('ecp_name', v)}
+                />
+                <FilterableHeader
+                  label="Asset"
+                  values={getUniqueValues(data, 'asset_name')}
+                  selected={filters['asset_name'] || []}
+                  onChange={(v) => updateFilter('asset_name', v)}
+                />
+                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Value Criteria</th>
+                <FilterableHeader
+                  label="Category"
+                  values={getUniqueValues(data, 'category')}
+                  selected={filters['category'] || []}
+                  onChange={(v) => updateFilter('category', v)}
+                />
+                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Justification for Differentiation</th>
+                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Competitive Advantage</th>
+                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Benefit for User</th>
+                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Proof</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredData.map((row, idx) => (
+                <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className={`px-2 py-2 text-gray-900 ${widthClass} whitespace-normal`}>{row.ecp_name}</td>
+                  <td className={`px-2 py-2 text-gray-700 ${widthClass} whitespace-normal`}>{row.asset_name}</td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.value_criteria || '-'}</td>
+                  <td className="px-2 py-2">
+                    <CategoryBadge value={row.category} />
+                  </td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.justification_differentiation || '-'}</td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.competitive_advantage || '-'}</td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.benefit_for_user || '-'}</td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.proof || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
 
-// Tabla PLANA para USP & UVP - SIN TOGGLE, todas las columnas visibles
-function UspUvpTable({ data }: { data: UspUvpRow[] }) {
+// Tabla para USP & UVP con filtros y sticky header
+function UspUvpTable({ data, columnWidth }: { data: UspUvpRow[], columnWidth: ColumnWidth }) {
+  const [filters, setFilters] = useState<ColumnFilters>({})
+
   if (data.length === 0) {
     return <EmptyState message="No hay datos. Haz click en 'Sincronizar' para parsear las campanas." />
   }
 
+  const filteredData = useMemo(() => {
+    return data.filter(row => {
+      return Object.entries(filters).every(([key, selectedValues]) => {
+        if (selectedValues.length === 0) return true
+        const value = String(row[key as keyof UspUvpRow] || '')
+        return selectedValues.includes(value)
+      })
+    })
+  }, [data, filters])
+
+  const updateFilter = (key: string, values: string[]) => {
+    setFilters(prev => ({ ...prev, [key]: values }))
+  }
+
+  const { className: widthClass, textClass } = widthConfig[columnWidth]
+  const activeFiltersCount = Object.values(filters).filter(v => v.length > 0).length
+
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200">
-      <table className="min-w-full divide-y divide-gray-200 text-xs">
-        <thead className="bg-gray-50 sticky top-0">
-          <tr>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">ECP</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Message Category</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Hypothesis</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Value Criteria</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Objective</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Message (EN)</th>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Message (ES)</th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {data.map((row, idx) => (
-            <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-              <td className="px-2 py-2 text-gray-900 whitespace-nowrap">{row.ecp_name}</td>
-              <td className="px-2 py-2 text-gray-700 max-w-[150px]">{row.message_category}</td>
-              <td className="px-2 py-2 text-gray-600 max-w-[200px]">{row.hypothesis || '-'}</td>
-              <td className="px-2 py-2 text-gray-600 max-w-[150px]">{row.value_criteria || '-'}</td>
-              <td className="px-2 py-2 text-gray-600 max-w-[150px]">{row.objective || '-'}</td>
-              <td className="px-2 py-2 text-gray-600 max-w-[250px]">{row.message_en || '-'}</td>
-              <td className="px-2 py-2 text-gray-600 max-w-[250px]">{row.message_es || '-'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      {activeFiltersCount > 0 && (
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <span>{filteredData.length} de {data.length} registros</span>
+          <button
+            onClick={() => setFilters({})}
+            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+          >
+            <X size={14} />
+            Limpiar filtros
+          </button>
+        </div>
+      )}
+      <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <div className="max-h-[600px] overflow-y-auto">
+          <table className={`min-w-full divide-y divide-gray-200 ${textClass}`}>
+            <thead className="bg-gray-50 sticky top-0 z-10">
+              <tr>
+                <FilterableHeader
+                  label="ECP"
+                  values={getUniqueValues(data, 'ecp_name')}
+                  selected={filters['ecp_name'] || []}
+                  onChange={(v) => updateFilter('ecp_name', v)}
+                />
+                <FilterableHeader
+                  label="Message Category"
+                  values={getUniqueValues(data, 'message_category')}
+                  selected={filters['message_category'] || []}
+                  onChange={(v) => updateFilter('message_category', v)}
+                />
+                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Hypothesis</th>
+                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Value Criteria</th>
+                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Objective</th>
+                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Message (EN)</th>
+                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Message (ES)</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredData.map((row, idx) => (
+                <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className={`px-2 py-2 text-gray-900 ${widthClass} whitespace-normal`}>{row.ecp_name}</td>
+                  <td className={`px-2 py-2 text-gray-700 ${widthClass} whitespace-normal`}>{row.message_category}</td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.hypothesis || '-'}</td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.value_criteria || '-'}</td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.objective || '-'}</td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.message_en || '-'}</td>
+                  <td className={`px-2 py-2 text-gray-600 ${widthClass} whitespace-normal`}>{row.message_es || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
