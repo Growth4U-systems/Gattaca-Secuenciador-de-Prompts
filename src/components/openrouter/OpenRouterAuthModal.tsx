@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useOpenRouter } from '@/lib/openrouter-context'
-import { supabase } from '@/lib/supabase'
 import { X, Zap, Shield, CreditCard, ExternalLink, Loader2, Link2Off, CheckCircle2, Clock, AlertCircle, DollarSign } from 'lucide-react'
 
 interface OpenRouterAuthModalProps {
@@ -17,40 +16,6 @@ export default function OpenRouterAuthModal({ isOpen, onClose, trigger = 'action
   const [disconnecting, setDisconnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [refreshingBalance, setRefreshingBalance] = useState(false)
-  const [realUsage, setRealUsage] = useState<number | null>(null)
-
-  // Fetch real usage from our logs (more accurate than OpenRouter's API)
-  useEffect(() => {
-    async function fetchRealUsage() {
-      if (!isOpen || !isConnected) return
-
-      try {
-        const { data, error } = await supabase
-          .from('openrouter_usage_logs')
-          .select('cost_usd')
-
-        console.log('[OpenRouter Usage] Query result:', { data, error, count: data?.length })
-
-        if (error) {
-          console.error('[OpenRouter Usage] Query error:', error)
-          return
-        }
-
-        if (data && data.length > 0) {
-          const totalCost = data.reduce((sum, log) => sum + (Number(log.cost_usd) || 0), 0)
-          console.log('[OpenRouter Usage] Total cost calculated:', totalCost)
-          setRealUsage(totalCost)
-        } else {
-          console.log('[OpenRouter Usage] No logs found, table may be empty')
-          setRealUsage(null) // Keep null to show OpenRouter's value instead
-        }
-      } catch (err) {
-        console.error('[OpenRouter Usage] Error fetching:', err)
-      }
-    }
-
-    fetchRealUsage()
-  }, [isOpen, isConnected])
 
   // Refresh balance from OpenRouter when modal opens and user is connected
   useEffect(() => {
@@ -254,22 +219,19 @@ export default function OpenRouterAuthModal({ isOpen, onClose, trigger = 'action
                   </div>
                 )}
 
-                {/* Usage Information - Show real usage from our logs or OpenRouter's value */}
-                {(realUsage !== null && realUsage > 0) ? (
+                {/* Usage Information - Direct from OpenRouter API */}
+                {tokenInfo?.usage !== null && tokenInfo?.usage !== undefined && (
                   <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <CreditCard className="w-4 h-4 text-gray-400" />
+                    {refreshingBalance ? (
+                      <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                    ) : (
+                      <CreditCard className="w-4 h-4 text-gray-400" />
+                    )}
                     <span>
-                      Usado en Gattaca: ${realUsage.toFixed(2)}
+                      Usado este mes: ${tokenInfo.usage.toFixed(2)}
                     </span>
                   </div>
-                ) : tokenInfo?.usage !== null && tokenInfo?.usage !== undefined && tokenInfo.usage > 0 ? (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <CreditCard className="w-4 h-4 text-gray-400" />
-                    <span>
-                      Usado (OpenRouter): ${tokenInfo.usage.toFixed(4)}
-                    </span>
-                  </div>
-                ) : null}
+                )}
               </div>
 
               <div className="flex gap-3">

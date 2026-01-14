@@ -107,7 +107,26 @@ async function createDeepResearchInteraction(
   context: string,
   userPrompt: string
 ): Promise<AsyncDeepResearchResponse> {
-  const fullPrompt = `${systemPrompt}\n\n${context}\n\n--- TASK ---\n\n${userPrompt}`
+  // Build comprehensive prompt for Deep Research with explicit instructions for detailed output
+  const fullPrompt = `# Deep Research Request
+
+## Instructions
+${systemPrompt}
+
+## Context Documents
+${context}
+
+## Research Task
+${userPrompt}
+
+## Output Requirements
+- Provide a comprehensive, detailed research report (minimum 2000 words)
+- Include citations and sources for all claims
+- Structure the report with clear sections, subsections, and bullet points
+- Analyze multiple perspectives and viewpoints
+- Include relevant data, statistics, and examples
+- End with actionable conclusions and recommendations`
+
   const promptTokens = Math.ceil(fullPrompt.length / 4)
 
   console.log(`[Deep Research Async] Creando interacción para modelo: ${model}`)
@@ -118,6 +137,7 @@ async function createDeepResearchInteraction(
   const requestBody = {
     agent: model,
     background: true,
+    store: true,  // Required for long-running tasks according to Google docs
     input: fullPrompt
   }
 
@@ -537,11 +557,16 @@ async function callOpenRouter(
 
   const text = data.choices?.[0]?.message?.content || ''
 
+  // Log full usage data for debugging (OpenRouter includes cost)
+  console.log(`[OpenRouter] Usage data:`, JSON.stringify(data.usage))
+
   return {
     text,
     usage: {
       promptTokens: data.usage?.prompt_tokens || 0,
       completionTokens: data.usage?.completion_tokens || Math.ceil(text.length / 4),
+      // OpenRouter returns cost directly in USD
+      cost: data.usage?.cost !== undefined ? data.usage.cost : null,
     },
     model: openRouterModel,
   }
@@ -575,8 +600,25 @@ async function callDeepResearch(
   const POLLING_INTERVAL_MS = 20_000  // 20 segundos entre cada poll
   const MAX_TIMEOUT_MS = 12 * 60 * 1000  // 12 minutos máximo (dentro del límite de Vercel Pro)
 
-  // Construir el prompt completo para Deep Research (input debe ser string directo)
-  const fullPrompt = `${systemPrompt}\n\n${context}\n\n--- TASK ---\n\n${userPrompt}`
+  // Build comprehensive prompt for Deep Research with explicit instructions for detailed output
+  const fullPrompt = `# Deep Research Request
+
+## Instructions
+${systemPrompt}
+
+## Context Documents
+${context}
+
+## Research Task
+${userPrompt}
+
+## Output Requirements
+- Provide a comprehensive, detailed research report (minimum 2000 words)
+- Include citations and sources for all claims
+- Structure the report with clear sections, subsections, and bullet points
+- Analyze multiple perspectives and viewpoints
+- Include relevant data, statistics, and examples
+- End with actionable conclusions and recommendations`
 
   console.log(`[Deep Research] Iniciando investigación con modelo: ${model}`)
   console.log(`[Deep Research] Prompt length: ${fullPrompt.length} caracteres`)
@@ -588,11 +630,12 @@ async function callDeepResearch(
   const requestBody = {
     agent: model,  // Modelo como string directo
     background: true,  // Ejecución asíncrona en background
+    store: true,  // Required for long-running tasks according to Google docs
     input: fullPrompt  // Input como string directo
   }
 
   console.log(`[Deep Research] Creando interacción v1alpha`)
-  console.log(`[Deep Research] Request body:`, JSON.stringify({ agent: model, background: true, input: '...' }))
+  console.log(`[Deep Research] Request body:`, JSON.stringify({ agent: model, background: true, store: true, input: '...' }))
 
   const createResponse = await fetch(interactionsUrl, {
     method: 'POST',
@@ -613,6 +656,7 @@ async function callDeepResearch(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         background: true,
+        store: true,
         input: fullPrompt
       })
     })
@@ -631,6 +675,7 @@ async function callDeepResearch(
         body: JSON.stringify({
           agent: `models/${model}`,  // Con prefijo models/
           background: true,
+          store: true,
           userInput: fullPrompt  // Campo alternativo
         })
       })
@@ -648,6 +693,7 @@ async function callDeepResearch(
           body: JSON.stringify({
             agent: model,
             background: true,
+            store: true,
             contents: [{
               role: 'user',
               parts: [{ text: fullPrompt }]
@@ -799,87 +845,62 @@ async function handleInteractionResponse(
       })
     }
 
-    // Verificar si completó
-    if (statusData.state === 'COMPLETED') {
+    // Verificar si completó (check both 'state' and 'status' fields, uppercase and lowercase)
+    const stateOrStatus = statusData.state || (statusData as any).status || ''
+    const isCompleted = stateOrStatus === 'COMPLETED' || stateOrStatus === 'completed'
+
+    if (isCompleted) {
       let resultText = ''
 
       // Debug: log full response for analysis
       console.log(`[Deep Research] COMPLETED - Full response:`, JSON.stringify(statusData, null, 2).substring(0, 5000))
 
-      // Try multiple extraction methods in order of priority
-      // 1. response.text (original format)
-      if (statusData.response?.text) {
-        resultText = statusData.response.text
-        console.log(`[Deep Research] Result from response.text: ${resultText.length} chars`)
-      }
-      // 2. Direct text field on statusData
-      else if ((statusData as any).text) {
-        resultText = (statusData as any).text
-        console.log(`[Deep Research] Result from direct text: ${resultText.length} chars`)
-      }
-      // 3. result.text or result.content (newer format)
-      else if ((statusData as any).result?.text) {
-        resultText = (statusData as any).result.text
-        console.log(`[Deep Research] Result from result.text: ${resultText.length} chars`)
-      }
-      else if ((statusData as any).result?.content) {
-        resultText = (statusData as any).result.content
-        console.log(`[Deep Research] Result from result.content: ${resultText.length} chars`)
-      }
-      // 4. output.text or output.content (alternative format)
-      else if ((statusData as any).output?.text) {
-        resultText = (statusData as any).output.text
-        console.log(`[Deep Research] Result from output.text: ${resultText.length} chars`)
-      }
-      else if ((statusData as any).output?.content) {
-        resultText = (statusData as any).output.content
-        console.log(`[Deep Research] Result from output.content: ${resultText.length} chars`)
-      }
-      // 5. candidates array (generateContent style)
-      else if ((statusData as any).candidates?.[0]?.content?.parts?.[0]?.text) {
-        resultText = (statusData as any).candidates[0].content.parts[0].text
-        console.log(`[Deep Research] Result from candidates: ${resultText.length} chars`)
-      }
-      // 6. outputs array
-      else if (statusData.outputs && statusData.outputs.length > 0) {
-        // Look for 'report', 'response', 'result', or 'text' type outputs first
-        for (const output of statusData.outputs) {
-          if ((output.type === 'report' || output.type === 'response' || output.type === 'result' || output.type === 'text') && output.text) {
-            resultText = output.text
-            console.log(`[Deep Research] Result from output type=${output.type}: ${resultText.length} chars`)
-            break
-          }
-          // Also try content field
-          if ((output.type === 'report' || output.type === 'response' || output.type === 'result' || output.type === 'text') && (output as any).content) {
-            resultText = (output as any).content
-            console.log(`[Deep Research] Result from output content type=${output.type}: ${resultText.length} chars`)
-            break
-          }
+      // According to Google documentation, the final report is in outputs[-1].text
+      // The last element of the outputs array contains the complete research report
+      if (statusData.outputs && statusData.outputs.length > 0) {
+        // Get the LAST output - this is where the final report is according to docs
+        const lastOutput = statusData.outputs[statusData.outputs.length - 1]
+        if (lastOutput.text) {
+          resultText = lastOutput.text
+          console.log(`[Deep Research] Result from outputs[-1].text (last output): ${resultText.length} chars`)
+        } else if ((lastOutput as any).content) {
+          resultText = (lastOutput as any).content
+          console.log(`[Deep Research] Result from outputs[-1].content (last output): ${resultText.length} chars`)
         }
-        // Fallback: find the longest text output that isn't thought/search/plan
-        if (!resultText) {
-          let longestText = ''
-          let longestIndex = -1
-          for (let i = 0; i < statusData.outputs.length; i++) {
-            const output = statusData.outputs[i]
-            const text = output.text || (output as any).content || ''
-            if (text && output.type !== 'thought' && output.type !== 'search' && output.type !== 'plan') {
-              if (text.length > longestText.length) {
-                longestText = text
-                longestIndex = i
-              }
-            }
-          }
-          if (longestText) {
-            resultText = longestText
-            console.log(`[Deep Research] Result from longest output[${longestIndex}]: ${resultText.length} chars`)
-          }
+      }
+
+      // Fallback: try other fields if outputs[-1] didn't work
+      if (!resultText) {
+        // 1. response.text (original format)
+        if (statusData.response?.text) {
+          resultText = statusData.response.text
+          console.log(`[Deep Research] Result from response.text: ${resultText.length} chars`)
+        }
+        // 2. result.text or result.content (newer format)
+        else if ((statusData as any).result?.text) {
+          resultText = (statusData as any).result.text
+          console.log(`[Deep Research] Result from result.text: ${resultText.length} chars`)
+        }
+        else if ((statusData as any).result?.content) {
+          resultText = (statusData as any).result.content
+          console.log(`[Deep Research] Result from result.content: ${resultText.length} chars`)
+        }
+        // 3. Direct text field on statusData
+        else if ((statusData as any).text) {
+          resultText = (statusData as any).text
+          console.log(`[Deep Research] Result from direct text: ${resultText.length} chars`)
+        }
+        // 4. candidates array (generateContent style)
+        else if ((statusData as any).candidates?.[0]?.content?.parts?.[0]?.text) {
+          resultText = (statusData as any).candidates[0].content.parts[0].text
+          console.log(`[Deep Research] Result from candidates: ${resultText.length} chars`)
         }
       }
 
       // If still no result, log warning
       if (!resultText) {
         console.log(`[Deep Research] WARNING: No result text found in any field. Keys:`, Object.keys(statusData))
+        console.log(`[Deep Research] Outputs array:`, JSON.stringify(statusData.outputs, null, 2))
       }
 
       const duration = (Date.now() - startTime) / 1000
@@ -897,7 +918,9 @@ async function handleInteractionResponse(
       }
     }
 
-    if (statusData.state === 'FAILED') {
+    // Check for failed state (both uppercase and lowercase)
+    const isFailed = stateOrStatus === 'FAILED' || stateOrStatus === 'failed' || stateOrStatus === 'cancelled'
+    if (isFailed) {
       const errorMsg = statusData.error?.message || 'Error desconocido en Deep Research'
       throw new Error(`Deep Research failed: ${errorMsg}. Interaction ID: ${interactionName}`)
     }
