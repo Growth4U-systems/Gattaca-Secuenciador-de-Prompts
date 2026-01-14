@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { RefreshCw, Download, Table2, Shield, MessageSquare, ChevronDown, ChevronRight } from 'lucide-react'
+import { RefreshCw, Download, Table2, Shield, MessageSquare } from 'lucide-react'
 import { useToast } from '@/components/ui'
 
 type SubTab = 'find-place' | 'prove-legit' | 'usp-uvp'
@@ -204,10 +204,8 @@ export default function ExportDataTab({ projectId }: { projectId: string }) {
   )
 }
 
-// Componente de tabla para Find Your Place
+// Tabla PLANA para Find Your Place - SIN TOGGLE, todas las columnas visibles
 function FindPlaceTable({ data }: { data: FindPlaceRow[] }) {
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
-
   if (data.length === 0) {
     return <EmptyState message="No hay datos. Haz click en 'Sincronizar' para parsear las campanas." />
   }
@@ -221,252 +219,129 @@ function FindPlaceTable({ data }: { data: FindPlaceRow[] }) {
   })
   const competitors = Array.from(allCompetitors).sort()
 
-  const toggleRow = (id: string) => {
-    const newExpanded = new Set(expandedRows)
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id)
-    } else {
-      newExpanded.add(id)
-    }
-    setExpandedRows(newExpanded)
-  }
-
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+      <table className="min-w-full divide-y divide-gray-200 text-xs">
+        <thead className="bg-gray-50 sticky top-0">
           <tr>
-            <th className="w-8 px-2"></th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ECP</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Criterion</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Relevance</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">ECP</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Evaluation Criterion</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Relevance</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Justification</th>
             {competitors.map(comp => (
-              <th key={comp} className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase whitespace-nowrap">
-                {comp.length > 10 ? comp.substring(0, 10) + '...' : comp}
+              <th key={comp} className="px-2 py-2 text-center font-semibold text-gray-700 whitespace-nowrap">
+                {comp}
               </th>
             ))}
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Analysis & Opportunity</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {data.map((row) => {
-            const isExpanded = expandedRows.has(row.id)
-            return (
-              <>
-                <tr key={row.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => toggleRow(row.id)}>
-                  <td className="px-2 py-3">
-                    {isExpanded ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />}
+          {data.map((row, idx) => (
+            <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+              <td className="px-2 py-2 text-gray-900 whitespace-nowrap">{row.ecp_name}</td>
+              <td className="px-2 py-2 text-gray-700 max-w-[200px]">{row.evaluation_criterion}</td>
+              <td className="px-2 py-2">
+                <RelevanceBadge value={row.relevance} />
+              </td>
+              <td className="px-2 py-2 text-gray-600 max-w-[300px]">{row.justification || '-'}</td>
+              {competitors.map(comp => {
+                const score = row.competitor_scores?.[comp]?.score
+                return (
+                  <td key={comp} className="px-2 py-2 text-center">
+                    {score !== undefined ? (
+                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${getScoreColor(score)}`}>
+                        {score}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300">-</span>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-900 max-w-[150px] truncate" title={row.ecp_name}>
-                    {row.ecp_name}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px] truncate" title={row.evaluation_criterion}>
-                    {row.evaluation_criterion}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <RelevanceBadge value={row.relevance} />
-                  </td>
-                  {competitors.map(comp => {
-                    const score = row.competitor_scores?.[comp]?.score
-                    return (
-                      <td key={comp} className="px-3 py-3 text-sm text-center">
-                        {score !== undefined ? (
-                          <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-medium ${getScoreColor(score)}`}>
-                            {score}
-                          </span>
-                        ) : (
-                          <span className="text-gray-300">-</span>
-                        )}
-                      </td>
-                    )
-                  })}
-                </tr>
-                {isExpanded && (
-                  <tr key={`${row.id}-expanded`} className="bg-gray-50">
-                    <td colSpan={4 + competitors.length} className="px-8 py-4">
-                      <div className="space-y-3 text-sm">
-                        <div>
-                          <span className="font-medium text-gray-700">Justification:</span>
-                          <p className="text-gray-600 mt-1">{row.justification || '-'}</p>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">Analysis & Opportunity:</span>
-                          <p className="text-gray-600 mt-1">{row.analysis_opportunity || '-'}</p>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </>
-            )
-          })}
+                )
+              })}
+              <td className="px-2 py-2 text-gray-600 max-w-[300px]">{row.analysis_opportunity || '-'}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
   )
 }
 
-// Componente de tabla para Prove Legit
+// Tabla PLANA para Prove Legit - SIN TOGGLE, todas las columnas visibles
 function ProveLegitTable({ data }: { data: ProveLegitRow[] }) {
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
-
   if (data.length === 0) {
     return <EmptyState message="No hay datos. Haz click en 'Sincronizar' para parsear las campanas." />
   }
 
-  const toggleRow = (id: string) => {
-    const newExpanded = new Set(expandedRows)
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id)
-    } else {
-      newExpanded.add(id)
-    }
-    setExpandedRows(newExpanded)
-  }
-
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+      <table className="min-w-full divide-y divide-gray-200 text-xs">
+        <thead className="bg-gray-50 sticky top-0">
           <tr>
-            <th className="w-8 px-2"></th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ECP</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asset</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value Criteria</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">ECP</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Asset</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Value Criteria</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Category</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Justification for Differentiation</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Competitive Advantage</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Benefit for User</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Proof</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {data.map((row) => {
-            const isExpanded = expandedRows.has(row.id)
-            return (
-              <>
-                <tr key={row.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => toggleRow(row.id)}>
-                  <td className="px-2 py-3">
-                    {isExpanded ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-900 max-w-[150px] truncate" title={row.ecp_name}>
-                    {row.ecp_name}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px] truncate" title={row.asset_name}>
-                    {row.asset_name}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <CategoryBadge value={row.category} />
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 max-w-[200px] truncate" title={row.value_criteria}>
-                    {row.value_criteria || '-'}
-                  </td>
-                </tr>
-                {isExpanded && (
-                  <tr key={`${row.id}-expanded`} className="bg-gray-50">
-                    <td colSpan={5} className="px-8 py-4">
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="font-medium text-gray-700">Justification for Differentiation:</span>
-                          <p className="text-gray-600 mt-1">{row.justification_differentiation || '-'}</p>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">Competitive Advantage:</span>
-                          <p className="text-gray-600 mt-1">{row.competitive_advantage || '-'}</p>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">Benefit for User:</span>
-                          <p className="text-gray-600 mt-1">{row.benefit_for_user || '-'}</p>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">Proof:</span>
-                          <p className="text-gray-600 mt-1">{row.proof || '-'}</p>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </>
-            )
-          })}
+          {data.map((row, idx) => (
+            <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+              <td className="px-2 py-2 text-gray-900 whitespace-nowrap">{row.ecp_name}</td>
+              <td className="px-2 py-2 text-gray-700 max-w-[150px]">{row.asset_name}</td>
+              <td className="px-2 py-2 text-gray-600 max-w-[150px]">{row.value_criteria || '-'}</td>
+              <td className="px-2 py-2">
+                <CategoryBadge value={row.category} />
+              </td>
+              <td className="px-2 py-2 text-gray-600 max-w-[200px]">{row.justification_differentiation || '-'}</td>
+              <td className="px-2 py-2 text-gray-600 max-w-[200px]">{row.competitive_advantage || '-'}</td>
+              <td className="px-2 py-2 text-gray-600 max-w-[200px]">{row.benefit_for_user || '-'}</td>
+              <td className="px-2 py-2 text-gray-600 max-w-[250px]">{row.proof || '-'}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
   )
 }
 
-// Componente de tabla para USP & UVP
+// Tabla PLANA para USP & UVP - SIN TOGGLE, todas las columnas visibles
 function UspUvpTable({ data }: { data: UspUvpRow[] }) {
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
-
   if (data.length === 0) {
     return <EmptyState message="No hay datos. Haz click en 'Sincronizar' para parsear las campanas." />
   }
 
-  const toggleRow = (id: string) => {
-    const newExpanded = new Set(expandedRows)
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id)
-    } else {
-      newExpanded.add(id)
-    }
-    setExpandedRows(newExpanded)
-  }
-
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+      <table className="min-w-full divide-y divide-gray-200 text-xs">
+        <thead className="bg-gray-50 sticky top-0">
           <tr>
-            <th className="w-8 px-2"></th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ECP</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Message Category</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value Criteria</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Objective</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">ECP</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Message Category</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Hypothesis</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Value Criteria</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Objective</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Message (EN)</th>
+            <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Message (ES)</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {data.map((row) => {
-            const isExpanded = expandedRows.has(row.id)
-            return (
-              <>
-                <tr key={row.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => toggleRow(row.id)}>
-                  <td className="px-2 py-3">
-                    {isExpanded ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-900 max-w-[150px] truncate" title={row.ecp_name}>
-                    {row.ecp_name}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px] truncate" title={row.message_category}>
-                    {row.message_category}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 max-w-[200px] truncate" title={row.value_criteria}>
-                    {row.value_criteria || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 max-w-[200px] truncate" title={row.objective}>
-                    {row.objective || '-'}
-                  </td>
-                </tr>
-                {isExpanded && (
-                  <tr key={`${row.id}-expanded`} className="bg-gray-50">
-                    <td colSpan={5} className="px-8 py-4">
-                      <div className="space-y-4 text-sm">
-                        <div>
-                          <span className="font-medium text-gray-700">Hypothesis:</span>
-                          <p className="text-gray-600 mt-1">{row.hypothesis || '-'}</p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-white p-3 rounded-lg border border-gray-200">
-                            <span className="font-medium text-gray-700 block mb-2">Message (EN):</span>
-                            <p className="text-gray-800">{row.message_en || '-'}</p>
-                          </div>
-                          <div className="bg-white p-3 rounded-lg border border-gray-200">
-                            <span className="font-medium text-gray-700 block mb-2">Message (ES):</span>
-                            <p className="text-gray-800">{row.message_es || '-'}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </>
-            )
-          })}
+          {data.map((row, idx) => (
+            <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+              <td className="px-2 py-2 text-gray-900 whitespace-nowrap">{row.ecp_name}</td>
+              <td className="px-2 py-2 text-gray-700 max-w-[150px]">{row.message_category}</td>
+              <td className="px-2 py-2 text-gray-600 max-w-[200px]">{row.hypothesis || '-'}</td>
+              <td className="px-2 py-2 text-gray-600 max-w-[150px]">{row.value_criteria || '-'}</td>
+              <td className="px-2 py-2 text-gray-600 max-w-[150px]">{row.objective || '-'}</td>
+              <td className="px-2 py-2 text-gray-600 max-w-[250px]">{row.message_en || '-'}</td>
+              <td className="px-2 py-2 text-gray-600 max-w-[250px]">{row.message_es || '-'}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -483,7 +358,7 @@ function RelevanceBadge({ value }: { value: string }) {
     'Low': 'bg-gray-100 text-gray-600',
   }
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[value] || 'bg-gray-100 text-gray-600'}`}>
+    <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${colors[value] || 'bg-gray-100 text-gray-600'}`}>
       {value || '-'}
     </span>
   )
@@ -495,7 +370,7 @@ function CategoryBadge({ value }: { value: string }) {
     'Qualifier': 'bg-blue-100 text-blue-700',
   }
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[value] || 'bg-gray-100 text-gray-600'}`}>
+    <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${colors[value] || 'bg-gray-100 text-gray-600'}`}>
       {value || '-'}
     </span>
   )
