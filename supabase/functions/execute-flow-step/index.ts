@@ -107,7 +107,8 @@ async function createDeepResearchInteraction(
   context: string,
   userPrompt: string
 ): Promise<AsyncDeepResearchResponse> {
-  // Build comprehensive prompt for Deep Research with explicit instructions for detailed output
+  // Build comprehensive prompt for Deep Research with explicit instructions for EXTENSIVE output
+  // Deep Research can generate very long reports - we want maximum depth and detail
   const fullPrompt = `# Deep Research Request
 
 ## Instructions
@@ -119,13 +120,44 @@ ${context}
 ## Research Task
 ${userPrompt}
 
-## Output Requirements
-- Provide a comprehensive, detailed research report (minimum 2000 words)
-- Include citations and sources for all claims
-- Structure the report with clear sections, subsections, and bullet points
-- Analyze multiple perspectives and viewpoints
-- Include relevant data, statistics, and examples
-- End with actionable conclusions and recommendations`
+## CRITICAL OUTPUT REQUIREMENTS
+
+You are conducting an in-depth research project. Your output must be a COMPREHENSIVE RESEARCH REPORT of at least 10,000 words (approximately 20+ pages).
+
+### Length & Depth Requirements:
+- MINIMUM 10,000 words - this is NON-NEGOTIABLE
+- Each major section should be 1,000-2,000 words minimum
+- Include detailed subsections within each section
+- Do NOT summarize or abbreviate - expand and elaborate on every point
+- If you find yourself being brief, STOP and add more detail, examples, and analysis
+
+### Structure Requirements:
+- Executive Summary (500+ words)
+- Table of Contents
+- 8-12 major sections with detailed analysis
+- Each section must have 3-5 subsections minimum
+- Include data tables, comparisons, and structured lists
+- Comprehensive Sources section with 30+ citations
+
+### Content Requirements:
+- Exhaustive analysis of every aspect mentioned in the research task
+- Multiple perspectives and viewpoints on each topic
+- Historical context where relevant
+- Current state analysis with specific data points
+- Future projections and trends
+- Competitive landscape analysis
+- Detailed case studies or examples (3-5 minimum)
+- Direct quotes from sources
+- Statistical data and metrics
+- Strategic recommendations with implementation details
+
+### Quality Indicators:
+- The report should feel like a professional consulting deliverable
+- No section should feel rushed or superficial
+- Every claim must be supported by evidence and citations
+- Include nuanced analysis, not just surface-level observations
+
+Remember: A short report is a FAILED report. Aim for depth, not brevity.`
 
   const promptTokens = Math.ceil(fullPrompt.length / 4)
 
@@ -600,7 +632,8 @@ async function callDeepResearch(
   const POLLING_INTERVAL_MS = 20_000  // 20 segundos entre cada poll
   const MAX_TIMEOUT_MS = 12 * 60 * 1000  // 12 minutos máximo (dentro del límite de Vercel Pro)
 
-  // Build comprehensive prompt for Deep Research with explicit instructions for detailed output
+  // Build comprehensive prompt for Deep Research with explicit instructions for EXTENSIVE output
+  // Deep Research can generate very long reports - we want maximum depth and detail
   const fullPrompt = `# Deep Research Request
 
 ## Instructions
@@ -612,13 +645,44 @@ ${context}
 ## Research Task
 ${userPrompt}
 
-## Output Requirements
-- Provide a comprehensive, detailed research report (minimum 2000 words)
-- Include citations and sources for all claims
-- Structure the report with clear sections, subsections, and bullet points
-- Analyze multiple perspectives and viewpoints
-- Include relevant data, statistics, and examples
-- End with actionable conclusions and recommendations`
+## CRITICAL OUTPUT REQUIREMENTS
+
+You are conducting an in-depth research project. Your output must be a COMPREHENSIVE RESEARCH REPORT of at least 10,000 words (approximately 20+ pages).
+
+### Length & Depth Requirements:
+- MINIMUM 10,000 words - this is NON-NEGOTIABLE
+- Each major section should be 1,000-2,000 words minimum
+- Include detailed subsections within each section
+- Do NOT summarize or abbreviate - expand and elaborate on every point
+- If you find yourself being brief, STOP and add more detail, examples, and analysis
+
+### Structure Requirements:
+- Executive Summary (500+ words)
+- Table of Contents
+- 8-12 major sections with detailed analysis
+- Each section must have 3-5 subsections minimum
+- Include data tables, comparisons, and structured lists
+- Comprehensive Sources section with 30+ citations
+
+### Content Requirements:
+- Exhaustive analysis of every aspect mentioned in the research task
+- Multiple perspectives and viewpoints on each topic
+- Historical context where relevant
+- Current state analysis with specific data points
+- Future projections and trends
+- Competitive landscape analysis
+- Detailed case studies or examples (3-5 minimum)
+- Direct quotes from sources
+- Statistical data and metrics
+- Strategic recommendations with implementation details
+
+### Quality Indicators:
+- The report should feel like a professional consulting deliverable
+- No section should feel rushed or superficial
+- Every claim must be supported by evidence and citations
+- Include nuanced analysis, not just surface-level observations
+
+Remember: A short report is a FAILED report. Aim for depth, not brevity.`
 
   console.log(`[Deep Research] Iniciando investigación con modelo: ${model}`)
   console.log(`[Deep Research] Prompt length: ${fullPrompt.length} caracteres`)
