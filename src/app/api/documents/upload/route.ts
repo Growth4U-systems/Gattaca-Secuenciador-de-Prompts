@@ -144,12 +144,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log('Document saved, triggering embedding generation...')
+
+    // Trigger embedding generation asynchronously (don't block the response)
+    // This runs in the background - user sees "Indexando..." status
+    triggerEmbeddingGeneration(data.id, supabase).catch(err => {
+      console.error('Background embedding generation failed:', err)
+    })
+
     console.log('Upload successful!')
 
     return NextResponse.json({
       success: true,
-      document: data,
-      message: 'Document uploaded successfully',
+      document: {
+        ...data,
+        embedding_status: 'processing' // Indicate processing started
+      },
+      message: 'Document uploaded successfully. Indexing in progress...',
     })
   } catch (error) {
     console.error('Upload error:', error)
@@ -161,6 +172,51 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     )
+  }
+}
+
+// Trigger embedding generation via Edge Function
+async function triggerEmbeddingGeneration(documentId: string, supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceKey) {
+    console.error('Missing Supabase configuration for embedding generation')
+    return
+  }
+
+  try {
+    // Call the Edge Function to generate embeddings
+    const response = await fetch(`${supabaseUrl}/functions/v1/generate-embeddings`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ document_id: documentId }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Embedding generation failed:', errorText)
+
+      // Update status to error
+      await supabase
+        .from('knowledge_base_docs')
+        .update({ embedding_status: 'error' })
+        .eq('id', documentId)
+    } else {
+      const result = await response.json()
+      console.log('Embedding generation completed:', result)
+    }
+  } catch (err) {
+    console.error('Error calling embedding function:', err)
+
+    // Update status to error
+    await supabase
+      .from('knowledge_base_docs')
+      .update({ embedding_status: 'error' })
+      .eq('id', documentId)
   }
 }
 

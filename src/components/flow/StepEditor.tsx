@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { X, Eye, Code, Copy, Check, FileText, ArrowRight, Hash, MessageSquare, Sparkles, Info, Cpu, Search, Plus, AlertTriangle, Loader2, Trash2 } from 'lucide-react'
-import { FlowStep, OutputFormat, LLMModel, RequiredDocument } from '@/types/flow.types'
+import { X, Eye, Code, Copy, Check, FileText, ArrowRight, Hash, MessageSquare, Sparkles, Info, Cpu, Search, Plus, AlertTriangle, Loader2, Trash2, Database, Zap, DollarSign } from 'lucide-react'
+import { FlowStep, OutputFormat, LLMModel, RequiredDocument, RetrievalMode, MODEL_PRICING } from '@/types/flow.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { usePromptValidator } from '@/hooks/usePromptValidator'
 import { findMatchingDocument, getConfidenceLabel } from '@/lib/documentMatcher'
@@ -1017,6 +1017,231 @@ export default function StepEditor({
                   />
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Document Retrieval Mode - RAG vs Full */}
+          <div className="bg-gradient-to-br from-cyan-50 to-white border border-cyan-200 rounded-xl p-5">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Database size={18} className="text-cyan-500" />
+              Modo de Documentos
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Full Document Mode */}
+              <label
+                className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                  (editedStep.retrieval_mode || 'full') === 'full'
+                    ? 'border-cyan-500 bg-cyan-50 shadow-md'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="retrieval_mode"
+                  value="full"
+                  checked={(editedStep.retrieval_mode || 'full') === 'full'}
+                  onChange={() => setEditedStep(prev => ({ ...prev, retrieval_mode: 'full' as RetrievalMode }))}
+                  className="sr-only"
+                />
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    (editedStep.retrieval_mode || 'full') === 'full' ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    <FileText size={20} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-900">Documento Completo</span>
+                      {(editedStep.retrieval_mode || 'full') === 'full' && (
+                        <Check size={16} className="text-cyan-500" />
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Envia el documento entero al modelo.
+                    </p>
+                    <ul className="text-xs text-gray-600 mt-2 space-y-1">
+                      <li className="flex items-center gap-1">
+                        <Check size={12} className="text-green-500" />
+                        Analisis holistico y contextual
+                      </li>
+                      <li className="flex items-center gap-1">
+                        <Check size={12} className="text-green-500" />
+                        Comparaciones y sintesis completas
+                      </li>
+                      <li className="flex items-center gap-1">
+                        <Check size={12} className="text-green-500" />
+                        Mejor para estrategia y vision general
+                      </li>
+                    </ul>
+                    {/* Cost estimate for full mode */}
+                    <div className="mt-3 p-2 bg-amber-50 rounded-lg border border-amber-100">
+                      <div className="flex items-center gap-1.5 text-amber-700">
+                        <DollarSign size={14} />
+                        <span className="text-xs font-medium">
+                          Costo estimado: ${(() => {
+                            const model = editedStep.model || 'gemini-2.5-flash'
+                            const pricing = MODEL_PRICING[model] || MODEL_PRICING['default']
+                            const costPerMillion = pricing.input
+                            const estimatedCost = (selectedDocsTokens / 1_000_000) * costPerMillion
+                            return estimatedCost.toFixed(3)
+                          })()}
+                        </span>
+                        <span className="text-xs text-amber-600">
+                          ({formatTokenCount(selectedDocsTokens)} tokens)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </label>
+
+              {/* RAG Mode */}
+              <label
+                className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                  editedStep.retrieval_mode === 'rag'
+                    ? 'border-cyan-500 bg-cyan-50 shadow-md'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="retrieval_mode"
+                  value="rag"
+                  checked={editedStep.retrieval_mode === 'rag'}
+                  onChange={() => setEditedStep(prev => ({
+                    ...prev,
+                    retrieval_mode: 'rag' as RetrievalMode,
+                    rag_config: prev.rag_config || { top_k: 10, min_score: 0.7 }
+                  }))}
+                  className="sr-only"
+                />
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    editedStep.retrieval_mode === 'rag' ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    <Zap size={20} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-900">Chunks Relevantes (RAG)</span>
+                      {editedStep.retrieval_mode === 'rag' && (
+                        <Check size={16} className="text-cyan-500" />
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Envia solo las secciones mas relevantes al prompt.
+                    </p>
+                    <ul className="text-xs text-gray-600 mt-2 space-y-1">
+                      <li className="flex items-center gap-1">
+                        <Check size={12} className="text-green-500" />
+                        Busquedas especificas y puntuales
+                      </li>
+                      <li className="flex items-center gap-1">
+                        <Check size={12} className="text-green-500" />
+                        Extraccion de datos concretos
+                      </li>
+                      <li className="flex items-center gap-1">
+                        <Check size={12} className="text-green-500" />
+                        90-95% ahorro en costos
+                      </li>
+                    </ul>
+                    {/* Cost estimate for RAG mode */}
+                    <div className="mt-3 p-2 bg-green-50 rounded-lg border border-green-100">
+                      <div className="flex items-center gap-1.5 text-green-700">
+                        <DollarSign size={14} />
+                        <span className="text-xs font-medium">
+                          Costo estimado: ${(() => {
+                            const model = editedStep.model || 'gemini-2.5-flash'
+                            const pricing = MODEL_PRICING[model] || MODEL_PRICING['default']
+                            const costPerMillion = pricing.input
+                            // RAG typically uses ~5-10K tokens
+                            const ragTokens = (editedStep.rag_config?.top_k || 10) * 500 // ~500 tokens per chunk
+                            const estimatedCost = (ragTokens / 1_000_000) * costPerMillion
+                            return estimatedCost.toFixed(4)
+                          })()}
+                        </span>
+                        <span className="text-xs text-green-600">
+                          (~{formatTokenCount((editedStep.rag_config?.top_k || 10) * 500)} tokens)
+                        </span>
+                      </div>
+                      {selectedDocsTokens > 0 && (
+                        <div className="text-xs text-green-600 mt-1">
+                          Ahorro estimado: {Math.round((1 - ((editedStep.rag_config?.top_k || 10) * 500) / selectedDocsTokens) * 100)}% vs documento completo
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {/* RAG Configuration (only show if RAG is selected) */}
+            {editedStep.retrieval_mode === 'rag' && (
+              <div className="mt-4 p-4 bg-white rounded-xl border border-cyan-200">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Configuracion RAG</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                      Chunks a recuperar (top_k): {editedStep.rag_config?.top_k || 10}
+                    </label>
+                    <input
+                      type="range"
+                      min="3"
+                      max="30"
+                      step="1"
+                      value={editedStep.rag_config?.top_k || 10}
+                      onChange={(e) =>
+                        setEditedStep(prev => ({
+                          ...prev,
+                          rag_config: {
+                            ...(prev.rag_config || { top_k: 10, min_score: 0.7 }),
+                            top_k: parseInt(e.target.value)
+                          }
+                        }))
+                      }
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>3 (mas rapido)</span>
+                      <span>30 (mas contexto)</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                      Score minimo: {(editedStep.rag_config?.min_score || 0.7).toFixed(1)}
+                    </label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="0.95"
+                      step="0.05"
+                      value={editedStep.rag_config?.min_score || 0.7}
+                      onChange={(e) =>
+                        setEditedStep(prev => ({
+                          ...prev,
+                          rag_config: {
+                            ...(prev.rag_config || { top_k: 10, min_score: 0.7 }),
+                            min_score: parseFloat(e.target.value)
+                          }
+                        }))
+                      }
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>0.5 (mas resultados)</span>
+                      <span>0.95 (solo exactos)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Guidance note */}
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-xs text-gray-600">
+                <strong>Recomendacion:</strong> Usa <span className="text-cyan-600 font-medium">Documento Completo</span> para analisis estrategicos, comparaciones de mercado, y sintesis de insights. Usa <span className="text-cyan-600 font-medium">RAG</span> para preguntas especificas, extraccion de datos puntuales, o cuando necesites buscar informacion concreta en documentos largos.
+              </p>
             </div>
           </div>
 

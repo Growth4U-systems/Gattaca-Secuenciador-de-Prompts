@@ -911,6 +911,13 @@ function getProvider(model: string): string {
   return 'gemini' // default
 }
 
+type RetrievalMode = 'full' | 'rag'
+
+interface RAGConfig {
+  top_k: number
+  min_score: number
+}
+
 interface FlowStep {
   id: string
   name: string
@@ -921,6 +928,8 @@ interface FlowStep {
   model?: string
   temperature?: number
   max_tokens?: number
+  retrieval_mode?: RetrievalMode  // 'full' (default) or 'rag'
+  rag_config?: RAGConfig
 }
 
 interface RequestPayload {
@@ -1104,23 +1113,98 @@ serve(async (req) => {
     // Build context
     let contextString = ''
     let totalTokens = 0
+    const retrievalMode = step_config.retrieval_mode || 'full'
 
-    // 1. Load base documents
+    // 1. Load base documents (either full or via RAG)
     if (step_config.base_doc_ids && step_config.base_doc_ids.length > 0) {
-      const { data: docs, error: docsError } = await supabase
-        .from('knowledge_base_docs')
-        .select('*')
-        .in('id', step_config.base_doc_ids)
+      if (retrievalMode === 'rag') {
+        // RAG mode: retrieve only relevant chunks
+        console.log(`[RAG] Retrieving relevant chunks for ${step_config.base_doc_ids.length} documents`)
 
-      if (docsError) {
-        throw new Error(`Failed to load documents: ${docsError.message}`)
-      }
+        const ragConfig = step_config.rag_config || { top_k: 10, min_score: 0.7 }
 
-      for (const doc of docs || []) {
-        contextString += `\n--- START DOCUMENT: ${doc.filename} (${doc.category}) ---\n`
-        contextString += doc.extracted_content
-        contextString += `\n--- END DOCUMENT ---\n`
-        totalTokens += doc.token_count || 0
+        try {
+          // Call retrieve-relevant-chunks edge function
+          const retrieveResponse = await fetch(`${supabaseUrl}/functions/v1/retrieve-relevant-chunks`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${supabaseKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              document_ids: step_config.base_doc_ids,
+              query: step_config.prompt, // Use the prompt as the query for semantic search
+              top_k: ragConfig.top_k,
+              min_similarity: ragConfig.min_score,
+            }),
+          })
+
+          if (!retrieveResponse.ok) {
+            const errorText = await retrieveResponse.text()
+            console.warn(`[RAG] Failed to retrieve chunks: ${errorText}. Falling back to full documents.`)
+            // Fallback to full documents
+          } else {
+            const retrieveResult = await retrieveResponse.json()
+
+            if (retrieveResult.success && retrieveResult.chunks && retrieveResult.chunks.length > 0) {
+              console.log(`[RAG] Retrieved ${retrieveResult.chunks.length} chunks, total tokens: ${retrieveResult.total_tokens}`)
+
+              contextString += `\n--- RELEVANT DOCUMENT CHUNKS (${retrieveResult.chunks.length} fragments) ---\n`
+
+              for (const chunk of retrieveResult.chunks) {
+                contextString += `\n[${chunk.document_filename || 'Document'}] (similarity: ${(chunk.similarity * 100).toFixed(1)}%):\n`
+                contextString += chunk.content
+                contextString += '\n'
+              }
+
+              contextString += `\n--- END RELEVANT CHUNKS ---\n`
+              totalTokens += retrieveResult.total_tokens || 0
+            } else {
+              console.warn(`[RAG] No chunks retrieved, falling back to full documents`)
+              // Fallback handled below
+            }
+          }
+        } catch (ragError) {
+          console.warn(`[RAG] Error during retrieval: ${ragError}. Falling back to full documents.`)
+          // Fallback to full documents
+        }
+
+        // Check if RAG didn't populate context (fallback to full)
+        if (contextString.trim() === '') {
+          console.log(`[RAG] Falling back to full document mode`)
+          const { data: docs, error: docsError } = await supabase
+            .from('knowledge_base_docs')
+            .select('*')
+            .in('id', step_config.base_doc_ids)
+
+          if (docsError) {
+            throw new Error(`Failed to load documents: ${docsError.message}`)
+          }
+
+          for (const doc of docs || []) {
+            contextString += `\n--- START DOCUMENT: ${doc.filename} (${doc.category}) ---\n`
+            contextString += doc.extracted_content
+            contextString += `\n--- END DOCUMENT ---\n`
+            totalTokens += doc.token_count || 0
+          }
+        }
+      } else {
+        // Full document mode (default)
+        const { data: docs, error: docsError } = await supabase
+          .from('knowledge_base_docs')
+          .select('*')
+          .in('id', step_config.base_doc_ids)
+
+        if (docsError) {
+          throw new Error(`Failed to load documents: ${docsError.message}`)
+        }
+
+        for (const doc of docs || []) {
+          contextString += `\n--- START DOCUMENT: ${doc.filename} (${doc.category}) ---\n`
+          contextString += doc.extracted_content
+          contextString += `\n--- END DOCUMENT ---\n`
+          totalTokens += doc.token_count || 0
+        }
       }
     }
 
@@ -1284,26 +1368,103 @@ serve(async (req) => {
 
     // Log completion
     const duration = Date.now() - startTime
+    const inputTokensFinal = usage.promptTokens || totalTokens
+    const outputTokensFinal = usage.completionTokens || outputTokens
+
     await supabase
       .from('execution_logs')
       .update({
         status: 'completed',
-        input_tokens: usage.promptTokens || totalTokens,
-        output_tokens: usage.completionTokens || outputTokens,
+        input_tokens: inputTokensFinal,
+        output_tokens: outputTokensFinal,
         duration_ms: duration,
         model_used: modelUsed,
       })
       .eq('id', logEntry.id)
+
+    // =========================================================================
+    // LOG COST TO openrouter_usage_logs
+    // =========================================================================
+    try {
+      // Calculate cost based on model pricing
+      const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+        'gemini-2.5-pro': { input: 1.25, output: 10.0 },
+        'gemini-2.5-flash': { input: 0.30, output: 2.50 },
+        'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
+        'gemini-3.0-pro-preview': { input: 2.00, output: 12.00 },
+        'google/gemini-2.5-pro': { input: 1.25, output: 10.0 },
+        'google/gemini-2.5-pro-preview': { input: 1.25, output: 10.0 },
+        'google/gemini-2.5-flash': { input: 0.30, output: 2.50 },
+        'google/gemini-2.5-flash-preview': { input: 0.30, output: 2.50 },
+        'google/gemini-3-pro-preview': { input: 2.00, output: 12.00 },
+        'gpt-4o': { input: 2.50, output: 10.0 },
+        'openai/gpt-4o': { input: 2.50, output: 10.0 },
+        'gpt-4o-mini': { input: 0.15, output: 0.60 },
+        'openai/gpt-4o-mini': { input: 0.15, output: 0.60 },
+        'claude-4.5-sonnet': { input: 3.00, output: 15.0 },
+        'anthropic/claude-sonnet-4': { input: 3.00, output: 15.0 },
+        'claude-4.5-opus': { input: 15.00, output: 75.0 },
+        'claude-4.5-haiku': { input: 1.00, output: 5.0 },
+        'anthropic/claude-haiku-3.5': { input: 1.00, output: 5.0 },
+        'default': { input: 1.00, output: 5.00 },
+      }
+
+      const pricing = MODEL_PRICING[modelUsed] || MODEL_PRICING['default']
+      const inputCost = (inputTokensFinal / 1_000_000) * pricing.input
+      const outputCost = (outputTokensFinal / 1_000_000) * pricing.output
+      const totalCost = inputCost + outputCost
+
+      // Get project_id and agency_id from campaign
+      const projectId = campaign.project_id || project?.id
+      let agencyId: string | null = null
+
+      // Get agency_id from user membership
+      const { data: membership } = await supabase
+        .from('agency_members')
+        .select('agency_id')
+        .eq('user_id', user_id)
+        .single()
+
+      if (membership) {
+        agencyId = membership.agency_id
+      }
+
+      await supabase
+        .from('openrouter_usage_logs')
+        .insert({
+          user_id: user_id,
+          agency_id: agencyId,
+          project_id: projectId,
+          campaign_id: campaign_id,
+          step_id: step_config.id,
+          step_name: step_config.name,
+          model_used: modelUsed,
+          input_tokens: inputTokensFinal,
+          output_tokens: outputTokensFinal,
+          cost_usd: totalCost,
+          cache_discount: 0, // TODO: Extract from OpenRouter response if available
+          retrieval_mode: retrievalMode,
+          duration_ms: duration,
+          status: 'success',
+        })
+
+      console.log(`[Cost Log] Model: ${modelUsed}, Tokens: ${inputTokensFinal}/${outputTokensFinal}, Cost: $${totalCost.toFixed(6)}`)
+    } catch (costLogError) {
+      // Don't fail the request if cost logging fails
+      console.warn('[Cost Log] Failed to log cost:', costLogError)
+    }
+    // =========================================================================
 
     return new Response(
       JSON.stringify({
         success: true,
         output: outputText,
         model_used: modelUsed,
+        retrieval_mode: retrievalMode,
         tokens: {
-          input: usage.promptTokens || totalTokens,
-          output: usage.completionTokens || outputTokens,
-          total: (usage.promptTokens || totalTokens) + (usage.completionTokens || outputTokens),
+          input: inputTokensFinal,
+          output: outputTokensFinal,
+          total: inputTokensFinal + outputTokensFinal,
         },
         duration_ms: duration,
       }),
