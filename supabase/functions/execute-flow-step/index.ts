@@ -1374,6 +1374,7 @@ serve(async (req) => {
             interaction_id: asyncResult.interaction_id,
             model: asyncResult.model,
             prompt_tokens: asyncResult.prompt_tokens,
+            step_name: step_config.name,
             started_at: new Date().toISOString()
           })
         })
