@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight, Sparkles, Zap, Cpu, Pause, Star } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight, Sparkles, Zap, Cpu, Pause, Star, ClipboardList } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
 import CampaignBulkUpload from './CampaignBulkUpload'
 import CampaignComparison from './CampaignComparison'
+import { ReportGenerator } from '@/components/reports'
 import DeepResearchProgress from './DeepResearchProgress'
 import StatusManager, { CustomStatus, DEFAULT_STATUSES, getStatusIcon, getStatusColors } from './StatusManager'
 import { FlowConfig, FlowStep, LLMModel } from '@/types/flow.types'
@@ -140,6 +141,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   const [downloadFormatMenu, setDownloadFormatMenu] = useState<string | null>(null)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
+  const [showReportGenerator, setShowReportGenerator] = useState(false)
 
   // Status management state
   const [statusDropdownOpen, setStatusDropdownOpen] = useState<{
@@ -1241,6 +1243,16 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {campaigns.length >= 1 && (
+              <button
+                onClick={() => setShowReportGenerator(true)}
+                className="px-4 py-2.5 border border-indigo-200 text-indigo-600 rounded-xl hover:bg-indigo-50 inline-flex items-center gap-2 font-medium transition-colors"
+                title="Generar reporte consolidado"
+              >
+                <ClipboardList size={18} />
+                Reporte
+              </button>
+            )}
             {campaigns.length >= 2 && (
               <button
                 onClick={() => setShowComparison(true)}
@@ -2193,6 +2205,18 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
           campaigns={campaigns}
           projectFlowConfig={project?.flow_config || null}
           onClose={() => setShowComparison(false)}
+        />
+      )}
+
+      {/* Report Generator Modal */}
+      {showReportGenerator && project && (
+        <ReportGenerator
+          projectId={projectId}
+          projectName={project.name}
+          campaigns={campaigns}
+          steps={project.flow_config?.steps || []}
+          customStatuses={project.custom_statuses}
+          onClose={() => setShowReportGenerator(false)}
         />
       )}
 
