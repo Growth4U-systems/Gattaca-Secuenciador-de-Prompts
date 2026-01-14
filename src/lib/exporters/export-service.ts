@@ -280,26 +280,46 @@ async function parseAndSaveProveLegit(supabase: any, campaign: Campaign): Promis
   )
 
   // Crear un mapa de assets de step 5
+  // IMPORTANTE: Solo usar getColumnValue, NO fallback por índice para evitar desfasaje
   const assetsMap = new Map<string, any>()
 
   if (assetsTable) {
     for (const row of assetsTable.rows) {
-      const assetName = getColumnValue(assetsTable, row, 'Asset') || row[0] || ''
+      // Para asset_name, intentamos múltiples variantes de header
+      const assetName = getColumnValue(assetsTable, row, 'Asset') ||
+                        getColumnValue(assetsTable, row, 'Unique Asset') ||
+                        getColumnValue(assetsTable, row, 'Selected Asset') || ''
       if (assetName) {
         assetsMap.set(normalizeAssetName(assetName), {
           asset_name: assetName.substring(0, 500),
-          value_criteria: (getColumnValue(assetsTable, row, 'Value') || getColumnValue(assetsTable, row, 'Criteria') || row[1] || '').substring(0, 500),
-          category: (getColumnValue(assetsTable, row, 'Category') || row[2] || '').substring(0, 100),
-          justification_differentiation: (getColumnValue(assetsTable, row, 'Justification') || getColumnValue(assetsTable, row, 'Differentiation') || row[3] || '').substring(0, 2000)
+          value_criteria: (
+            getColumnValue(assetsTable, row, 'Value Criteria') ||
+            getColumnValue(assetsTable, row, 'Value') ||
+            getColumnValue(assetsTable, row, 'Criteria') ||
+            ''
+          ).substring(0, 500),
+          category: (
+            getColumnValue(assetsTable, row, 'Category') ||
+            getColumnValue(assetsTable, row, 'Type') ||
+            ''
+          ).substring(0, 100),
+          justification_differentiation: (
+            getColumnValue(assetsTable, row, 'Justification') ||
+            getColumnValue(assetsTable, row, 'Differentiation') ||
+            getColumnValue(assetsTable, row, 'Justification for Differentiation') ||
+            ''
+          ).substring(0, 2000)
         })
       }
     }
   }
 
   // Combinar con datos de step 6
+  // IMPORTANTE: Solo usar getColumnValue, NO fallback por índice
   if (proofTable) {
     for (const row of proofTable.rows) {
-      const assetName = getColumnValue(proofTable, row, 'Asset') || row[0] || ''
+      const assetName = getColumnValue(proofTable, row, 'Asset') ||
+                        getColumnValue(proofTable, row, 'Unique Asset') || ''
       if (assetName) {
         const normalizedName = normalizeAssetName(assetName)
         const existing = assetsMap.get(normalizedName) || {
@@ -311,9 +331,22 @@ async function parseAndSaveProveLegit(supabase: any, campaign: Campaign): Promis
 
         assetsMap.set(normalizedName, {
           ...existing,
-          competitive_advantage: (getColumnValue(proofTable, row, 'Advantage') || row[1] || '').substring(0, 2000),
-          benefit_for_user: (getColumnValue(proofTable, row, 'Benefit') || row[2] || '').substring(0, 2000),
-          proof: (getColumnValue(proofTable, row, 'Proof') || row[3] || '').substring(0, 4000)
+          competitive_advantage: (
+            getColumnValue(proofTable, row, 'Competitive Advantage') ||
+            getColumnValue(proofTable, row, 'Advantage') ||
+            ''
+          ).substring(0, 2000),
+          benefit_for_user: (
+            getColumnValue(proofTable, row, 'Benefit for the User') ||
+            getColumnValue(proofTable, row, 'Benefit') ||
+            getColumnValue(proofTable, row, 'User Benefit') ||
+            ''
+          ).substring(0, 2000),
+          proof: (
+            getColumnValue(proofTable, row, 'Proof') ||
+            getColumnValue(proofTable, row, 'Evidence') ||
+            ''
+          ).substring(0, 4000)
         })
       }
     }
