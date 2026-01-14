@@ -371,6 +371,52 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     loadDocuments()
   }, [projectId, projectProp])
 
+  // Check for ongoing Deep Research on page load and restore polling state
+  const checkOngoingDeepResearch = async (campaignId: string) => {
+    try {
+      const response = await fetch(`/api/campaign/check-deep-research?campaign_id=${campaignId}`)
+      if (!response.ok) return null
+
+      const data = await response.json()
+      if (data.has_ongoing && data.interaction_id) {
+        return {
+          campaignId: campaignId,
+          stepId: data.step_id,
+          stepName: data.step_name,
+          interactionId: data.interaction_id,
+          logId: data.log_id
+        }
+      }
+      return null
+    } catch (error) {
+      console.error('Error checking ongoing Deep Research:', error)
+      return null
+    }
+  }
+
+  // Restore Deep Research polling state for all campaigns
+  useEffect(() => {
+    const restoreDeepResearchState = async () => {
+      // Wait until campaigns are loaded
+      if (loading || campaigns.length === 0) return
+
+      // Check each campaign for ongoing Deep Research
+      for (const campaign of campaigns) {
+        const ongoingResearch = await checkOngoingDeepResearch(campaign.id)
+        if (ongoingResearch) {
+          console.log('[Deep Research] Restoring polling state for campaign:', campaign.ecp_name)
+          setDeepResearchPolling(ongoingResearch)
+          setRunningStep({ campaignId: campaign.id, stepId: ongoingResearch.stepId })
+          // Expand the campaign to show progress
+          setExpandedCampaigns(prev => new Set([...prev, campaign.id]))
+          break // Only restore one at a time
+        }
+      }
+    }
+
+    restoreDeepResearchState()
+  }, [campaigns, loading])
+
   const loadProject = async () => {
     try {
       const response = await fetch(`/api/projects/${projectId}`)
