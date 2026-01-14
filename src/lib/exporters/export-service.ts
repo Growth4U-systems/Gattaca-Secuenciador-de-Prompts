@@ -51,6 +51,63 @@ function normalizeCriterion(criterion: string): string {
 }
 
 /**
+ * Busca la mejor coincidencia en el mapa de posicionamiento
+ * Primero intenta match exacto, luego busca si uno contiene al otro
+ * Ejemplo: "Sense of Professionalism & Legitimacy" debe matchear con "Sense of Professionalism"
+ */
+function findBestPositioningMatch(
+  normalizedCriterion: string,
+  positioningMap: Map<string, string[]>
+): string[] {
+  // 1. Match exacto
+  if (positioningMap.has(normalizedCriterion)) {
+    return positioningMap.get(normalizedCriterion)!
+  }
+
+  // 2. Buscar si el criterio contiene alguna key del mapa o viceversa
+  for (const [key, value] of positioningMap.entries()) {
+    // Si el criterio de tabla1 contiene el de tabla2
+    if (normalizedCriterion.includes(key) && key.length >= 10) {
+      return value
+    }
+    // Si el criterio de tabla2 contiene el de tabla1
+    if (key.includes(normalizedCriterion) && normalizedCriterion.length >= 10) {
+      return value
+    }
+  }
+
+  // 3. Buscar coincidencia por palabras clave principales (al menos 60% de palabras en comun)
+  const criterionWords = new Set(normalizedCriterion.match(/[a-z]{3,}/g) || [])
+  if (criterionWords.size >= 2) {
+    let bestMatch: string[] = []
+    let bestScore = 0
+
+    for (const [key, value] of positioningMap.entries()) {
+      const keyWords = new Set(key.match(/[a-z]{3,}/g) || [])
+      if (keyWords.size === 0) continue
+
+      // Contar palabras en comun
+      let commonWords = 0
+      for (const word of criterionWords) {
+        if (keyWords.has(word)) commonWords++
+      }
+
+      const score = commonWords / Math.max(criterionWords.size, keyWords.size)
+      if (score > bestScore && score >= 0.6) {
+        bestScore = score
+        bestMatch = value
+      }
+    }
+
+    if (bestMatch.length > 0) {
+      return bestMatch
+    }
+  }
+
+  return []
+}
+
+/**
  * Parsea Step 4 (Find Your Place to Win) y guarda en export_find_place
  */
 async function parseAndSaveFindPlace(supabase: any, campaign: Campaign): Promise<number> {
@@ -91,9 +148,9 @@ async function parseAndSaveFindPlace(supabase: any, campaign: Campaign): Promise
     const relevance = getColumnValue(criteriaTable, criteriaRow, 'Relevance') || criteriaRow[1] || ''
     const justification = getColumnValue(criteriaTable, criteriaRow, 'Justification') || criteriaRow[2] || ''
 
-    // CORRECCION: Buscar fila de scores por nombre de criterio, no por indice
+    // CORRECCION: Buscar fila de scores por nombre de criterio con fuzzy matching
     const normalizedCriterion = normalizeCriterion(criterion)
-    const positioningRow = positioningMap.get(normalizedCriterion) || []
+    const positioningRow = findBestPositioningMatch(normalizedCriterion, positioningMap)
 
     // Extraer scores de competidores de la segunda tabla
     const competitorScores = extractCompetitorScores(positioningTable.headers, positioningRow)
