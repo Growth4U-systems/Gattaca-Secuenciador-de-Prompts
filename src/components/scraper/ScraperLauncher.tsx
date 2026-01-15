@@ -190,24 +190,69 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
   // Get input label in Spanish
   const getInputLabel = (key: string): string => {
     const labels: Record<string, string> = {
+      // URLs and profiles
       url: 'URL del sitio web',
-      username: 'Usuario de Instagram',
-      profiles: 'Perfiles (uno por línea)',
-      company_name: 'Nombre de la empresa',
-      companyUrls: 'URLs de empresa en Trustpilot',
-      resultsLimitPosts: 'Límite de posts',
-      resultsLimitComments: 'Límite de comentarios',
-      includeComments: 'Incluir comentarios',
+      directUrls: 'URLs de perfiles de Instagram',
+      profiles: 'Perfiles de TikTok (uno por línea)',
+      company_name: 'Nombre o URL de la empresa en LinkedIn',
+      companyDomain: 'Dominio de la empresa (ej: revolut.com)',
+      postIds: 'IDs o URLs de posts de LinkedIn',
+      postURLs: 'URLs de videos de TikTok',
+      startUrls: 'URLs de la app (App Store o Play Store)',
+      youtube_channels: 'Canales de YouTube (formato @usuario)',
+      videoUrls: 'URLs de videos de YouTube',
+      product: 'Nombre del producto en G2',
+      // Limits
+      resultsLimit: 'Límite de resultados',
       resultsPerPage: 'Resultados por página',
       limit: 'Límite de resultados',
-      maxReviews: 'Máximo de reviews',
+      count: 'Cantidad de reviews',
+      max_reviews: 'Máximo de reviews',
+      maxItems: 'Máximo de items',
+      commentsPerPost: 'Comentarios por post',
+      // Filters
+      resultsType: 'Tipo de resultados',
+      languages: 'Idiomas de las reviews',
+      stars: 'Filtrar por estrellas',
+      date: 'Filtrar por fecha',
+      country: 'País',
+      language: 'Idioma',
+      sortOrder: 'Orden',
+      End_date: 'Fecha límite',
+      // Others
+      includeComments: 'Incluir comentarios',
     }
     return labels[key] || key
+  }
+
+  // Get placeholder for field
+  const getPlaceholder = (key: string): string => {
+    const placeholders: Record<string, string> = {
+      directUrls: 'https://instagram.com/usuario',
+      profiles: '@usuario1\n@usuario2',
+      company_name: 'google o linkedin.com/company/google',
+      companyDomain: 'revolut.com',
+      postIds: 'https://linkedin.com/posts/...',
+      postURLs: 'https://tiktok.com/@user/video/123',
+      startUrls: 'https://apps.apple.com/app/...',
+      youtube_channels: '@MrBeast\n@PewDiePie',
+      videoUrls: 'https://youtube.com/watch?v=...',
+      product: 'slack',
+      languages: 'es, en',
+    }
+    return placeholders[key] || `Ingresa ${getInputLabel(key).toLowerCase()}`
   }
 
   // Render input field based on type
   const renderInputField = (key: string, isRequired: boolean) => {
     const defaultValue = template?.inputSchema.defaults[key]
+
+    // Array fields that need textarea (multiple URLs/profiles)
+    const multiLineArrayFields = ['profiles', 'directUrls', 'postURLs', 'postIds', 'startUrls',
+      'youtube_channels', 'videoUrls', 'channelUrls', 'companyUrls']
+
+    // Array fields that are comma-separated (like languages)
+    const commaSeparatedArrayFields = ['languages', 'stars']
 
     // Determine input type
     if (key.toLowerCase().includes('include') || typeof defaultValue === 'boolean') {
@@ -224,22 +269,54 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
       )
     }
 
-    if (key === 'profiles' || key.endsWith('Urls') || key.endsWith('URLs')) {
+    // Multi-line array fields (URLs, profiles)
+    if (multiLineArrayFields.includes(key)) {
+      const currentValue = inputConfig[key]
+      const displayValue = Array.isArray(currentValue)
+        ? currentValue.join('\n')
+        : (typeof currentValue === 'string' ? currentValue : '')
       return (
         <div key={key}>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
             {getInputLabel(key)} {isRequired && <span className="text-red-500">*</span>}
           </label>
           <textarea
-            value={(inputConfig[key] as string[])?.join('\n') || ''}
+            value={displayValue}
             onChange={(e) => setInputConfig({
               ...inputConfig,
-              [key]: e.target.value.split('\n').filter(Boolean)
+              [key]: e.target.value.split('\n').map(s => s.trim()).filter(Boolean)
             })}
             rows={3}
-            placeholder="Una URL por línea"
+            placeholder={getPlaceholder(key)}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
           />
+        </div>
+      )
+    }
+
+    // Comma-separated array fields (languages, stars)
+    if (commaSeparatedArrayFields.includes(key)) {
+      const currentValue = inputConfig[key] as string[] | undefined
+      const defaultArrayValue = defaultValue as string[] | undefined
+      const displayValue = Array.isArray(currentValue)
+        ? currentValue.join(', ')
+        : (Array.isArray(defaultArrayValue) ? defaultArrayValue.join(', ') : '')
+      return (
+        <div key={key}>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            {getInputLabel(key)}
+          </label>
+          <input
+            type="text"
+            value={displayValue}
+            onChange={(e) => setInputConfig({
+              ...inputConfig,
+              [key]: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+            })}
+            placeholder={getPlaceholder(key)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
+          />
+          <p className="text-xs text-gray-500 mt-1">Separados por coma</p>
         </div>
       )
     }
@@ -262,6 +339,26 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
       )
     }
 
+    // Select for specific fields
+    if (key === 'resultsType') {
+      return (
+        <div key={key}>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            {getInputLabel(key)}
+          </label>
+          <select
+            value={inputConfig[key] as string ?? defaultValue ?? 'posts'}
+            onChange={(e) => setInputConfig({ ...inputConfig, [key]: e.target.value })}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+          >
+            <option value="posts">Posts</option>
+            <option value="comments">Comentarios</option>
+            <option value="reels">Reels</option>
+          </select>
+        </div>
+      )
+    }
+
     // Default text input
     return (
       <div key={key}>
@@ -272,7 +369,7 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
           type="text"
           value={inputConfig[key] as string || ''}
           onChange={(e) => setInputConfig({ ...inputConfig, [key]: e.target.value })}
-          placeholder={`Ingresa ${getInputLabel(key).toLowerCase()}`}
+          placeholder={getPlaceholder(key)}
           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
         />
       </div>
