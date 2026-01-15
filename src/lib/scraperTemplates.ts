@@ -440,10 +440,43 @@ export function buildScraperInput(
   }
 
   // Merge defaults with user input
-  return {
+  const merged = {
     ...template.inputSchema.defaults,
     ...userInput,
   };
+
+  // Ensure array fields are properly typed
+  // Some fields need to be arrays even if user passes a string
+  const arrayFields = ['directUrls', 'profiles', 'postURLs', 'postIds', 'startUrls',
+    'youtube_channels', 'languages', 'stars', 'videoUrls', 'channelUrls', 'companyUrls'];
+
+  for (const field of arrayFields) {
+    if (merged[field] !== undefined) {
+      // If it's a string, convert to array
+      if (typeof merged[field] === 'string') {
+        const value = merged[field] as string;
+        merged[field] = value.includes('\n')
+          ? value.split('\n').map(s => s.trim()).filter(Boolean)
+          : [value.trim()].filter(Boolean);
+      }
+      // Ensure it's an array
+      if (!Array.isArray(merged[field])) {
+        merged[field] = [merged[field]];
+      }
+    }
+  }
+
+  // Ensure number fields are numbers
+  const numberFields = ['resultsLimit', 'limit', 'count', 'max_reviews', 'maxItems',
+    'resultsPerPage', 'commentsPerPost'];
+
+  for (const field of numberFields) {
+    if (merged[field] !== undefined && typeof merged[field] === 'string') {
+      merged[field] = parseInt(merged[field] as string, 10) || 0;
+    }
+  }
+
+  return merged;
 }
 
 // ============================================
