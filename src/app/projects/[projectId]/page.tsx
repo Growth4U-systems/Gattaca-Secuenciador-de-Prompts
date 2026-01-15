@@ -18,6 +18,7 @@ import ProjectVariables from '@/components/project/ProjectVariables'
 import ResearchPromptsEditor from '@/components/project/ResearchPromptsEditor'
 import ShareProjectModal from '@/components/project/ShareProjectModal'
 import ExportDataTab from '@/components/project/ExportDataTab'
+import ApiKeysConfig from '@/components/settings/ApiKeysConfig'
 
 type TabType = 'documents' | 'flow' | 'config' | 'campaigns' | 'context' | 'variables' | 'export'
 
@@ -423,6 +424,7 @@ export default function ProjectPage({
                     window.location.reload()
                   }}
                 />
+                <ApiKeysConfig />
               </div>
             )}
             {activeTab === 'flow' && (
