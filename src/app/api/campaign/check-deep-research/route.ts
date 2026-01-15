@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     // The interaction_id is stored in error_details as JSON
     const { data: pollingLogs, error } = await supabase
       .from('execution_logs')
-      .select('id, step_id, error_details, created_at')
+      .select('id, step_name, error_details, created_at')
       .eq('campaign_id', campaignId)
       .eq('status', 'polling')
       .order('created_at', { ascending: false })
@@ -75,26 +75,17 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Get step name from campaign flow_config if not in error_details
-    if (!stepName) {
-      const { data: campaign } = await supabase
-        .from('ecp_campaigns')
-        .select('flow_config, projects_legacy(flow_config)')
-        .eq('id', campaignId)
-        .single()
-
-      if (campaign) {
-        const flowConfig = campaign.flow_config || (campaign.projects_legacy as any)?.[0]?.flow_config
-        const step = flowConfig?.steps?.find((s: any) => s.id === log.step_id)
-        stepName = step?.name || log.step_id
-      }
+    // Use step_name from the log directly (it's stored there)
+    // Fall back to error_details.step_name if needed
+    if (!stepName && log.step_name) {
+      stepName = log.step_name
     }
 
     return NextResponse.json({
       has_ongoing: true,
       interaction_id: interactionId,
-      step_id: log.step_id,
-      step_name: stepName,
+      step_id: null, // execution_logs doesn't have step_id, only step_name
+      step_name: stepName || log.step_name || 'Deep Research',
       log_id: log.id,
       started_at: log.created_at
     })
