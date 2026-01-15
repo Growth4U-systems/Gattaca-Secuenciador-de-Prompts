@@ -10,16 +10,15 @@ import {
   ApifyRunResponse,
 } from '@/types/scraper.types';
 import { getScraperTemplate, buildScraperInput, SCRAPER_TEMPLATES } from '@/lib/scraperTemplates';
+import { getUserApiKey } from '@/lib/getUserApiKey';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120; // 2 minutes for sync scrapers like Firecrawl
 
 // ============================================
-// ENVIRONMENT VARIABLES
+// ENVIRONMENT VARIABLES (fallbacks)
 // ============================================
 
-const APIFY_TOKEN = process.env.APIFY_TOKEN;
-const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
@@ -158,8 +157,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle batch or single scraper
+    const userId = session.user.id;
     if (batch) {
-      return await handleBatch(supabase, project_id, batch);
+      return await handleBatch(supabase, project_id, batch, userId);
     } else if (scraper_type && input_config) {
       return await handleSingleScraper(
         supabase,
@@ -168,7 +168,8 @@ export async function POST(request: NextRequest) {
         input_config,
         target_name,
         target_category,
-        tags
+        tags,
+        userId
       );
     } else {
       return NextResponse.json(
@@ -196,7 +197,8 @@ async function handleSingleScraper(
   inputConfig: Record<string, unknown>,
   targetName?: string,
   targetCategory?: string,
-  tags?: string[]
+  tags?: string[],
+  userId?: string
 ): Promise<NextResponse<StartScraperResponse>> {
   const template = getScraperTemplate(scraperType as Parameters<typeof getScraperTemplate>[0]);
   if (!template) {
@@ -233,9 +235,9 @@ async function handleSingleScraper(
   try {
     switch (template.provider) {
       case 'firecrawl':
-        return await executeFirecrawl(supabase, job as ScraperJob, finalInput, targetName, targetCategory, tags);
+        return await executeFirecrawl(supabase, job as ScraperJob, finalInput, targetName, targetCategory, tags, userId);
       case 'apify':
-        return await launchApifyActor(supabase, job as ScraperJob, finalInput, webhookSecret, targetName, targetCategory, tags);
+        return await launchApifyActor(supabase, job as ScraperJob, finalInput, webhookSecret, targetName, targetCategory, tags, userId);
       case 'mangools':
         // TODO: Implement Mangools
         return NextResponse.json({ success: false, error: 'Mangools not yet implemented' }, { status: 501 });
@@ -267,7 +269,8 @@ async function handleSingleScraper(
 async function handleBatch(
   supabase: Awaited<ReturnType<typeof createClient>>,
   projectId: string,
-  batch: NonNullable<StartScraperRequest['batch']>
+  batch: NonNullable<StartScraperRequest['batch']>,
+  userId?: string
 ): Promise<NextResponse<StartScraperResponse>> {
   const { name, jobs: jobConfigs } = batch;
 
@@ -324,7 +327,7 @@ async function handleBatch(
   }
 
   // Launch all jobs asynchronously (don't wait)
-  launchBatchJobs(supabase, jobs as ScraperJob[]).catch((err) => {
+  launchBatchJobs(supabase, jobs as ScraperJob[], userId).catch((err) => {
     console.error('[scraper/start] Error launching batch jobs:', err);
   });
 
@@ -341,7 +344,8 @@ async function handleBatch(
 
 async function launchBatchJobs(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  jobs: ScraperJob[]
+  jobs: ScraperJob[],
+  userId?: string
 ): Promise<void> {
   for (const job of jobs) {
     try {
@@ -356,7 +360,8 @@ async function launchBatchJobs(
             job.input_config,
             job.target_name,
             job.target_category,
-            undefined // Tags will be auto-generated
+            undefined, // Tags will be auto-generated
+            userId
           );
           break;
         case 'apify':
@@ -367,7 +372,8 @@ async function launchBatchJobs(
             job.webhook_secret || '',
             job.target_name,
             job.target_category,
-            undefined // Tags will be auto-generated
+            undefined, // Tags will be auto-generated
+            userId
           );
           break;
         // Add other providers as needed
@@ -396,10 +402,16 @@ async function executeFirecrawl(
   input: Record<string, unknown>,
   targetName?: string,
   targetCategory?: string,
-  providedTags?: string[]
+  providedTags?: string[],
+  userId?: string
 ): Promise<NextResponse<StartScraperResponse>> {
-  if (!FIRECRAWL_API_KEY) {
-    throw new Error('FIRECRAWL_API_KEY not configured');
+  // Get Firecrawl API key (user's personal key or fallback to env)
+  const firecrawlApiKey = userId
+    ? await getUserApiKey({ userId, serviceName: 'firecrawl', supabase })
+    : process.env.FIRECRAWL_API_KEY;
+
+  if (!firecrawlApiKey) {
+    throw new Error('Firecrawl API key not configured. Please add your API key in Settings > API Keys.');
   }
 
   // Update job to running
@@ -418,7 +430,7 @@ async function executeFirecrawl(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+      Authorization: `Bearer ${firecrawlApiKey}`,
     },
     body: JSON.stringify({
       url,
@@ -503,10 +515,16 @@ async function launchApifyActor(
   webhookSecret: string,
   targetName?: string,
   targetCategory?: string,
-  providedTags?: string[]
+  providedTags?: string[],
+  userId?: string
 ): Promise<NextResponse<StartScraperResponse>> {
-  if (!APIFY_TOKEN) {
-    throw new Error('APIFY_TOKEN not configured');
+  // Get Apify API key (user's personal key or fallback to env)
+  const apifyToken = userId
+    ? await getUserApiKey({ userId, serviceName: 'apify', supabase })
+    : process.env.APIFY_TOKEN;
+
+  if (!apifyToken) {
+    throw new Error('Apify API key not configured. Please add your API key in Settings > API Keys.');
   }
 
   // Update job to running with target info for later processing
@@ -524,7 +542,7 @@ async function launchApifyActor(
   const webhookUrl = `${APP_URL}/api/scraper/webhook?job_id=${job.id}&secret=${webhookSecret}`;
 
   // Launch Apify actor
-  const response = await fetch(`https://api.apify.com/v2/acts/${job.actor_id}/runs?token=${APIFY_TOKEN}`, {
+  const response = await fetch(`https://api.apify.com/v2/acts/${job.actor_id}/runs?token=${apifyToken}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
