@@ -197,12 +197,42 @@ export default function ExportDataTab({ projectId }: { projectId: string }) {
   )
 }
 
-// Estilos CSS para headers redimensionables
-const resizableHeaderStyle: React.CSSProperties = {
-  resize: 'horizontal',
-  overflow: 'auto',
-  minWidth: '80px',
-  maxWidth: '600px',
+// Hook para manejar resize de columnas con drag
+function useColumnResize(initialWidth: number) {
+  const [width, setWidth] = useState(initialWidth)
+  const isResizing = useRef(false)
+  const startX = useRef(0)
+  const startWidth = useRef(0)
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    isResizing.current = true
+    startX.current = e.clientX
+    startWidth.current = width
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return
+      const delta = e.clientX - startX.current
+      const newWidth = Math.max(60, Math.min(800, startWidth.current + delta))
+      setWidth(newWidth)
+    }
+
+    const handleMouseUp = () => {
+      isResizing.current = false
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+
+  return { width, handleMouseDown }
 }
 
 // Componente de filtro dropdown
@@ -288,10 +318,10 @@ function getUniqueValues<T>(data: T[], columnKey: keyof T): string[] {
   return Array.from(values).sort()
 }
 
-// Header redimensionable con CSS nativo
+// Header redimensionable con drag handle
 function ResizableTh({
   children,
-  width = 150,
+  initialWidth = 150,
   filterValues,
   filterSelected,
   onFilterChange,
@@ -299,19 +329,21 @@ function ResizableTh({
   className = ''
 }: {
   children: React.ReactNode
-  width?: number
+  initialWidth?: number
   filterValues?: string[]
   filterSelected?: string[]
   onFilterChange?: (selected: string[]) => void
   label?: string
   className?: string
 }) {
+  const { width, handleMouseDown } = useColumnResize(initialWidth)
+
   return (
     <th
-      className={`px-3 py-2 text-left font-semibold text-gray-700 bg-gray-50 ${className}`}
-      style={{ ...resizableHeaderStyle, width: `${width}px` }}
+      className={`relative px-3 py-2 text-left font-semibold text-gray-700 bg-gray-50 ${className}`}
+      style={{ width: `${width}px`, minWidth: `${width}px`, maxWidth: `${width}px` }}
     >
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 pr-2">
         <span className="truncate">{children}</span>
         {filterValues && onFilterChange && label && (
           <FilterDropdown
@@ -322,6 +354,13 @@ function ResizableTh({
           />
         )}
       </div>
+      {/* Drag handle - borde derecho */}
+      <div
+        onMouseDown={handleMouseDown}
+        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors"
+        style={{ borderRight: '2px solid transparent' }}
+        title="Arrastrar para redimensionar"
+      />
     </th>
   )
 }
@@ -374,11 +413,11 @@ function FindPlaceTable({ data }: { data: FindPlaceRow[] }) {
       )}
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <div className="max-h-[600px] overflow-y-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-xs">
+          <table className="min-w-full divide-y divide-gray-200 text-xs" style={{ tableLayout: 'fixed' }}>
             <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
                 <ResizableTh
-                  width={180}
+                  initialWidth={180}
                   filterValues={getUniqueValues(data, 'ecp_name')}
                   filterSelected={filters['ecp_name']}
                   onFilterChange={(v) => updateFilter('ecp_name', v)}
@@ -387,7 +426,7 @@ function FindPlaceTable({ data }: { data: FindPlaceRow[] }) {
                   ECP
                 </ResizableTh>
                 <ResizableTh
-                  width={200}
+                  initialWidth={200}
                   filterValues={getUniqueValues(data, 'evaluation_criterion')}
                   filterSelected={filters['evaluation_criterion']}
                   onFilterChange={(v) => updateFilter('evaluation_criterion', v)}
@@ -396,7 +435,7 @@ function FindPlaceTable({ data }: { data: FindPlaceRow[] }) {
                   Evaluation Criterion
                 </ResizableTh>
                 <ResizableTh
-                  width={100}
+                  initialWidth={100}
                   filterValues={getUniqueValues(data, 'relevance')}
                   filterSelected={filters['relevance']}
                   onFilterChange={(v) => updateFilter('relevance', v)}
@@ -404,13 +443,13 @@ function FindPlaceTable({ data }: { data: FindPlaceRow[] }) {
                 >
                   Relevance
                 </ResizableTh>
-                <ResizableTh width={300}>Justification</ResizableTh>
+                <ResizableTh initialWidth={300}>Justification</ResizableTh>
                 {competitors.map(comp => (
                   <th key={comp} className="px-2 py-2 text-center font-semibold text-gray-700 whitespace-nowrap bg-gray-50" style={{ minWidth: '70px' }}>
                     {comp}
                   </th>
                 ))}
-                <ResizableTh width={300}>Analysis & Opportunity</ResizableTh>
+                <ResizableTh initialWidth={300}>Analysis & Opportunity</ResizableTh>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -485,11 +524,11 @@ function ProveLegitTable({ data }: { data: ProveLegitRow[] }) {
       )}
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <div className="max-h-[600px] overflow-y-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-xs">
+          <table className="min-w-full divide-y divide-gray-200 text-xs" style={{ tableLayout: 'fixed' }}>
             <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
                 <ResizableTh
-                  width={180}
+                  initialWidth={180}
                   filterValues={getUniqueValues(data, 'ecp_name')}
                   filterSelected={filters['ecp_name']}
                   onFilterChange={(v) => updateFilter('ecp_name', v)}
@@ -498,7 +537,7 @@ function ProveLegitTable({ data }: { data: ProveLegitRow[] }) {
                   ECP
                 </ResizableTh>
                 <ResizableTh
-                  width={180}
+                  initialWidth={180}
                   filterValues={getUniqueValues(data, 'asset_name')}
                   filterSelected={filters['asset_name']}
                   onFilterChange={(v) => updateFilter('asset_name', v)}
@@ -506,9 +545,9 @@ function ProveLegitTable({ data }: { data: ProveLegitRow[] }) {
                 >
                   Asset
                 </ResizableTh>
-                <ResizableTh width={180}>Value Criteria</ResizableTh>
+                <ResizableTh initialWidth={180}>Value Criteria</ResizableTh>
                 <ResizableTh
-                  width={120}
+                  initialWidth={120}
                   filterValues={getUniqueValues(data, 'category')}
                   filterSelected={filters['category']}
                   onFilterChange={(v) => updateFilter('category', v)}
@@ -516,10 +555,10 @@ function ProveLegitTable({ data }: { data: ProveLegitRow[] }) {
                 >
                   Category
                 </ResizableTh>
-                <ResizableTh width={280}>Justification</ResizableTh>
-                <ResizableTh width={280}>Competitive Advantage</ResizableTh>
-                <ResizableTh width={280}>Benefit for User</ResizableTh>
-                <ResizableTh width={280}>Proof</ResizableTh>
+                <ResizableTh initialWidth={280}>Justification</ResizableTh>
+                <ResizableTh initialWidth={280}>Competitive Advantage</ResizableTh>
+                <ResizableTh initialWidth={280}>Benefit for User</ResizableTh>
+                <ResizableTh initialWidth={280}>Proof</ResizableTh>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -583,11 +622,11 @@ function UspUvpTable({ data }: { data: UspUvpRow[] }) {
       )}
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <div className="max-h-[600px] overflow-y-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-xs">
+          <table className="min-w-full divide-y divide-gray-200 text-xs" style={{ tableLayout: 'fixed' }}>
             <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
                 <ResizableTh
-                  width={180}
+                  initialWidth={180}
                   filterValues={getUniqueValues(data, 'ecp_name')}
                   filterSelected={filters['ecp_name']}
                   onFilterChange={(v) => updateFilter('ecp_name', v)}
@@ -596,7 +635,7 @@ function UspUvpTable({ data }: { data: UspUvpRow[] }) {
                   ECP
                 </ResizableTh>
                 <ResizableTh
-                  width={160}
+                  initialWidth={160}
                   filterValues={getUniqueValues(data, 'message_category')}
                   filterSelected={filters['message_category']}
                   onFilterChange={(v) => updateFilter('message_category', v)}
@@ -604,11 +643,11 @@ function UspUvpTable({ data }: { data: UspUvpRow[] }) {
                 >
                   Message Category
                 </ResizableTh>
-                <ResizableTh width={280}>Hypothesis</ResizableTh>
-                <ResizableTh width={180}>Value Criteria</ResizableTh>
-                <ResizableTh width={180}>Objective</ResizableTh>
-                <ResizableTh width={320}>Message (EN)</ResizableTh>
-                <ResizableTh width={320}>Message (ES)</ResizableTh>
+                <ResizableTh initialWidth={280}>Hypothesis</ResizableTh>
+                <ResizableTh initialWidth={180}>Value Criteria</ResizableTh>
+                <ResizableTh initialWidth={180}>Objective</ResizableTh>
+                <ResizableTh initialWidth={320}>Message (EN)</ResizableTh>
+                <ResizableTh initialWidth={320}>Message (ES)</ResizableTh>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
