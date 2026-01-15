@@ -158,6 +158,25 @@ export async function createProject(data: {
     .single()
 
   if (error) throw error
+
+  // Also insert into projects_legacy for FK compatibility with ecp_campaigns
+  // This is a workaround until we consolidate the tables
+  try {
+    await supabase
+      .from('projects_legacy')
+      .insert({
+        id: newProject.id,
+        user_id: newProject.user_id,
+        name: newProject.name,
+        description: newProject.description,
+        created_at: newProject.created_at,
+        updated_at: newProject.updated_at,
+      })
+  } catch (legacyError) {
+    // Silently ignore if projects_legacy doesn't exist or insert fails
+    console.warn('Failed to sync to projects_legacy:', legacyError)
+  }
+
   return newProject
 }
 

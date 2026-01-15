@@ -9,6 +9,7 @@ interface MatchableDocument {
   id: string
   filename: string
   description?: string
+  tags?: string[] | null
 }
 
 interface MatchResult {
@@ -115,6 +116,42 @@ function calculateSimilarity(a: string, b: string): number {
 }
 
 /**
+ * Calculate tag match score
+ * Returns a score based on how well the required name matches any of the document's tags
+ */
+function calculateTagScore(requiredName: string, tags: string[] | null | undefined): number {
+  if (!tags || tags.length === 0) return 0
+
+  const normalizedRequired = normalize(requiredName)
+  if (!normalizedRequired) return 0
+
+  let bestTagScore = 0
+
+  for (const tag of tags) {
+    const normalizedTag = normalize(tag)
+    if (!normalizedTag) continue
+
+    // Check for exact match (after normalization)
+    if (normalizedTag === normalizedRequired) {
+      return 1
+    }
+
+    // Check if required name contains tag or vice versa
+    if (normalizedRequired.includes(normalizedTag) || normalizedTag.includes(normalizedRequired)) {
+      const overlapScore = Math.min(normalizedTag.length, normalizedRequired.length) /
+        Math.max(normalizedTag.length, normalizedRequired.length)
+      bestTagScore = Math.max(bestTagScore, overlapScore * 0.9)
+    }
+
+    // Calculate word overlap similarity
+    const tagSimilarity = calculateSimilarity(requiredName, tag)
+    bestTagScore = Math.max(bestTagScore, tagSimilarity)
+  }
+
+  return bestTagScore
+}
+
+/**
  * Find the best matching document for a required document name
  *
  * @param requiredName - The name/description of the required document
@@ -130,16 +167,24 @@ export function findMatchingDocument(
   if (!requiredName || projectDocuments.length === 0) return null
 
   const matches = projectDocuments.map(doc => {
-    // Calculate similarity with filename (weight: 60%)
+    // Calculate similarity with filename (weight: 50%)
     const filenameScore = calculateSimilarity(requiredName, doc.filename)
 
-    // Calculate similarity with description (weight: 40%)
+    // Calculate similarity with description (weight: 30%)
     const descriptionScore = doc.description
       ? calculateSimilarity(requiredName, doc.description)
       : 0
 
-    // Combined score
-    const score = (filenameScore * 0.6) + (descriptionScore * 0.4)
+    // Calculate similarity with tags (weight: 20%)
+    const tagScore = calculateTagScore(requiredName, doc.tags)
+
+    // Combined score with adjusted weights
+    // If document has tags, use the new weights
+    // Otherwise, use the old weights to not penalize documents without tags
+    const hasTags = doc.tags && doc.tags.length > 0
+    const score = hasTags
+      ? (filenameScore * 0.5) + (descriptionScore * 0.3) + (tagScore * 0.2)
+      : (filenameScore * 0.6) + (descriptionScore * 0.4)
 
     return { doc, confidence: score }
   })

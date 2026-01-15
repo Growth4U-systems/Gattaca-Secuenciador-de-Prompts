@@ -22,6 +22,8 @@ export type CampaignStatus =
   | 'completed'
   | 'error'
 
+export type PlaybookType = 'ecp' | 'video_viral_ia' | 'custom'
+
 export interface Database {
   public: {
     Tables: {
@@ -47,6 +49,7 @@ export interface Database {
           variable_definitions: Json
           deep_research_prompts: Json
           campaign_docs_guide: string | null
+          playbook_type: PlaybookType
         }
         Insert: {
           id?: string
@@ -69,6 +72,7 @@ export interface Database {
           variable_definitions?: Json
           deep_research_prompts?: Json
           campaign_docs_guide?: string | null
+          playbook_type?: PlaybookType
         }
         Update: {
           id?: string
@@ -91,6 +95,7 @@ export interface Database {
           variable_definitions?: Json
           deep_research_prompts?: Json
           campaign_docs_guide?: string | null
+          playbook_type?: PlaybookType
         }
       }
       knowledge_base_docs: {

@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight, Sparkles, Zap, Cpu, Pause, Star } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight, Sparkles, Zap, Cpu, Pause, Star, ClipboardList } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
 import CampaignBulkUpload from './CampaignBulkUpload'
 import CampaignComparison from './CampaignComparison'
+import { ReportGenerator } from '@/components/reports'
 import DeepResearchProgress from './DeepResearchProgress'
 import StatusManager, { CustomStatus, DEFAULT_STATUSES, getStatusIcon, getStatusColors } from './StatusManager'
 import { FlowConfig, FlowStep, LLMModel } from '@/types/flow.types'
@@ -140,6 +141,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   const [downloadFormatMenu, setDownloadFormatMenu] = useState<string | null>(null)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
+  const [showReportGenerator, setShowReportGenerator] = useState(false)
 
   // Status management state
   const [statusDropdownOpen, setStatusDropdownOpen] = useState<{
@@ -368,6 +370,61 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     loadCampaigns()
     loadDocuments()
   }, [projectId, projectProp])
+
+  // Check for ongoing Deep Research on page load and restore polling state
+  const checkOngoingDeepResearch = async (campaignId: string, flowConfig: FlowConfig | null | undefined) => {
+    try {
+      const response = await fetch(`/api/campaign/check-deep-research?campaign_id=${campaignId}`)
+      if (!response.ok) return null
+
+      const data = await response.json()
+      if (data.has_ongoing && data.interaction_id) {
+        // Find step_id from flow_config using step_name
+        let stepId = data.step_id
+        if (!stepId && flowConfig?.steps && data.step_name) {
+          const step = flowConfig.steps.find(s => s.name === data.step_name)
+          stepId = step?.id || null
+        }
+
+        return {
+          campaignId: campaignId,
+          stepId: stepId,
+          stepName: data.step_name,
+          interactionId: data.interaction_id,
+          logId: data.log_id
+        }
+      }
+      return null
+    } catch (error) {
+      console.error('Error checking ongoing Deep Research:', error)
+      return null
+    }
+  }
+
+  // Restore Deep Research polling state for all campaigns
+  useEffect(() => {
+    const restoreDeepResearchState = async () => {
+      // Wait until campaigns are loaded
+      if (loading || campaigns.length === 0) return
+
+      // Check each campaign for ongoing Deep Research
+      for (const campaign of campaigns) {
+        // Get flow_config from campaign or project
+        const flowConfig = campaign.flow_config || project?.flow_config
+        const ongoingResearch = await checkOngoingDeepResearch(campaign.id, flowConfig)
+        if (ongoingResearch && ongoingResearch.stepId) {
+          console.log('[Deep Research] Restoring polling state for campaign:', campaign.ecp_name)
+          setDeepResearchPolling(ongoingResearch)
+          setRunningStep({ campaignId: campaign.id, stepId: ongoingResearch.stepId })
+          // Expand the campaign to show progress
+          setExpandedCampaigns(prev => new Set([...prev, campaign.id]))
+          break // Only restore one at a time
+        }
+      }
+    }
+
+    restoreDeepResearchState()
+  }, [campaigns, loading, project])
 
   const loadProject = async () => {
     try {
@@ -1272,6 +1329,16 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {campaigns.length >= 1 && (
+              <button
+                onClick={() => setShowReportGenerator(true)}
+                className="px-4 py-2.5 border border-indigo-200 text-indigo-600 rounded-xl hover:bg-indigo-50 inline-flex items-center gap-2 font-medium transition-colors"
+                title="Generar reporte consolidado"
+              >
+                <ClipboardList size={18} />
+                Reporte
+              </button>
+            )}
             {campaigns.length >= 2 && (
               <button
                 onClick={() => setShowComparison(true)}
@@ -2241,6 +2308,18 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
         />
       )}
 
+      {/* Report Generator Modal */}
+      {showReportGenerator && project && (
+        <ReportGenerator
+          projectId={projectId}
+          projectName={project.name}
+          campaigns={campaigns}
+          steps={project.flow_config?.steps || []}
+          customStatuses={project.custom_statuses}
+          onClose={() => setShowReportGenerator(false)}
+        />
+      )}
+
       {/* Documentation Guide Modal */}
       {showDocsGuide && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -2493,10 +2572,18 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
 
               {/* Error message */}
               <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <p className="text-sm text-red-700 break-words">
-                  {retryDialog.error.substring(0, 300)}
-                  {retryDialog.error.length > 300 && '...'}
-                </p>
+                {retryDialog.error.includes('<!DOCTYPE') || retryDialog.error.includes('<html') ? (
+                  <p className="text-sm text-red-700">
+                    OpenRouter devolvió una respuesta inválida (HTML en lugar de JSON).
+                    Esto suele ser un error temporal del servidor.
+                    <strong className="block mt-2">Verifica si el paso se completó antes de reintentar.</strong>
+                  </p>
+                ) : (
+                  <p className="text-sm text-red-700 break-words">
+                    {retryDialog.error.substring(0, 300)}
+                    {retryDialog.error.length > 300 && '...'}
+                  </p>
+                )}
               </div>
 
               {/* Original error (collapsible for debugging) */}

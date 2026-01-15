@@ -219,11 +219,17 @@ export default function OpenRouterAuthModal({ isOpen, onClose, trigger = 'action
                   </div>
                 )}
 
-                {/* Usage Information */}
-                {tokenInfo?.usage !== null && tokenInfo?.usage !== undefined && tokenInfo.usage > 0 && (
+                {/* Usage Information - Direct from OpenRouter API */}
+                {tokenInfo?.usage !== null && tokenInfo?.usage !== undefined && (
                   <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <CreditCard className="w-4 h-4 text-gray-400" />
-                    <span>Usado: ${tokenInfo.usage.toFixed(4)}</span>
+                    {refreshingBalance ? (
+                      <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                    ) : (
+                      <CreditCard className="w-4 h-4 text-gray-400" />
+                    )}
+                    <span>
+                      Usado este mes: ${tokenInfo.usage.toFixed(2)}
+                    </span>
                   </div>
                 )}
               </div>

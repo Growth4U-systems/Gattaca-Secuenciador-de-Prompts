@@ -108,7 +108,25 @@ async function createDeepResearchInteraction(
   context: string,
   userPrompt: string
 ): Promise<AsyncDeepResearchResponse> {
-  const fullPrompt = `${systemPrompt}\n\n${context}\n\n--- TASK ---\n\n${userPrompt}`
+  // Deep Research works best with a clear, direct research query
+  // The step prompt already contains all the structure needed
+  // Only add context documents if they exist, keep it simple
+
+  let fullPrompt = userPrompt
+
+  // Add context documents if provided (but keep them separate and clean)
+  if (context && context.trim().length > 0) {
+    fullPrompt = `${userPrompt}
+
+---
+
+## Documentos de Contexto Adicionales
+
+Los siguientes documentos proporcionan información adicional relevante para tu investigación:
+
+${context}`
+  }
+
   const promptTokens = Math.ceil(fullPrompt.length / 4)
 
   console.log(`[Deep Research Async] Creando interacción para modelo: ${model}`)
@@ -119,6 +137,7 @@ async function createDeepResearchInteraction(
   const requestBody = {
     agent: model,
     background: true,
+    store: true,  // Required for long-running tasks according to Google docs
     input: fullPrompt
   }
 
@@ -538,9 +557,12 @@ async function callOpenRouter(
 
   const text = data.choices?.[0]?.message?.content || ''
 
+  // Log full usage data for debugging (OpenRouter includes cost)
+  console.log(`[OpenRouter] Usage data:`, JSON.stringify(data.usage))
+
   // OpenRouter devuelve el costo real en data.usage.cost (o data.usage.total_cost)
-  const openRouterCost = data.usage?.cost || data.usage?.total_cost || undefined
-  if (openRouterCost !== undefined) {
+  const openRouterCost = data.usage?.cost ?? data.usage?.total_cost ?? null
+  if (openRouterCost !== null) {
     console.log(`[OpenRouter] Real cost from API: $${openRouterCost}`)
   }
 
@@ -549,7 +571,7 @@ async function callOpenRouter(
     usage: {
       promptTokens: data.usage?.prompt_tokens || 0,
       completionTokens: data.usage?.completion_tokens || Math.ceil(text.length / 4),
-      cost: openRouterCost, // Costo real de OpenRouter
+      cost: openRouterCost, // Costo real de OpenRouter en USD
     },
     model: openRouterModel,
   }
@@ -583,8 +605,24 @@ async function callDeepResearch(
   const POLLING_INTERVAL_MS = 20_000  // 20 segundos entre cada poll
   const MAX_TIMEOUT_MS = 12 * 60 * 1000  // 12 minutos máximo (dentro del límite de Vercel Pro)
 
-  // Construir el prompt completo para Deep Research (input debe ser string directo)
-  const fullPrompt = `${systemPrompt}\n\n${context}\n\n--- TASK ---\n\n${userPrompt}`
+  // Deep Research works best with a clear, direct research query
+  // The step prompt already contains all the structure needed
+  // Only add context documents if they exist, keep it simple
+
+  let fullPrompt = userPrompt
+
+  // Add context documents if provided (but keep them separate and clean)
+  if (context && context.trim().length > 0) {
+    fullPrompt = `${userPrompt}
+
+---
+
+## Documentos de Contexto Adicionales
+
+Los siguientes documentos proporcionan información adicional relevante para tu investigación:
+
+${context}`
+  }
 
   console.log(`[Deep Research] Iniciando investigación con modelo: ${model}`)
   console.log(`[Deep Research] Prompt length: ${fullPrompt.length} caracteres`)
@@ -596,11 +634,12 @@ async function callDeepResearch(
   const requestBody = {
     agent: model,  // Modelo como string directo
     background: true,  // Ejecución asíncrona en background
+    store: true,  // Required for long-running tasks according to Google docs
     input: fullPrompt  // Input como string directo
   }
 
   console.log(`[Deep Research] Creando interacción v1alpha`)
-  console.log(`[Deep Research] Request body:`, JSON.stringify({ agent: model, background: true, input: '...' }))
+  console.log(`[Deep Research] Request body:`, JSON.stringify({ agent: model, background: true, store: true, input: '...' }))
 
   const createResponse = await fetch(interactionsUrl, {
     method: 'POST',
@@ -621,6 +660,7 @@ async function callDeepResearch(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         background: true,
+        store: true,
         input: fullPrompt
       })
     })
@@ -639,6 +679,7 @@ async function callDeepResearch(
         body: JSON.stringify({
           agent: `models/${model}`,  // Con prefijo models/
           background: true,
+          store: true,
           userInput: fullPrompt  // Campo alternativo
         })
       })
@@ -656,6 +697,7 @@ async function callDeepResearch(
           body: JSON.stringify({
             agent: model,
             background: true,
+            store: true,
             contents: [{
               role: 'user',
               parts: [{ text: fullPrompt }]
@@ -807,47 +849,62 @@ async function handleInteractionResponse(
       })
     }
 
-    // Verificar si completó
-    if (statusData.state === 'COMPLETED') {
+    // Verificar si completó (check both 'state' and 'status' fields, uppercase and lowercase)
+    const stateOrStatus = statusData.state || (statusData as any).status || ''
+    const isCompleted = stateOrStatus === 'COMPLETED' || stateOrStatus === 'completed'
+
+    if (isCompleted) {
       let resultText = ''
 
-      // Debug: log response structure
-      console.log(`[Deep Research] COMPLETED - Response structure:`, JSON.stringify({
-        hasResponse: !!statusData.response,
-        responseText: statusData.response?.text?.substring(0, 200),
-        outputsCount: statusData.outputs?.length || 0,
-        lastOutputType: statusData.outputs?.[statusData.outputs.length - 1]?.type,
-        lastOutputHasText: !!statusData.outputs?.[statusData.outputs.length - 1]?.text
-      }))
+      // Debug: log full response for analysis
+      console.log(`[Deep Research] COMPLETED - Full response:`, JSON.stringify(statusData, null, 2).substring(0, 5000))
 
-      // Try multiple extraction methods
-      if (statusData.response?.text) {
-        resultText = statusData.response.text
-        console.log(`[Deep Research] Result from response.text: ${resultText.length} chars`)
-      } else if (statusData.outputs && statusData.outputs.length > 0) {
-        // Look for 'report' or 'response' type outputs first
-        for (const output of statusData.outputs) {
-          if ((output.type === 'report' || output.type === 'response') && output.text) {
-            resultText = output.text
-            console.log(`[Deep Research] Result from output type=${output.type}: ${resultText.length} chars`)
-            break
-          }
-        }
-        // Fallback to last output with text
-        if (!resultText) {
-          for (let i = statusData.outputs.length - 1; i >= 0; i--) {
-            if (statusData.outputs[i].text && statusData.outputs[i].type !== 'thought' && statusData.outputs[i].type !== 'search') {
-              resultText = statusData.outputs[i].text!
-              console.log(`[Deep Research] Result from output[${i}] type=${statusData.outputs[i].type}: ${resultText.length} chars`)
-              break
-            }
-          }
+      // According to Google documentation, the final report is in outputs[-1].text
+      // The last element of the outputs array contains the complete research report
+      if (statusData.outputs && statusData.outputs.length > 0) {
+        // Get the LAST output - this is where the final report is according to docs
+        const lastOutput = statusData.outputs[statusData.outputs.length - 1]
+        if (lastOutput.text) {
+          resultText = lastOutput.text
+          console.log(`[Deep Research] Result from outputs[-1].text (last output): ${resultText.length} chars`)
+        } else if ((lastOutput as any).content) {
+          resultText = (lastOutput as any).content
+          console.log(`[Deep Research] Result from outputs[-1].content (last output): ${resultText.length} chars`)
         }
       }
 
-      // If still no result, log full response for debugging
+      // Fallback: try other fields if outputs[-1] didn't work
       if (!resultText) {
-        console.log(`[Deep Research] WARNING: No result text found. Full response:`, JSON.stringify(statusData, null, 2))
+        // 1. response.text (original format)
+        if (statusData.response?.text) {
+          resultText = statusData.response.text
+          console.log(`[Deep Research] Result from response.text: ${resultText.length} chars`)
+        }
+        // 2. result.text or result.content (newer format)
+        else if ((statusData as any).result?.text) {
+          resultText = (statusData as any).result.text
+          console.log(`[Deep Research] Result from result.text: ${resultText.length} chars`)
+        }
+        else if ((statusData as any).result?.content) {
+          resultText = (statusData as any).result.content
+          console.log(`[Deep Research] Result from result.content: ${resultText.length} chars`)
+        }
+        // 3. Direct text field on statusData
+        else if ((statusData as any).text) {
+          resultText = (statusData as any).text
+          console.log(`[Deep Research] Result from direct text: ${resultText.length} chars`)
+        }
+        // 4. candidates array (generateContent style)
+        else if ((statusData as any).candidates?.[0]?.content?.parts?.[0]?.text) {
+          resultText = (statusData as any).candidates[0].content.parts[0].text
+          console.log(`[Deep Research] Result from candidates: ${resultText.length} chars`)
+        }
+      }
+
+      // If still no result, log warning
+      if (!resultText) {
+        console.log(`[Deep Research] WARNING: No result text found in any field. Keys:`, Object.keys(statusData))
+        console.log(`[Deep Research] Outputs array:`, JSON.stringify(statusData.outputs, null, 2))
       }
 
       const duration = (Date.now() - startTime) / 1000
@@ -865,7 +922,9 @@ async function handleInteractionResponse(
       }
     }
 
-    if (statusData.state === 'FAILED') {
+    // Check for failed state (both uppercase and lowercase)
+    const isFailed = stateOrStatus === 'FAILED' || stateOrStatus === 'failed' || stateOrStatus === 'cancelled'
+    if (isFailed) {
       const errorMsg = statusData.error?.message || 'Error desconocido en Deep Research'
       throw new Error(`Deep Research failed: ${errorMsg}. Interaction ID: ${interactionName}`)
     }
@@ -1006,7 +1065,12 @@ serve(async (req) => {
       )
     }
 
-    if (!user_id) {
+    // Check if this is a Deep Research model (uses Google API directly, not OpenRouter)
+    const preferredModelEarly = step_config.model || 'gemini-2.5-flash'
+    const isDeepResearchModel = preferredModelEarly.startsWith('deep-research')
+
+    // Deep Research uses GEMINI_API_KEY directly, doesn't need user_id or OpenRouter
+    if (!isDeepResearchModel && !user_id) {
       return new Response(
         JSON.stringify({ error: 'Missing user_id. Please connect OpenRouter first.' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
@@ -1019,74 +1083,89 @@ serve(async (req) => {
 
     // =========================================================================
     // FETCH AND DECRYPT OPENROUTER API KEY (User -> Agency -> Error)
+    // Skip for Deep Research models (they use Google API directly)
     // =========================================================================
     let userOpenRouterKey: string | null = null
     let keySource: 'user' | 'agency' = 'user'
 
-    // 1. Try user's personal token first
-    const { data: tokenRecord } = await supabase
-      .from('user_openrouter_tokens')
-      .select('encrypted_api_key')
-      .eq('user_id', user_id)
-      .single()
+    if (!isDeepResearchModel) {
+      console.log(`[OpenRouter] Looking for token for user_id: ${user_id}`)
 
-    if (tokenRecord?.encrypted_api_key) {
-      try {
-        userOpenRouterKey = await decryptToken(tokenRecord.encrypted_api_key)
-        keySource = 'user'
-        console.log('[OpenRouter] Using user personal key')
-
-        // Update last_used_at for user token
-        await supabase
-          .from('user_openrouter_tokens')
-          .update({ last_used_at: new Date().toISOString() })
-          .eq('user_id', user_id)
-      } catch (decryptError) {
-        console.warn('Failed to decrypt user OpenRouter key:', decryptError)
-      }
-    }
-
-    // 2. If no user key, try agency key
-    if (!userOpenRouterKey) {
-      console.log('[OpenRouter] No user key, checking agency...')
-
-      const { data: membership } = await supabase
-        .from('agency_members')
-        .select('agency_id, agencies(id, openrouter_api_key)')
+      // 1. Try user's personal token first
+      const { data: tokenRecord, error: tokenError } = await supabase
+        .from('user_openrouter_tokens')
+        .select('encrypted_api_key')
         .eq('user_id', user_id)
         .single()
 
-      const agencyData = membership?.agencies as { id: string; openrouter_api_key: string | null } | null
+      console.log(`[OpenRouter] Token query:`, {
+        found: !!tokenRecord?.encrypted_api_key,
+        keyLength: tokenRecord?.encrypted_api_key?.length || 0,
+        isPending: tokenRecord?.encrypted_api_key === 'PENDING',
+        error: tokenError?.message || null
+      })
 
-      if (agencyData?.openrouter_api_key) {
+      // Skip if token is 'PENDING' (OAuth not completed)
+      if (tokenRecord?.encrypted_api_key && tokenRecord.encrypted_api_key !== 'PENDING') {
         try {
-          userOpenRouterKey = await decryptToken(agencyData.openrouter_api_key)
-          keySource = 'agency'
-          console.log('[OpenRouter] Using agency key')
+          userOpenRouterKey = await decryptToken(tokenRecord.encrypted_api_key)
+          keySource = 'user'
+          console.log('[OpenRouter] Successfully decrypted user key')
 
-          // Update last_used_at for agency
+          // Update last_used_at for user token
           await supabase
-            .from('agencies')
-            .update({ openrouter_key_last_used_at: new Date().toISOString() })
-            .eq('id', agencyData.id)
+            .from('user_openrouter_tokens')
+            .update({ last_used_at: new Date().toISOString() })
+            .eq('user_id', user_id)
         } catch (decryptError) {
-          console.warn('Failed to decrypt agency OpenRouter key:', decryptError)
+          console.warn('Failed to decrypt user OpenRouter key:', decryptError)
         }
       }
-    }
 
-    // 3. No key available - return error
-    if (!userOpenRouterKey) {
-      return new Response(
-        JSON.stringify({
-          error: 'OpenRouter not connected. Please connect your OpenRouter account or ask your agency admin to configure an API key.',
-          requires_openrouter: true
-        }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
+      // 2. If no user key, try agency key
+      if (!userOpenRouterKey) {
+        console.log('[OpenRouter] No user key, checking agency...')
 
-    console.log(`[OpenRouter] Key source: ${keySource}`)
+        const { data: membership } = await supabase
+          .from('agency_members')
+          .select('agency_id, agencies(id, openrouter_api_key)')
+          .eq('user_id', user_id)
+          .single()
+
+        const agencyData = membership?.agencies as { id: string; openrouter_api_key: string | null } | null
+
+        if (agencyData?.openrouter_api_key) {
+          try {
+            userOpenRouterKey = await decryptToken(agencyData.openrouter_api_key)
+            keySource = 'agency'
+            console.log('[OpenRouter] Using agency key')
+
+            // Update last_used_at for agency
+            await supabase
+              .from('agencies')
+              .update({ openrouter_key_last_used_at: new Date().toISOString() })
+              .eq('id', agencyData.id)
+          } catch (decryptError) {
+            console.warn('Failed to decrypt agency OpenRouter key:', decryptError)
+          }
+        }
+      }
+
+      // 3. No key available - return error
+      if (!userOpenRouterKey) {
+        return new Response(
+          JSON.stringify({
+            error: 'OpenRouter not connected. Please connect your OpenRouter account or ask your agency admin to configure an API key.',
+            requires_openrouter: true
+          }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`[OpenRouter] Key source: ${keySource}`)
+    } else {
+      console.log('[Deep Research] Skipping OpenRouter key lookup - using Google API directly')
+    }
 
     // =========================================================================
 
@@ -1309,6 +1388,7 @@ serve(async (req) => {
             interaction_id: asyncResult.interaction_id,
             model: asyncResult.model,
             prompt_tokens: asyncResult.prompt_tokens,
+            step_name: step_config.name,
             started_at: new Date().toISOString()
           })
         })
@@ -1446,7 +1526,7 @@ serve(async (req) => {
         agencyId = membership.agency_id
       }
 
-      await supabase
+      const { error: usageLogError } = await supabase
         .from('openrouter_usage_logs')
         .insert({
           user_id: user_id,
@@ -1462,10 +1542,14 @@ serve(async (req) => {
           cache_discount: 0, // TODO: Extract from OpenRouter response if available
           retrieval_mode: retrievalMode,
           duration_ms: duration,
-          status: 'success',
+          status: 'completed',
         })
 
-      console.log(`[Cost Log] Model: ${modelUsed}, Tokens: ${inputTokensFinal}/${outputTokensFinal}, Cost: $${totalCost.toFixed(6)}`)
+      if (usageLogError) {
+        console.error(`[Cost Log] Insert error:`, usageLogError)
+      } else {
+        console.log(`[Cost Log] Model: ${modelUsed}, Tokens: ${inputTokensFinal}/${outputTokensFinal}, Cost: $${totalCost.toFixed(6)}`)
+      }
     } catch (costLogError) {
       // Don't fail the request if cost logging fails
       console.warn('[Cost Log] Failed to log cost:', costLogError)

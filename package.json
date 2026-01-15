@@ -25,10 +25,13 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.45.0",
     "@vercel/blob": "^0.23.0",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.390.0",
     "mammoth": "^1.8.0",
     "next": "14.2.0",
+    "openai": "^6.16.0",
     "pdf-parse": "^1.1.1",
+    "pptxgenjs": "^4.0.1",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },

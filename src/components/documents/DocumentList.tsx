@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { FileText, Trash2, Eye, Link2, Search, Filter, FolderOpen, X, Edit2, Check, Loader2 } from 'lucide-react'
+import { FileText, Trash2, Eye, Link2, Search, Filter, FolderOpen, X, Edit2, Check, Loader2, Tag } from 'lucide-react'
 import { DocCategory } from '@/types/database.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { useModal } from '@/components/ui'
@@ -16,6 +16,8 @@ interface Document {
   created_at: string
   campaign_id?: string | null
   extracted_content?: string | null
+  tags?: string[] | null
+  source_type?: string | null
 }
 
 interface Campaign {
@@ -56,6 +58,7 @@ export default function DocumentList({
   const [searchInContent, setSearchInContent] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'global' | 'assigned'>('all')
+  const [tagFilter, setTagFilter] = useState<string>('all')
 
   // State for inline editing
   const [editingDocId, setEditingDocId] = useState<string | null>(null)
@@ -72,6 +75,19 @@ export default function DocumentList({
     return Array.from(new Set(documents.map(d => d.category))).sort()
   }, [documents])
 
+  // Get unique tags with counts
+  const allTags = useMemo(() => {
+    const tagCounts: Record<string, number> = {}
+    documents.forEach(doc => {
+      doc.tags?.forEach(tag => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1
+      })
+    })
+    return Object.entries(tagCounts)
+      .sort((a, b) => b[1] - a[1]) // Sort by count descending
+      .map(([tag, count]) => ({ tag, count }))
+  }, [documents])
+
   // Filter documents
   const filteredDocs = useMemo(() => {
     return documents.filter(doc => {
@@ -80,12 +96,17 @@ export default function DocumentList({
         const query = searchQuery.toLowerCase()
         const matchesFilename = doc.filename.toLowerCase().includes(query)
         const matchesContent = searchInContent && doc.extracted_content?.toLowerCase().includes(query)
-        if (!matchesFilename && !matchesContent) {
+        const matchesTags = doc.tags?.some(tag => tag.toLowerCase().includes(query))
+        if (!matchesFilename && !matchesContent && !matchesTags) {
           return false
         }
       }
       // Category filter
       if (categoryFilter !== 'all' && doc.category !== categoryFilter) {
+        return false
+      }
+      // Tag filter
+      if (tagFilter !== 'all' && !doc.tags?.includes(tagFilter)) {
         return false
       }
       // Assignment filter
@@ -97,7 +118,7 @@ export default function DocumentList({
       }
       return true
     })
-  }, [documents, searchQuery, searchInContent, categoryFilter, assignmentFilter])
+  }, [documents, searchQuery, searchInContent, categoryFilter, tagFilter, assignmentFilter])
 
   // Get content match snippet
   const getContentMatchSnippet = (content: string | null | undefined, query: string): string | null => {
@@ -284,6 +305,25 @@ export default function DocumentList({
           </select>
         </div>
 
+        {/* Tag Filter */}
+        {allTags.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Tag size={16} className="text-gray-400" />
+            <select
+              value={tagFilter}
+              onChange={(e) => setTagFilter(e.target.value)}
+              className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Tags: Todos</option>
+              {allTags.map(({ tag, count }) => (
+                <option key={tag} value={tag}>
+                  {tag} ({count})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Assignment Filter */}
         {campaigns.length > 0 && (
           <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
@@ -309,7 +349,7 @@ export default function DocumentList({
       </div>
 
       {/* Results count */}
-      {(searchQuery || categoryFilter !== 'all' || assignmentFilter !== 'all') && (
+      {(searchQuery || categoryFilter !== 'all' || tagFilter !== 'all' || assignmentFilter !== 'all') && (
         <div className="flex items-center justify-between text-sm text-gray-500">
           <span>
             Mostrando {filteredDocs.length} de {documents.length} documentos
@@ -319,12 +359,18 @@ export default function DocumentList({
                 {searchInContent && <span className="text-blue-600 ml-1">(en contenido)</span>}
               </span>
             )}
+            {tagFilter !== 'all' && (
+              <span className="ml-1">
+                con tag <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-xs">{tagFilter}</span>
+              </span>
+            )}
           </span>
-          {(searchQuery || categoryFilter !== 'all' || assignmentFilter !== 'all') && (
+          {(searchQuery || categoryFilter !== 'all' || tagFilter !== 'all' || assignmentFilter !== 'all') && (
             <button
               onClick={() => {
                 setSearchQuery('')
                 setCategoryFilter('all')
+                setTagFilter('all')
                 setAssignmentFilter('all')
               }}
               className="text-blue-600 hover:text-blue-700 font-medium"
@@ -344,6 +390,7 @@ export default function DocumentList({
             onClick={() => {
               setSearchQuery('')
               setCategoryFilter('all')
+              setTagFilter('all')
               setAssignmentFilter('all')
             }}
             className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
@@ -491,6 +538,32 @@ export default function DocumentList({
                       + Agregar descripcion
                     </button>
                   ) : null}
+
+                  {/* Document Tags */}
+                  {doc.tags && doc.tags.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      <Tag size={12} className="text-gray-400" />
+                      {doc.tags.map((tag, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setTagFilter(tag)}
+                          className={`px-2 py-0.5 text-xs rounded-full transition-colors ${
+                            tagFilter === tag
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                          }`}
+                          title={`Filtrar por "${tag}"`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                      {doc.source_type === 'scraper' && (
+                        <span className="ml-1 px-1.5 py-0.5 text-xs bg-green-50 text-green-700 rounded">
+                          Scraper
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Content match snippet */}
                   {searchInContent && searchQuery && (() => {

@@ -43,6 +43,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    console.log(`[run-step] Session user_id: ${session.user.id}`)
+
     // Load campaign and project
     const { data: campaign, error: campaignError } = await supabase
       .from('ecp_campaigns')

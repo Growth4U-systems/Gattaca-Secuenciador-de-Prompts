@@ -3,21 +3,23 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2, Building2 } from 'lucide-react'
+import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2, Building2, Table2, Globe } from 'lucide-react'
 import { useToast, useModal } from '@/components/ui'
 import { useProject } from '@/hooks/useProjects'
 import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
 import DocumentUpload from '@/components/documents/DocumentUpload'
 import DocumentBulkUpload from '@/components/documents/DocumentBulkUpload'
 import DocumentList from '@/components/documents/DocumentList'
+import ScraperLauncher from '@/components/scraper/ScraperLauncher'
 import TokenMonitor from '@/components/TokenMonitor'
 import FlowSetup from '@/components/flow/FlowSetup'
 import CampaignRunner from '@/components/campaign/CampaignRunner'
 import ProjectVariables from '@/components/project/ProjectVariables'
 import ResearchPromptsEditor from '@/components/project/ResearchPromptsEditor'
 import ShareProjectModal from '@/components/project/ShareProjectModal'
+import ExportDataTab from '@/components/project/ExportDataTab'
 
-type TabType = 'documents' | 'flow' | 'config' | 'campaigns' | 'context' | 'variables'
+type TabType = 'documents' | 'flow' | 'config' | 'campaigns' | 'context' | 'variables' | 'export'
 
 // Loading Skeleton
 function LoadingSkeleton() {
@@ -73,12 +75,18 @@ export default function ProjectPage({
   const [showMenu, setShowMenu] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
 
-  const tabs = [
+  // Base tabs available for all projects
+  const baseTabs = [
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
     { id: 'variables' as TabType, label: 'Variables', icon: Sliders, description: 'Configuración' },
     { id: 'flow' as TabType, label: 'Flujo', icon: Workflow, description: 'Pasos y prompts' },
     { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
   ]
+
+  // Add Export tab only for ECP projects
+  const tabs = project?.playbook_type === 'ecp'
+    ? [...baseTabs, { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' }]
+    : baseTabs
 
   if (projectLoading) {
     return <LoadingSkeleton />
@@ -423,6 +431,9 @@ export default function ProjectPage({
             {activeTab === 'campaigns' && (
               <CampaignRunner projectId={params.projectId} project={project} />
             )}
+            {activeTab === 'export' && (
+              <ExportDataTab projectId={params.projectId} />
+            )}
           </div>
         </div>
       </div>
@@ -457,6 +468,7 @@ function DocumentsTab({
   const [viewingDoc, setViewingDoc] = useState<any | null>(null)
   const [showGuide, setShowGuide] = useState(true)
   const [campaigns, setCampaigns] = useState<Array<{ id: string; ecp_name: string }>>([])
+  const [showScraperLauncher, setShowScraperLauncher] = useState(false)
 
   // Load campaigns for assignment
   useEffect(() => {
@@ -552,6 +564,13 @@ function DocumentsTab({
           <p className="text-sm text-gray-500 mt-1">Gestiona los documentos que alimentan tus prompts</p>
         </div>
         <div className="flex gap-3">
+          <button
+            onClick={() => setShowScraperLauncher(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all shadow-sm"
+          >
+            <Globe size={18} />
+            <span>Importar datos</span>
+          </button>
           <DocumentUpload projectId={projectId} onUploadComplete={onReload} />
           <DocumentBulkUpload projectId={projectId} onUploadComplete={onReload} />
         </div>
@@ -633,6 +652,18 @@ function DocumentsTab({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Scraper Launcher Modal */}
+      {showScraperLauncher && (
+        <ScraperLauncher
+          projectId={projectId}
+          onComplete={() => {
+            setShowScraperLauncher(false)
+            onReload()
+          }}
+          onClose={() => setShowScraperLauncher(false)}
+        />
       )}
     </div>
   )
