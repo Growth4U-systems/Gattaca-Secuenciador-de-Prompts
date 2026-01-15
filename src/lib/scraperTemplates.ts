@@ -51,12 +51,11 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.INSTAGRAM_POSTS_COMMENTS,
     category: 'social',
     inputSchema: {
-      required: ['username'],
-      optional: ['resultsLimitPosts', 'resultsLimitComments', 'includeComments'],
+      required: ['directUrls'],
+      optional: ['resultsLimit', 'resultsType'],
       defaults: {
-        resultsLimitPosts: 50,
-        resultsLimitComments: 100,
-        includeComments: true,
+        resultsLimit: 50,
+        resultsType: 'posts',
       },
     },
     outputFields: ['shortCode', 'caption', 'likesCount', 'commentsCount', 'timestamp', 'comments'],
@@ -127,7 +126,7 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
       optional: ['limit', 'sortOrder'],
       defaults: {
         limit: 100,
-        sortOrder: 'RELEVANCE',
+        sortOrder: 'most recent',
       },
     },
     outputFields: ['text', 'likesCount', 'author', 'createdAt'],
@@ -194,11 +193,9 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.YOUTUBE_CHANNEL_VIDEOS,
     category: 'youtube',
     inputSchema: {
-      required: ['channelUrls'],
-      optional: ['maxVideos'],
-      defaults: {
-        maxVideos: 50,
-      },
+      required: ['youtube_channels'],
+      optional: ['End_date'],
+      defaults: {},
     },
     outputFields: ['title', 'description', 'viewCount', 'likeCount', 'publishedAt', 'url'],
   },
@@ -249,10 +246,10 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.G2_REVIEWS,
     category: 'reviews',
     inputSchema: {
-      required: ['productUrls'],
-      optional: ['maxReviews'],
+      required: ['product'],
+      optional: ['max_reviews'],
       defaults: {
-        maxReviews: 100,
+        max_reviews: 200,
       },
     },
     outputFields: ['title', 'text', 'rating', 'author', 'date', 'pros', 'cons'],
@@ -283,13 +280,14 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.TRUSTPILOT_REVIEWS,
     category: 'reviews',
     inputSchema: {
-      required: ['companyUrls'],
-      optional: ['maxReviews'],
+      required: ['companyDomain'],
+      optional: ['count', 'stars', 'date', 'languages'],
       defaults: {
-        maxReviews: 100,
+        count: 100,
+        languages: ['es'],
       },
     },
-    outputFields: ['title', 'text', 'rating', 'author', 'date', 'verified'],
+    outputFields: ['title', 'text', 'rating', 'author', 'date', 'verified', 'consumerCountryCode'],
   },
 
   appstore_reviews: {
@@ -300,11 +298,11 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.APPSTORE_REVIEWS,
     category: 'reviews',
     inputSchema: {
-      required: ['appUrls'],
-      optional: ['maxReviews', 'country'],
+      required: ['startUrls'],
+      optional: ['maxItems', 'country'],
       defaults: {
-        maxReviews: 100,
-        country: 'es',
+        maxItems: 100,
+        country: 'us',
       },
     },
     outputFields: ['title', 'text', 'rating', 'author', 'date', 'version'],
@@ -318,11 +316,12 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.PLAYSTORE_REVIEWS,
     category: 'reviews',
     inputSchema: {
-      required: ['appUrls'],
-      optional: ['maxReviews', 'language'],
+      required: ['startUrls'],
+      optional: ['maxItems', 'language', 'country'],
       defaults: {
-        maxReviews: 100,
+        maxItems: 100,
         language: 'es',
+        country: 'es',
       },
     },
     outputFields: ['text', 'rating', 'author', 'date', 'thumbsUp'],
