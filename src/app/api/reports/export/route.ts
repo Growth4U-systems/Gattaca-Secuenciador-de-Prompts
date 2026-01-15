@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { GeneratedReport, ReportExportConfig } from '@/types/flow.types'
+import PptxGenJS from 'pptxgenjs'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -176,18 +177,267 @@ function exportMarkdown(report: GeneratedReport, config: ReportExportConfig) {
 }
 
 /**
- * Export report as PPTX (placeholder - needs pptxgenjs library)
+ * Export report as PPTX
  */
 async function exportPPTX(report: GeneratedReport, config: ReportExportConfig) {
-  // For now, return a simple implementation message
-  // Full implementation would use pptxgenjs library
-  return NextResponse.json(
-    {
-      error: 'PPTX export coming soon',
-      message: 'Use Markdown export and convert to PPTX using external tools',
+  const pptx = new PptxGenJS()
+
+  // Presentation settings
+  pptx.author = 'Gattaca'
+  pptx.title = config.customTitle || `Reporte: ${report.projectName}`
+  pptx.subject = 'Reporte de Campañas'
+  pptx.company = 'Gattaca'
+
+  // Define master slide with branding
+  pptx.defineSlideMaster({
+    title: 'GATTACA_MASTER',
+    background: { color: 'FFFFFF' },
+    objects: [
+      // Header bar
+      { rect: { x: 0, y: 0, w: '100%', h: 0.5, fill: { color: '4F46E5' } } },
+      // Footer
+      { rect: { x: 0, y: 5.25, w: '100%', h: 0.25, fill: { color: 'F3F4F6' } } },
+      { text: { text: 'Generado por Gattaca', options: { x: 0.3, y: 5.28, w: 3, h: 0.2, fontSize: 8, color: '6B7280' } } },
+    ],
+  })
+
+  // Title slide
+  const titleSlide = pptx.addSlide({ masterName: 'GATTACA_MASTER' })
+  titleSlide.addText(report.projectName, {
+    x: 0.5,
+    y: 2,
+    w: 9,
+    h: 1,
+    fontSize: 36,
+    bold: true,
+    color: '1F2937',
+    align: 'center',
+  })
+  titleSlide.addText(`${report.campaigns.length} Campañas · ${report.selectedStepIds.length} Pasos`, {
+    x: 0.5,
+    y: 3,
+    w: 9,
+    h: 0.5,
+    fontSize: 18,
+    color: '6B7280',
+    align: 'center',
+  })
+  titleSlide.addText(new Date(report.generatedAt).toLocaleDateString('es-ES', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }), {
+    x: 0.5,
+    y: 3.5,
+    w: 9,
+    h: 0.5,
+    fontSize: 14,
+    color: '9CA3AF',
+    align: 'center',
+  })
+
+  // Executive summary slide (if available)
+  if (config.includeExecutiveSummary && report.executiveSummary) {
+    const summarySlide = pptx.addSlide({ masterName: 'GATTACA_MASTER' })
+    summarySlide.addText('Resumen Ejecutivo', {
+      x: 0.5,
+      y: 0.7,
+      w: 9,
+      h: 0.5,
+      fontSize: 24,
+      bold: true,
+      color: '4F46E5',
+    })
+    // Truncate if too long for slide
+    const summaryText = report.executiveSummary.length > 2000
+      ? report.executiveSummary.substring(0, 2000) + '...'
+      : report.executiveSummary
+    summarySlide.addText(stripMarkdown(summaryText), {
+      x: 0.5,
+      y: 1.3,
+      w: 9,
+      h: 3.8,
+      fontSize: 12,
+      color: '374151',
+      valign: 'top',
+    })
+  }
+
+  // Campaign slides
+  if (config.includeCampaignDetails) {
+    for (const campaign of report.campaigns) {
+      // Campaign header slide
+      const campaignSlide = pptx.addSlide({ masterName: 'GATTACA_MASTER' })
+      campaignSlide.addText(campaign.name, {
+        x: 0.5,
+        y: 0.7,
+        w: 9,
+        h: 0.6,
+        fontSize: 24,
+        bold: true,
+        color: '1F2937',
+      })
+      campaignSlide.addText(`${campaign.country}${campaign.industry ? ` · ${campaign.industry}` : ''}`, {
+        x: 0.5,
+        y: 1.3,
+        w: 9,
+        h: 0.4,
+        fontSize: 14,
+        color: '6B7280',
+      })
+
+      // Custom variables if any
+      if (Object.keys(campaign.customVariables).length > 0) {
+        const varsText = Object.entries(campaign.customVariables)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('  |  ')
+        campaignSlide.addText(varsText, {
+          x: 0.5,
+          y: 1.8,
+          w: 9,
+          h: 0.3,
+          fontSize: 10,
+          color: '9CA3AF',
+          italic: true,
+        })
+      }
+
+      // Step outputs - each step gets a slide
+      for (const stepOutput of campaign.stepOutputs) {
+        if (!stepOutput.output) continue
+
+        const stepSlide = pptx.addSlide({ masterName: 'GATTACA_MASTER' })
+        stepSlide.addText(`${campaign.name}`, {
+          x: 0.5,
+          y: 0.7,
+          w: 6,
+          h: 0.3,
+          fontSize: 10,
+          color: '9CA3AF',
+        })
+        stepSlide.addText(stepOutput.stepName, {
+          x: 0.5,
+          y: 1,
+          w: 9,
+          h: 0.5,
+          fontSize: 20,
+          bold: true,
+          color: '4F46E5',
+        })
+
+        // Output content - truncate if needed
+        const outputText = stepOutput.output.length > 2500
+          ? stepOutput.output.substring(0, 2500) + '\n\n[Contenido truncado...]'
+          : stepOutput.output
+        stepSlide.addText(stripMarkdown(outputText), {
+          x: 0.5,
+          y: 1.6,
+          w: 9,
+          h: 3.5,
+          fontSize: 11,
+          color: '374151',
+          valign: 'top',
+        })
+      }
+    }
+  }
+
+  // Inconsistencies slide (if any)
+  if (config.includeInconsistencyReport && report.inconsistencies.length > 0) {
+    const incSlide = pptx.addSlide({ masterName: 'GATTACA_MASTER' })
+    incSlide.addText('Inconsistencias Detectadas', {
+      x: 0.5,
+      y: 0.7,
+      w: 9,
+      h: 0.5,
+      fontSize: 24,
+      bold: true,
+      color: 'DC2626',
+    })
+
+    const incRows: any[][] = [
+      [
+        { text: 'Severidad', options: { bold: true, fill: { color: 'F3F4F6' } } },
+        { text: 'Campo', options: { bold: true, fill: { color: 'F3F4F6' } } },
+        { text: 'Descripcion', options: { bold: true, fill: { color: 'F3F4F6' } } },
+      ],
+    ]
+
+    for (const inc of report.inconsistencies.slice(0, 8)) { // Limit to 8 rows
+      incRows.push([
+        { text: inc.severity === 'high' ? 'Alta' : inc.severity === 'medium' ? 'Media' : 'Baja' },
+        { text: inc.field },
+        { text: inc.description.substring(0, 100) },
+      ])
+    }
+
+    incSlide.addTable(incRows, {
+      x: 0.5,
+      y: 1.3,
+      w: 9,
+      colW: [1.2, 2.3, 5.5],
+      fontSize: 10,
+      color: '374151',
+      border: { pt: 0.5, color: 'E5E7EB' },
+      valign: 'middle',
+    })
+  }
+
+  // Recommendations slide (if any)
+  if (config.includeRecommendations && report.recommendations && report.recommendations.length > 0) {
+    const recSlide = pptx.addSlide({ masterName: 'GATTACA_MASTER' })
+    recSlide.addText('Recomendaciones', {
+      x: 0.5,
+      y: 0.7,
+      w: 9,
+      h: 0.5,
+      fontSize: 24,
+      bold: true,
+      color: '059669',
+    })
+
+    const recsText = report.recommendations
+      .slice(0, 10) // Limit to 10
+      .map((r, i) => `${i + 1}. ${r}`)
+      .join('\n\n')
+    recSlide.addText(recsText, {
+      x: 0.5,
+      y: 1.3,
+      w: 9,
+      h: 3.8,
+      fontSize: 12,
+      color: '374151',
+      valign: 'top',
+    })
+  }
+
+  // Generate PPTX file
+  const pptxBuffer = await pptx.write({ outputType: 'arraybuffer' }) as ArrayBuffer
+
+  return new Response(pptxBuffer, {
+    headers: {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'Content-Disposition': `attachment; filename="${report.projectName}-report.pptx"`,
     },
-    { status: 501 }
-  )
+  })
+}
+
+/**
+ * Strip markdown formatting for plain text display
+ */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/#{1,6}\s+/g, '') // headers
+    .replace(/\*\*([^*]+)\*\*/g, '$1') // bold
+    .replace(/\*([^*]+)\*/g, '$1') // italic
+    .replace(/__([^_]+)__/g, '$1') // bold alt
+    .replace(/_([^_]+)_/g, '$1') // italic alt
+    .replace(/`([^`]+)`/g, '$1') // code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links
+    .replace(/^[-*+]\s+/gm, '• ') // bullet points
+    .replace(/^\d+\.\s+/gm, (match) => match) // keep numbered lists
+    .replace(/---+/g, '') // horizontal rules
+    .replace(/\n{3,}/g, '\n\n') // multiple newlines
 }
 
 /**
