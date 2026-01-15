@@ -5,6 +5,7 @@ import { getScraperTemplate } from '@/lib/scraperTemplates';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
 
 const APIFY_TOKEN = process.env.APIFY_TOKEN;
 
