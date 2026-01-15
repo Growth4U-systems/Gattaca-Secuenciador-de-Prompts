@@ -83,6 +83,7 @@ interface LLMResponse {
   usage: {
     promptTokens: number
     completionTokens: number
+    cost?: number // Costo real de OpenRouter (si está disponible)
   }
   model: string
   // Campos opcionales para Deep Research
@@ -559,13 +560,18 @@ async function callOpenRouter(
   // Log full usage data for debugging (OpenRouter includes cost)
   console.log(`[OpenRouter] Usage data:`, JSON.stringify(data.usage))
 
+  // OpenRouter devuelve el costo real en data.usage.cost (o data.usage.total_cost)
+  const openRouterCost = data.usage?.cost ?? data.usage?.total_cost ?? null
+  if (openRouterCost !== null) {
+    console.log(`[OpenRouter] Real cost from API: $${openRouterCost}`)
+  }
+
   return {
     text,
     usage: {
       promptTokens: data.usage?.prompt_tokens || 0,
       completionTokens: data.usage?.completion_tokens || Math.ceil(text.length / 4),
-      // OpenRouter returns cost directly in USD
-      cost: data.usage?.cost !== undefined ? data.usage.cost : null,
+      cost: openRouterCost, // Costo real de OpenRouter en USD
     },
     model: openRouterModel,
   }
@@ -1491,10 +1497,19 @@ serve(async (req) => {
         'default': { input: 1.00, output: 5.00 },
       }
 
-      const pricing = MODEL_PRICING[modelUsed] || MODEL_PRICING['default']
-      const inputCost = (inputTokensFinal / 1_000_000) * pricing.input
-      const outputCost = (outputTokensFinal / 1_000_000) * pricing.output
-      const totalCost = inputCost + outputCost
+      // Usar costo real de OpenRouter si está disponible, sino calcular manualmente
+      let totalCost: number
+      if (usage.cost !== undefined && usage.cost !== null) {
+        totalCost = usage.cost
+        console.log(`[Cost Log] Using real OpenRouter cost: $${totalCost}`)
+      } else {
+        // Fallback: calcular manualmente si OpenRouter no devuelve el costo
+        const pricing = MODEL_PRICING[modelUsed] || MODEL_PRICING['default']
+        const inputCost = (inputTokensFinal / 1_000_000) * pricing.input
+        const outputCost = (outputTokensFinal / 1_000_000) * pricing.output
+        totalCost = inputCost + outputCost
+        console.log(`[Cost Log] Calculated cost (no API cost): $${totalCost}`)
+      }
 
       // Get project_id and agency_id from campaign
       const projectId = campaign.project_id || project?.id

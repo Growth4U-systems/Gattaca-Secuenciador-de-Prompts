@@ -132,11 +132,112 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
     // Blockquotes
     html = html.replace(/^&gt; (.+)$/gm, '<blockquote class="border-l-4 border-blue-500 pl-4 py-2 my-4 bg-blue-50 text-gray-700 italic">$1</blockquote>')
 
-    // Unordered lists
-    html = html.replace(/^[\-\*] (.+)$/gm, '<li class="ml-4 list-disc list-inside text-gray-700">$1</li>')
+    // Process lists with proper nesting support
+    // This handles both ordered (1. 2. 3.) and unordered (- * ) lists with indentation
+    const processLists = (text: string): string => {
+      const lines = text.split('\n')
+      const result: string[] = []
+      let i = 0
 
-    // Ordered lists
-    html = html.replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal list-inside text-gray-700">$1</li>')
+      while (i < lines.length) {
+        const line = lines[i]
+
+        // Check if this line starts a list (unordered: - or *, ordered: 1. 2. etc)
+        const unorderedMatch = line.match(/^(\s*)([-*])\s+(.+)$/)
+        const orderedMatch = line.match(/^(\s*)(\d+)\.\s+(.+)$/)
+
+        if (unorderedMatch || orderedMatch) {
+          // Start collecting list items
+          const listItems: { indent: number; content: string; type: 'ul' | 'ol' }[] = []
+
+          while (i < lines.length) {
+            const currentLine = lines[i]
+            const ulMatch = currentLine.match(/^(\s*)([-*])\s+(.+)$/)
+            const olMatch = currentLine.match(/^(\s*)(\d+)\.\s+(.+)$/)
+
+            if (ulMatch) {
+              const indent = ulMatch[1].length
+              listItems.push({ indent, content: ulMatch[3], type: 'ul' })
+              i++
+            } else if (olMatch) {
+              const indent = olMatch[1].length
+              listItems.push({ indent, content: olMatch[3], type: 'ol' })
+              i++
+            } else if (currentLine.trim() === '') {
+              // Empty line might end the list or continue it
+              if (i + 1 < lines.length) {
+                const nextLine = lines[i + 1]
+                if (nextLine.match(/^(\s*)([-*]|\d+\.)\s+/)) {
+                  i++ // Skip empty line, continue list
+                  continue
+                }
+              }
+              break
+            } else {
+              break
+            }
+          }
+
+          // Build nested list HTML
+          if (listItems.length > 0) {
+            const buildNestedList = (items: typeof listItems, startIdx: number, baseIndent: number): { html: string; endIdx: number } => {
+              if (startIdx >= items.length) return { html: '', endIdx: startIdx }
+
+              const listType = items[startIdx].type
+              const listClass = listType === 'ul'
+                ? 'list-disc pl-5 my-2 space-y-1'
+                : 'list-decimal pl-5 my-2 space-y-1'
+
+              let html = `<${listType} class="${listClass}">`
+              let idx = startIdx
+
+              while (idx < items.length) {
+                const item = items[idx]
+
+                // Check if this item is at the same or lower level
+                if (item.indent < baseIndent) {
+                  break
+                }
+
+                if (item.indent === baseIndent) {
+                  html += `<li class="text-gray-700">${item.content}`
+                  idx++
+
+                  // Check for nested items
+                  if (idx < items.length && items[idx].indent > baseIndent) {
+                    const nested = buildNestedList(items, idx, items[idx].indent)
+                    html += nested.html
+                    idx = nested.endIdx
+                  }
+
+                  html += '</li>'
+                } else if (item.indent > baseIndent) {
+                  // This shouldn't happen normally, but handle nested lists
+                  const nested = buildNestedList(items, idx, item.indent)
+                  html += nested.html
+                  idx = nested.endIdx
+                } else {
+                  break
+                }
+              }
+
+              html += `</${listType}>`
+              return { html, endIdx: idx }
+            }
+
+            const { html: listHtml } = buildNestedList(listItems, 0, listItems[0].indent)
+            result.push(listHtml)
+          }
+        } else {
+          result.push(line)
+          i++
+        }
+      }
+
+      return result.join('\n')
+    }
+
+    html = processLists(html)
 
     // Tables - capture table rows including the last one without trailing newline
     const tableRegex = /(\|.+\|(?:[\r\n]+|$))+/g
