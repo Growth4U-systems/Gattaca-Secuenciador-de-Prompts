@@ -10,8 +10,9 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
-    const jobId = request.nextUrl.searchParams.get('jobId');
-    const batchId = request.nextUrl.searchParams.get('batchId');
+    // Support both job_id (from frontend) and jobId for backwards compatibility
+    const jobId = request.nextUrl.searchParams.get('job_id') || request.nextUrl.searchParams.get('jobId');
+    const batchId = request.nextUrl.searchParams.get('batch_id') || request.nextUrl.searchParams.get('batchId');
 
     if (!jobId && !batchId) {
       return NextResponse.json({ error: 'Must provide jobId or batchId' }, { status: 400 });
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Job not found' }, { status: 404 });
       }
 
-      return NextResponse.json<ScraperStatusResponse>({ job });
+      return NextResponse.json({ success: true, job });
     }
 
     // Get batch status with all jobs
@@ -62,7 +63,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to fetch jobs' }, { status: 500 });
       }
 
-      return NextResponse.json<ScraperStatusResponse>({
+      return NextResponse.json({
+        success: true,
         batch: {
           ...batch,
           jobs: jobs || [],

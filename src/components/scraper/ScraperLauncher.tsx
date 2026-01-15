@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Search, Loader2, Check, AlertCircle, Globe, MessageSquare, Star, Briefcase, Play, Tag, ArrowLeft } from 'lucide-react'
+import { X, Search, Loader2, Check, AlertCircle, Globe, MessageSquare, Star, Briefcase, Play, Tag, ArrowLeft, HelpCircle, Info } from 'lucide-react'
 import { ScraperType, ScraperTemplate } from '@/types/scraper.types'
 import { SCRAPER_TEMPLATES } from '@/lib/scraperTemplates'
 import { DocCategory } from '@/types/database.types'
+import { SCRAPER_FIELD_SCHEMAS, FieldSchema, validateField, validateAllFields } from '@/lib/scraperFieldSchemas'
 
 // Top 5 scrapers for Phase 1
 const ENABLED_SCRAPERS: ScraperType[] = [
@@ -51,6 +52,8 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
   const [jobStatus, setJobStatus] = useState<string>('pending')
   const [error, setError] = useState<string | null>(null)
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [showExamples, setShowExamples] = useState<string | null>(null)
 
   // Get selected template
   const template = selectedScraper ? SCRAPER_TEMPLATES[selectedScraper] : null
@@ -136,8 +139,19 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
   const handleSubmit = async () => {
     if (!selectedScraper || !targetName) return
 
+    // Validate all fields before submission
+    const validation = validateAllFields(selectedScraper, inputConfig)
+    if (!validation.valid) {
+      setFieldErrors(validation.errors)
+      // Show first error
+      const firstError = Object.values(validation.errors)[0]
+      setError(`Por favor corrige los errores: ${firstError}`)
+      return
+    }
+
     setCurrentStep('running')
     setError(null)
+    setFieldErrors({})
 
     try {
       const response = await fetch('/api/scraper/start', {
@@ -187,193 +201,363 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
     setTags(tags.filter(t => t !== tagToRemove))
   }
 
-  // Get input label in Spanish
-  const getInputLabel = (key: string): string => {
-    const labels: Record<string, string> = {
-      // URLs and profiles
-      url: 'URL del sitio web',
-      directUrls: 'URLs de perfiles de Instagram',
-      profiles: 'Perfiles de TikTok (uno por línea)',
-      company_name: 'Nombre o URL de la empresa en LinkedIn',
-      companyDomain: 'Dominio de la empresa (ej: revolut.com)',
-      postIds: 'IDs o URLs de posts de LinkedIn',
-      postURLs: 'URLs de videos de TikTok',
-      startUrls: 'URLs de la app (App Store o Play Store)',
-      youtube_channels: 'Canales de YouTube (formato @usuario)',
-      videoUrls: 'URLs de videos de YouTube',
-      product: 'Nombre del producto en G2',
-      // Limits
-      resultsLimit: 'Límite de resultados',
-      resultsPerPage: 'Resultados por página',
-      limit: 'Límite de resultados',
-      count: 'Cantidad de reviews',
-      max_reviews: 'Máximo de reviews',
-      maxItems: 'Máximo de items',
-      commentsPerPost: 'Comentarios por post',
-      // Filters
-      resultsType: 'Tipo de resultados',
-      languages: 'Idiomas de las reviews',
-      stars: 'Filtrar por estrellas',
-      date: 'Filtrar por fecha',
-      country: 'País',
-      language: 'Idioma',
-      sortOrder: 'Orden',
-      End_date: 'Fecha límite',
-      // Others
-      includeComments: 'Incluir comentarios',
-    }
-    return labels[key] || key
+  // Get field schema for current scraper
+  const getFieldSchema = (key: string): FieldSchema | undefined => {
+    if (!selectedScraper) return undefined
+    return SCRAPER_FIELD_SCHEMAS[selectedScraper]?.fields[key]
   }
 
-  // Get placeholder for field
-  const getPlaceholder = (key: string): string => {
-    const placeholders: Record<string, string> = {
-      directUrls: 'https://instagram.com/usuario',
-      profiles: '@usuario1\n@usuario2',
-      company_name: 'google o linkedin.com/company/google',
-      companyDomain: 'revolut.com',
-      postIds: 'https://linkedin.com/posts/...',
-      postURLs: 'https://tiktok.com/@user/video/123',
-      startUrls: 'https://apps.apple.com/app/...',
-      youtube_channels: '@MrBeast\n@PewDiePie',
-      videoUrls: 'https://youtube.com/watch?v=...',
-      product: 'slack',
-      languages: 'es, en',
+  // Validate a single field and update errors
+  const handleFieldChange = (key: string, value: unknown) => {
+    setInputConfig({ ...inputConfig, [key]: value })
+
+    // Validate field
+    if (selectedScraper) {
+      const result = validateField(selectedScraper, key, value)
+      if (!result.valid && result.error) {
+        setFieldErrors(prev => ({ ...prev, [key]: result.error! }))
+      } else {
+        setFieldErrors(prev => {
+          const newErrors = { ...prev }
+          delete newErrors[key]
+          return newErrors
+        })
+      }
     }
-    return placeholders[key] || `Ingresa ${getInputLabel(key).toLowerCase()}`
   }
 
-  // Render input field based on type
+  // Render examples tooltip
+  const renderExamples = (fieldSchema: FieldSchema) => {
+    if (!fieldSchema.examples || fieldSchema.examples.length === 0) return null
+
+    return (
+      <div className="relative inline-block ml-2">
+        <button
+          type="button"
+          onClick={() => setShowExamples(showExamples === fieldSchema.key ? null : fieldSchema.key)}
+          className="text-gray-400 hover:text-blue-500 transition-colors"
+          title="Ver ejemplos"
+        >
+          <HelpCircle size={16} />
+        </button>
+        {showExamples === fieldSchema.key && (
+          <div className="absolute left-0 top-6 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[280px]">
+            <div className="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700">
+              <Info size={14} className="text-blue-500" />
+              Ejemplos v\u00e1lidos:
+            </div>
+            <ul className="space-y-1">
+              {fieldSchema.examples.map((example, idx) => (
+                <li key={idx}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleFieldChange(fieldSchema.key, example)
+                      setShowExamples(null)
+                    }}
+                    className="text-xs text-gray-600 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded w-full text-left font-mono truncate"
+                  >
+                    {example}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Render input field based on schema type
   const renderInputField = (key: string, isRequired: boolean) => {
+    const fieldSchema = getFieldSchema(key)
     const defaultValue = template?.inputSchema.defaults[key]
+    const error = fieldErrors[key]
 
-    // Array fields that need textarea (multiple URLs/profiles)
-    const multiLineArrayFields = ['profiles', 'directUrls', 'postURLs', 'postIds', 'startUrls',
-      'youtube_channels', 'videoUrls', 'channelUrls', 'companyUrls']
-
-    // Array fields that are comma-separated (like languages)
-    const commaSeparatedArrayFields = ['languages', 'stars']
-
-    // Determine input type
-    if (key.toLowerCase().includes('include') || typeof defaultValue === 'boolean') {
-      return (
-        <label key={key} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
-          <input
-            type="checkbox"
-            checked={inputConfig[key] as boolean ?? defaultValue ?? false}
-            onChange={(e) => setInputConfig({ ...inputConfig, [key]: e.target.checked })}
-            className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-          />
-          <span className="text-sm text-gray-700">{getInputLabel(key)}</span>
-        </label>
-      )
-    }
-
-    // Multi-line array fields (URLs, profiles)
-    if (multiLineArrayFields.includes(key)) {
-      const currentValue = inputConfig[key]
-      const displayValue = Array.isArray(currentValue)
-        ? currentValue.join('\n')
-        : (typeof currentValue === 'string' ? currentValue : '')
-      return (
-        <div key={key}>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            {getInputLabel(key)} {isRequired && <span className="text-red-500">*</span>}
+    // If no schema, fall back to basic rendering based on default value type
+    if (!fieldSchema) {
+      // Boolean
+      if (typeof defaultValue === 'boolean' || key.toLowerCase().includes('include')) {
+        return (
+          <label key={key} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
+            <input
+              type="checkbox"
+              checked={inputConfig[key] as boolean ?? defaultValue ?? false}
+              onChange={(e) => handleFieldChange(key, e.target.checked)}
+              className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700">{key}</span>
           </label>
-          <textarea
-            value={displayValue}
-            onChange={(e) => setInputConfig({
-              ...inputConfig,
-              [key]: e.target.value.split('\n').map(s => s.trim()).filter(Boolean)
-            })}
-            rows={3}
-            placeholder={getPlaceholder(key)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
-          />
-        </div>
-      )
-    }
+        )
+      }
 
-    // Comma-separated array fields (languages, stars)
-    if (commaSeparatedArrayFields.includes(key)) {
-      const currentValue = inputConfig[key] as string[] | undefined
-      const defaultArrayValue = defaultValue as string[] | undefined
-      const displayValue = Array.isArray(currentValue)
-        ? currentValue.join(', ')
-        : (Array.isArray(defaultArrayValue) ? defaultArrayValue.join(', ') : '')
+      // Number
+      if (typeof defaultValue === 'number') {
+        return (
+          <div key={key}>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{key}</label>
+            <input
+              type="number"
+              value={inputConfig[key] as number ?? defaultValue}
+              onChange={(e) => handleFieldChange(key, parseInt(e.target.value) || 0)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900"
+            />
+          </div>
+        )
+      }
+
+      // Default text
       return (
         <div key={key}>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            {getInputLabel(key)}
+            {key} {isRequired && <span className="text-red-500">*</span>}
           </label>
           <input
             type="text"
-            value={displayValue}
-            onChange={(e) => setInputConfig({
-              ...inputConfig,
-              [key]: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-            })}
-            placeholder={getPlaceholder(key)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
-          />
-          <p className="text-xs text-gray-500 mt-1">Separados por coma</p>
-        </div>
-      )
-    }
-
-    // Number inputs
-    if (typeof defaultValue === 'number') {
-      return (
-        <div key={key}>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            {getInputLabel(key)}
-          </label>
-          <input
-            type="number"
-            value={inputConfig[key] as number ?? defaultValue}
-            onChange={(e) => setInputConfig({ ...inputConfig, [key]: parseInt(e.target.value) || 0 })}
-            min={1}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+            value={inputConfig[key] as string || ''}
+            onChange={(e) => handleFieldChange(key, e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900"
           />
         </div>
       )
     }
 
-    // Select for specific fields
-    if (key === 'resultsType') {
-      return (
-        <div key={key}>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            {getInputLabel(key)}
-          </label>
-          <select
-            value={inputConfig[key] as string ?? defaultValue ?? 'posts'}
-            onChange={(e) => setInputConfig({ ...inputConfig, [key]: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-          >
-            <option value="posts">Posts</option>
-            <option value="comments">Comentarios</option>
-            <option value="reels">Reels</option>
-          </select>
-        </div>
-      )
-    }
+    // Render based on field schema type
+    const baseInputClasses = `w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 ${
+      error ? 'border-red-300 bg-red-50' : 'border-gray-200'
+    }`
 
-    // Default text input
-    return (
-      <div key={key}>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-          {getInputLabel(key)} {isRequired && <span className="text-red-500">*</span>}
-        </label>
-        <input
-          type="text"
-          value={inputConfig[key] as string || ''}
-          onChange={(e) => setInputConfig({ ...inputConfig, [key]: e.target.value })}
-          placeholder={getPlaceholder(key)}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
-        />
-      </div>
-    )
+    switch (fieldSchema.type) {
+      case 'boolean':
+        return (
+          <label key={key} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
+            <input
+              type="checkbox"
+              checked={inputConfig[key] as boolean ?? fieldSchema.defaultValue ?? false}
+              onChange={(e) => handleFieldChange(key, e.target.checked)}
+              className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+            />
+            <div>
+              <span className="text-sm text-gray-700 font-medium">{fieldSchema.label}</span>
+              {fieldSchema.description && (
+                <p className="text-xs text-gray-500">{fieldSchema.description}</p>
+              )}
+            </div>
+          </label>
+        )
+
+      case 'select':
+        return (
+          <div key={key}>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              {fieldSchema.label}
+              {fieldSchema.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            {fieldSchema.description && (
+              <p className="text-xs text-gray-500 mb-2">{fieldSchema.description}</p>
+            )}
+            <select
+              value={inputConfig[key] as string ?? fieldSchema.defaultValue ?? ''}
+              onChange={(e) => handleFieldChange(key, e.target.value)}
+              className={`${baseInputClasses} bg-white`}
+            >
+              <option value="">Seleccionar...</option>
+              {fieldSchema.options?.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}{opt.description ? ` - ${opt.description}` : ''}
+                </option>
+              ))}
+            </select>
+            {fieldSchema.helpText && (
+              <p className="text-xs text-gray-500 mt-1">{fieldSchema.helpText}</p>
+            )}
+            {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+          </div>
+        )
+
+      case 'multi-select':
+        const selectedValues = (inputConfig[key] as string[]) ?? (fieldSchema.defaultValue as string[]) ?? []
+        return (
+          <div key={key}>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              {fieldSchema.label}
+              {fieldSchema.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            {fieldSchema.description && (
+              <p className="text-xs text-gray-500 mb-2">{fieldSchema.description}</p>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              {fieldSchema.options?.map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex items-center gap-2 p-2 border rounded-lg cursor-pointer transition-colors ${
+                    selectedValues.includes(opt.value)
+                      ? 'border-blue-300 bg-blue-50'
+                      : 'border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedValues.includes(opt.value)}
+                    onChange={(e) => {
+                      const newValues = e.target.checked
+                        ? [...selectedValues, opt.value]
+                        : selectedValues.filter(v => v !== opt.value)
+                      handleFieldChange(key, newValues)
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm text-gray-700">{opt.label}</span>
+                    {opt.description && (
+                      <p className="text-xs text-gray-400 truncate">{opt.description}</p>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+            {fieldSchema.helpText && (
+              <p className="text-xs text-gray-500 mt-1">{fieldSchema.helpText}</p>
+            )}
+            {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+          </div>
+        )
+
+      case 'number':
+        return (
+          <div key={key}>
+            <div className="flex items-center mb-1.5">
+              <label className="text-sm font-medium text-gray-700">
+                {fieldSchema.label}
+                {fieldSchema.required && <span className="text-red-500 ml-1">*</span>}
+              </label>
+            </div>
+            {fieldSchema.description && (
+              <p className="text-xs text-gray-500 mb-2">{fieldSchema.description}</p>
+            )}
+            <input
+              type="number"
+              value={inputConfig[key] as number ?? fieldSchema.defaultValue ?? ''}
+              onChange={(e) => handleFieldChange(key, parseInt(e.target.value) || 0)}
+              min={fieldSchema.validation?.min}
+              max={fieldSchema.validation?.max}
+              className={baseInputClasses}
+            />
+            {fieldSchema.helpText && (
+              <p className="text-xs text-gray-500 mt-1">{fieldSchema.helpText}</p>
+            )}
+            {fieldSchema.validation && (fieldSchema.validation.min !== undefined || fieldSchema.validation.max !== undefined) && (
+              <p className="text-xs text-gray-400 mt-1">
+                Rango: {fieldSchema.validation.min ?? 0} - {fieldSchema.validation.max ?? '\u221e'}
+              </p>
+            )}
+            {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+          </div>
+        )
+
+      case 'url':
+      case 'text':
+        return (
+          <div key={key}>
+            <div className="flex items-center mb-1.5">
+              <label className="text-sm font-medium text-gray-700">
+                {fieldSchema.label}
+                {fieldSchema.required && <span className="text-red-500 ml-1">*</span>}
+              </label>
+              {renderExamples(fieldSchema)}
+            </div>
+            {fieldSchema.description && (
+              <p className="text-xs text-gray-500 mb-2">{fieldSchema.description}</p>
+            )}
+            <input
+              type={fieldSchema.type === 'url' ? 'url' : 'text'}
+              value={inputConfig[key] as string || ''}
+              onChange={(e) => handleFieldChange(key, e.target.value)}
+              placeholder={fieldSchema.placeholder}
+              className={baseInputClasses}
+            />
+            {fieldSchema.helpText && (
+              <p className="text-xs text-gray-500 mt-1">{fieldSchema.helpText}</p>
+            )}
+            {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+          </div>
+        )
+
+      case 'url-array':
+      case 'text-array':
+        const arrayValue = inputConfig[key]
+        const displayValue = Array.isArray(arrayValue)
+          ? arrayValue.join('\n')
+          : (typeof arrayValue === 'string' ? arrayValue : '')
+        return (
+          <div key={key}>
+            <div className="flex items-center mb-1.5">
+              <label className="text-sm font-medium text-gray-700">
+                {fieldSchema.label}
+                {fieldSchema.required && <span className="text-red-500 ml-1">*</span>}
+              </label>
+              {renderExamples(fieldSchema)}
+            </div>
+            {fieldSchema.description && (
+              <p className="text-xs text-gray-500 mb-2">{fieldSchema.description}</p>
+            )}
+            <textarea
+              value={displayValue}
+              onChange={(e) => {
+                const values = e.target.value.split('\n').map(s => s.trim()).filter(Boolean)
+                handleFieldChange(key, values.length > 0 ? values : e.target.value)
+              }}
+              rows={3}
+              placeholder={fieldSchema.placeholder}
+              className={baseInputClasses}
+            />
+            {fieldSchema.helpText && (
+              <p className="text-xs text-gray-500 mt-1">{fieldSchema.helpText}</p>
+            )}
+            {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+          </div>
+        )
+
+      case 'date':
+        return (
+          <div key={key}>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              {fieldSchema.label}
+              {fieldSchema.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            {fieldSchema.description && (
+              <p className="text-xs text-gray-500 mb-2">{fieldSchema.description}</p>
+            )}
+            <input
+              type="date"
+              value={inputConfig[key] as string || ''}
+              onChange={(e) => handleFieldChange(key, e.target.value)}
+              className={baseInputClasses}
+            />
+            {fieldSchema.helpText && (
+              <p className="text-xs text-gray-500 mt-1">{fieldSchema.helpText}</p>
+            )}
+            {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+          </div>
+        )
+
+      default:
+        return (
+          <div key={key}>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              {fieldSchema.label}
+              {fieldSchema.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <input
+              type="text"
+              value={inputConfig[key] as string || ''}
+              onChange={(e) => handleFieldChange(key, e.target.value)}
+              placeholder={fieldSchema.placeholder}
+              className={baseInputClasses}
+            />
+          </div>
+        )
+    }
   }
 
   return (
