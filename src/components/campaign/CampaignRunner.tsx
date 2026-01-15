@@ -2518,10 +2518,18 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
 
               {/* Error message */}
               <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <p className="text-sm text-red-700 break-words">
-                  {retryDialog.error.substring(0, 300)}
-                  {retryDialog.error.length > 300 && '...'}
-                </p>
+                {retryDialog.error.includes('<!DOCTYPE') || retryDialog.error.includes('<html') ? (
+                  <p className="text-sm text-red-700">
+                    OpenRouter devolvió una respuesta inválida (HTML en lugar de JSON).
+                    Esto suele ser un error temporal del servidor.
+                    <strong className="block mt-2">Verifica si el paso se completó antes de reintentar.</strong>
+                  </p>
+                ) : (
+                  <p className="text-sm text-red-700 break-words">
+                    {retryDialog.error.substring(0, 300)}
+                    {retryDialog.error.length > 300 && '...'}
+                  </p>
+                )}
               </div>
 
               {/* Original error (collapsible for debugging) */}
