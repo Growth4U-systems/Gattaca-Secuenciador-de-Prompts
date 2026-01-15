@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2, Building2, Table2 } from 'lucide-react'
+import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2, Building2, Table2, Globe } from 'lucide-react'
 import { useToast, useModal } from '@/components/ui'
 import { useProject } from '@/hooks/useProjects'
 import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
 import DocumentUpload from '@/components/documents/DocumentUpload'
 import DocumentBulkUpload from '@/components/documents/DocumentBulkUpload'
 import DocumentList from '@/components/documents/DocumentList'
+import ScraperLauncher from '@/components/scraper/ScraperLauncher'
 import TokenMonitor from '@/components/TokenMonitor'
 import FlowSetup from '@/components/flow/FlowSetup'
 import CampaignRunner from '@/components/campaign/CampaignRunner'
@@ -467,6 +468,7 @@ function DocumentsTab({
   const [viewingDoc, setViewingDoc] = useState<any | null>(null)
   const [showGuide, setShowGuide] = useState(true)
   const [campaigns, setCampaigns] = useState<Array<{ id: string; ecp_name: string }>>([])
+  const [showScraperLauncher, setShowScraperLauncher] = useState(false)
 
   // Load campaigns for assignment
   useEffect(() => {
@@ -562,6 +564,13 @@ function DocumentsTab({
           <p className="text-sm text-gray-500 mt-1">Gestiona los documentos que alimentan tus prompts</p>
         </div>
         <div className="flex gap-3">
+          <button
+            onClick={() => setShowScraperLauncher(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all shadow-sm"
+          >
+            <Globe size={18} />
+            <span>Importar datos</span>
+          </button>
           <DocumentUpload projectId={projectId} onUploadComplete={onReload} />
           <DocumentBulkUpload projectId={projectId} onUploadComplete={onReload} />
         </div>
@@ -643,6 +652,18 @@ function DocumentsTab({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Scraper Launcher Modal */}
+      {showScraperLauncher && (
+        <ScraperLauncher
+          projectId={projectId}
+          onComplete={() => {
+            setShowScraperLauncher(false)
+            onReload()
+          }}
+          onClose={() => setShowScraperLauncher(false)}
+        />
       )}
     </div>
   )
