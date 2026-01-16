@@ -375,6 +375,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
 
     setDeepSearchingForums(true)
     try {
+      console.log('Deep search: starting request...')
       const response = await fetch('/api/niche-finder/deep-search-forums', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -387,12 +388,24 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
         }),
       })
 
+      console.log('Deep search: response status', response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Deep search: HTTP error', response.status, errorText)
+        toast.error('Error', `Error HTTP ${response.status}`)
+        return
+      }
+
       const data = await response.json()
+      console.log('Deep search: data received', data)
+
       if (data.success && data.forums) {
         // Add discovered forums to AI suggestions for approval
         const newForums = data.forums.filter(
           (f: { domain: string }) => !suggestedThematicForums.has(f.domain) && !sources.general_forums.includes(f.domain)
         )
+        console.log('Deep search: new forums', newForums.length)
         if (newForums.length > 0) {
           setAiSuggestedForums(prev => [...prev, ...newForums])
           toast.success('Foros encontrados', `Se encontraron ${newForums.length} foros relevantes. Revisa las sugerencias.`)
@@ -400,6 +413,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
           toast.info('Sin nuevos foros', 'No se encontraron foros adicionales')
         }
       } else {
+        console.error('Deep search: API returned error', data.error)
         toast.error('Error', data.error || 'No se pudieron buscar foros')
       }
     } catch (error) {
@@ -502,6 +516,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
 
     setSuggestingForums(true)
     try {
+      console.log('Suggest forums: starting request...')
       const response = await fetch('/api/niche-finder/suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -514,11 +529,23 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
         }),
       })
 
+      console.log('Suggest forums: response status', response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Suggest forums: HTTP error', response.status, errorText)
+        toast.error('Error', `Error HTTP ${response.status}`)
+        return
+      }
+
       const data = await response.json()
+      console.log('Suggest forums: data received', data)
+
       if (data.success && data.suggestions) {
         const newForums = data.suggestions.filter(
           (f: {domain: string}) => !approvedForums.includes(f.domain) && !suggestedThematicForums.has(f.domain)
         )
+        console.log('Suggest forums: new forums', newForums.length)
         if (newForums.length > 0) {
           setAiSuggestedForums(prev => [...prev, ...newForums])
           toast.success('Foros sugeridos', `Se encontraron ${newForums.length} foros. Aprueba los que quieras usar.`)
@@ -526,6 +553,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
           toast.warning('Sin sugerencias', 'No se encontraron nuevos foros temáticos')
         }
       } else {
+        console.error('Suggest forums: API returned error', data.error)
         toast.error('Error', data.error || 'No se pudieron obtener sugerencias')
       }
     } catch (error) {
