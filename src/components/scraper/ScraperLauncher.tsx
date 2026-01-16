@@ -96,11 +96,29 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
 
   // Poll for job status - uses /api/scraper/poll which checks Apify status and updates DB
   const startPolling = (jobId: string) => {
+    let errorCount = 0
+    const maxErrors = 3
+
     const interval = setInterval(async () => {
       try {
         // Use /poll endpoint which actively checks Apify status and updates the DB
         const response = await fetch(`/api/scraper/poll?jobId=${jobId}`)
         const data = await response.json()
+
+        // Handle HTTP errors
+        if (!response.ok) {
+          console.error('[polling] HTTP error:', response.status, data.error)
+          errorCount++
+          if (errorCount >= maxErrors) {
+            clearInterval(interval)
+            setError(data.error || `Error del servidor: ${response.status}`)
+            setCurrentStep('error')
+          }
+          return
+        }
+
+        // Reset error count on successful response
+        errorCount = 0
 
         if (data.status) {
           setJobStatus(data.status)
@@ -116,7 +134,13 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
           }
         }
       } catch (err) {
-        console.error('Error polling job status:', err)
+        console.error('[polling] Error:', err)
+        errorCount++
+        if (errorCount >= maxErrors) {
+          clearInterval(interval)
+          setError('Error de conexión al verificar el estado')
+          setCurrentStep('error')
+        }
       }
     }, 5000) // Poll every 5 seconds (Apify runs take time)
 

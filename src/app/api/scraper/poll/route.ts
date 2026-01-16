@@ -124,8 +124,28 @@ async function pollApifyRun(
   }
 
   if (runStatus === 'SUCCEEDED') {
-    // Fetch and save results
-    await fetchAndSaveApifyResults(supabase, job, statusData.data.defaultDatasetId);
+    // Fetch and save results - wrap in try/catch to ensure job is marked complete
+    try {
+      await fetchAndSaveApifyResults(supabase, job, statusData.data.defaultDatasetId);
+    } catch (saveError) {
+      console.error('[scraper/poll] Error saving results, marking job as failed:', saveError);
+      // Update job as failed if we couldn't save the results
+      await supabase
+        .from('scraper_jobs')
+        .update({
+          status: 'failed',
+          error_message: `Error guardando resultados: ${saveError instanceof Error ? saveError.message : 'Unknown'}`,
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', job.id);
+
+      return NextResponse.json<ScraperPollResponse>({
+        status: 'failed',
+        progress_percent: 0,
+        completed: true,
+        error: 'Error al guardar los resultados del scraper',
+      });
+    }
 
     return NextResponse.json<ScraperPollResponse>({
       status: 'completed',
