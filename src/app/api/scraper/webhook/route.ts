@@ -129,6 +129,33 @@ async function handleRunFailed(
 }
 
 // ============================================
+// SOURCE NAMES FOR DOCUMENT NAMING
+// ============================================
+
+const SOURCE_NAMES: Record<string, string> = {
+  website: 'Website Content',
+  trustpilot_reviews: 'Trustpilot Reviews',
+  instagram_posts_comments: 'Instagram Posts & Comments',
+  tiktok_posts: 'TikTok Posts',
+  tiktok_comments: 'TikTok Comments',
+  linkedin_company_posts: 'LinkedIn Posts',
+  linkedin_comments: 'LinkedIn Comments',
+  linkedin_company_insights: 'LinkedIn Company Info',
+  facebook_posts: 'Facebook Posts',
+  facebook_comments: 'Facebook Comments',
+  youtube_channel_videos: 'YouTube Videos',
+  youtube_comments: 'YouTube Comments',
+  youtube_transcripts: 'YouTube Transcripts',
+  g2_reviews: 'G2 Reviews',
+  capterra_reviews: 'Capterra Reviews',
+  appstore_reviews: 'App Store Reviews',
+  playstore_reviews: 'Play Store Reviews',
+  google_maps_reviews: 'Google Maps Reviews',
+  seo_keywords: 'SEO Keywords',
+  news_bing: 'News Articles',
+};
+
+// ============================================
 // FETCH AND SAVE RESULTS
 // ============================================
 
@@ -189,44 +216,60 @@ async function fetchAndSaveResults(
   // Get template for field extraction
   const template = getScraperTemplate(job.scraper_type as Parameters<typeof getScraperTemplate>[0]);
 
-  // Convert items to documents
-  const documents = allItems.map((item, index) => {
-    const textContent = extractTextContent(item, template?.outputFields || []);
+  // ============================================
+  // CREATE ONE CONSOLIDATED DOCUMENT
+  // ============================================
 
-    return {
-      project_id: job.project_id,
-      name: generateDocumentName(job.scraper_type, item, index),
-      content: textContent,
-      category: job.target_category || 'research',
-      source_type: 'scraper',
-      source_job_id: job.id,
-      source_url: extractUrl(item),
-      source_metadata: {
-        scraper_type: job.scraper_type,
-        scraped_at: new Date().toISOString(),
-        item_index: index,
-        total_items: allItems.length,
-        raw_data: item,
-      },
-    };
+  // Generate consolidated content from all items
+  const consolidatedContent = allItems.map((item, index) => {
+    const textContent = extractTextContent(item, template?.outputFields || []);
+    return `## Item ${index + 1}\n\n${textContent}`;
+  }).join('\n\n---\n\n');
+
+  // Get target name from job or generate from first item
+  const targetName = job.target_name ||
+    (allItems[0]?.author as string) ||
+    (allItems[0]?.profileUrl as string)?.split('/').pop() ||
+    'Unknown';
+
+  // Generate document name: "Trustpilot Reviews - Revolut"
+  const sourceName = SOURCE_NAMES[job.scraper_type] || job.scraper_type.replace(/_/g, ' ');
+  const documentName = `${sourceName} - ${targetName}`;
+
+  // Generate tags from job metadata or auto-generate
+  const providerMetadata = job.provider_metadata as Record<string, unknown> | null;
+  const pendingTags = (providerMetadata?.pending_tags as string[]) || [];
+  const tags = pendingTags.length > 0 ? pendingTags : generateAutoTags(job.scraper_type, targetName);
+
+  // Generate description/brief
+  const description = `${allItems.length} ${sourceName.toLowerCase()} de ${targetName}, extraídos el ${new Date().toLocaleDateString('es-ES')}. Incluye información como ratings, fechas, y contenido textual.`;
+
+  // Insert ONE consolidated document
+  const { error: docError } = await supabase.from('knowledge_base_docs').insert({
+    project_id: job.project_id,
+    name: documentName,
+    content: consolidatedContent,
+    description: description,
+    category: job.target_category || 'research',
+    tags: tags,
+    source_type: 'scraper',
+    source_job_id: job.id,
+    source_url: extractUrl(allItems[0]),
+    source_metadata: {
+      scraper_type: job.scraper_type,
+      scraped_at: new Date().toISOString(),
+      total_items: allItems.length,
+      target_name: targetName,
+      // Store raw data as preview (first 10 items)
+      raw_preview: allItems.slice(0, 10),
+    },
   });
 
-  // Insert documents in batches
-  const batchSize = 100;
-  let insertedCount = 0;
-
-  for (let i = 0; i < documents.length; i += batchSize) {
-    const batch = documents.slice(i, i + batchSize);
-    const { error } = await supabase.from('knowledge_base_docs').insert(batch);
-
-    if (error) {
-      console.error(`[webhook] Error inserting batch ${i / batchSize}:`, error);
-    } else {
-      insertedCount += batch.length;
-    }
+  if (docError) {
+    console.error('[webhook] Error inserting consolidated document:', docError);
+  } else {
+    console.log(`[webhook] Created consolidated document "${documentName}" with ${allItems.length} items for job ${job.id}`);
   }
-
-  console.log(`[webhook] Inserted ${insertedCount} documents for job ${job.id}`);
 
   // Update job as completed
   await supabase
@@ -238,6 +281,22 @@ async function fetchAndSaveResults(
       completed_at: new Date().toISOString(),
     })
     .eq('id', job.id);
+}
+
+// ============================================
+// GENERATE AUTO TAGS
+// ============================================
+
+function generateAutoTags(scraperType: string, targetName: string): string[] {
+  const today = new Date().toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).replace(/\//g, '-');
+
+  const sourceTag = SOURCE_NAMES[scraperType]?.split(' ')[0] || scraperType;
+
+  return [targetName, sourceTag, today].filter(Boolean);
 }
 
 // ============================================

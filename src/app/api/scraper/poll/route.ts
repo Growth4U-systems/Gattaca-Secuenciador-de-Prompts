@@ -144,6 +144,33 @@ async function pollApifyRun(
 }
 
 // ============================================
+// SOURCE NAMES FOR DOCUMENT NAMING
+// ============================================
+
+const SOURCE_NAMES: Record<string, string> = {
+  website: 'Website Content',
+  trustpilot_reviews: 'Trustpilot Reviews',
+  instagram_posts_comments: 'Instagram Posts & Comments',
+  tiktok_posts: 'TikTok Posts',
+  tiktok_comments: 'TikTok Comments',
+  linkedin_company_posts: 'LinkedIn Posts',
+  linkedin_comments: 'LinkedIn Comments',
+  linkedin_company_insights: 'LinkedIn Company Info',
+  facebook_posts: 'Facebook Posts',
+  facebook_comments: 'Facebook Comments',
+  youtube_channel_videos: 'YouTube Videos',
+  youtube_comments: 'YouTube Comments',
+  youtube_transcripts: 'YouTube Transcripts',
+  g2_reviews: 'G2 Reviews',
+  capterra_reviews: 'Capterra Reviews',
+  appstore_reviews: 'App Store Reviews',
+  playstore_reviews: 'Play Store Reviews',
+  google_maps_reviews: 'Google Maps Reviews',
+  seo_keywords: 'SEO Keywords',
+  news_bing: 'News Articles',
+};
+
+// ============================================
 // FETCH AND SAVE APIFY RESULTS
 // ============================================
 
@@ -186,37 +213,56 @@ async function fetchAndSaveApifyResults(
   // Get template to know which fields to extract
   const template = getScraperTemplate(job.scraper_type as Parameters<typeof getScraperTemplate>[0]);
 
-  // Convert items to documents
-  const documents = items.map((item, index) => {
-    // Extract relevant text content based on scraper type
-    const textContent = extractTextContent(item, template?.outputFields || []);
+  // ============================================
+  // CREATE ONE CONSOLIDATED DOCUMENT
+  // ============================================
 
-    return {
-      project_id: job.project_id,
-      name: generateDocumentName(job.scraper_type, item, index),
-      content: textContent,
-      category: job.target_category || 'research',
-      source_type: 'scraper',
-      source_job_id: job.id,
-      source_url: extractUrl(item),
-      source_metadata: {
-        scraper_type: job.scraper_type,
-        scraped_at: new Date().toISOString(),
-        item_index: index,
-        total_items: items.length,
-        raw_data: item, // Store original data
-      },
-    };
+  // Generate consolidated content from all items
+  const consolidatedContent = items.map((item, index) => {
+    const textContent = extractTextContent(item, template?.outputFields || []);
+    return `## Item ${index + 1}\n\n${textContent}`;
+  }).join('\n\n---\n\n');
+
+  // Get target name from job or generate from first item
+  const targetName = job.target_name ||
+    (items[0]?.author as string) ||
+    (items[0]?.profileUrl as string)?.split('/').pop() ||
+    'Unknown';
+
+  // Generate document name: "Trustpilot Reviews - Revolut"
+  const sourceName = SOURCE_NAMES[job.scraper_type] || job.scraper_type.replace(/_/g, ' ');
+  const documentName = `${sourceName} - ${targetName}`;
+
+  // Generate tags from job metadata or auto-generate
+  const providerMetadata = job.provider_metadata as Record<string, unknown> | null;
+  const pendingTags = (providerMetadata?.pending_tags as string[]) || [];
+  const tags = pendingTags.length > 0 ? pendingTags : generateAutoTags(job.scraper_type, targetName);
+
+  // Generate description/brief
+  const description = `${items.length} ${sourceName.toLowerCase()} de ${targetName}, extraídos el ${new Date().toLocaleDateString('es-ES')}.`;
+
+  // Insert ONE consolidated document
+  const { error: docError } = await supabase.from('knowledge_base_docs').insert({
+    project_id: job.project_id,
+    name: documentName,
+    content: consolidatedContent,
+    description: description,
+    category: job.target_category || 'research',
+    tags: tags,
+    source_type: 'scraper',
+    source_job_id: job.id,
+    source_url: extractUrl(items[0]),
+    source_metadata: {
+      scraper_type: job.scraper_type,
+      scraped_at: new Date().toISOString(),
+      total_items: items.length,
+      target_name: targetName,
+      raw_preview: items.slice(0, 10),
+    },
   });
 
-  // Insert documents in batches of 50
-  const batchSize = 50;
-  for (let i = 0; i < documents.length; i += batchSize) {
-    const batch = documents.slice(i, i + batchSize);
-    const { error } = await supabase.from('knowledge_base_docs').insert(batch);
-    if (error) {
-      console.error(`[scraper/poll] Error inserting documents batch ${i / batchSize}:`, error);
-    }
+  if (docError) {
+    console.error('[scraper/poll] Error inserting consolidated document:', docError);
   }
 
   // Update job as completed
@@ -225,10 +271,26 @@ async function fetchAndSaveApifyResults(
     .update({
       status: 'completed',
       result_count: items.length,
-      result_preview: items.slice(0, 5), // Store first 5 items as preview
+      result_preview: items.slice(0, 5),
       completed_at: new Date().toISOString(),
     })
     .eq('id', job.id);
+}
+
+// ============================================
+// GENERATE AUTO TAGS
+// ============================================
+
+function generateAutoTags(scraperType: string, targetName: string): string[] {
+  const today = new Date().toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).replace(/\//g, '-');
+
+  const sourceTag = SOURCE_NAMES[scraperType]?.split(' ')[0] || scraperType;
+
+  return [targetName, sourceTag, today].filter(Boolean);
 }
 
 // ============================================
@@ -243,7 +305,21 @@ function extractTextContent(item: ApifyDatasetItem, outputFields: string[]): str
 
   for (const field of textFields) {
     if (item[field] && typeof item[field] === 'string') {
-      parts.push(`${field}: ${item[field]}`);
+      parts.push(`**${field}**: ${item[field]}`);
+    }
+  }
+
+  // Add rating if present
+  if (item.rating !== undefined) {
+    parts.push(`**rating**: ${item.rating}`);
+  }
+
+  // Add date if present
+  const dateFields = ['date', 'timestamp', 'createdAt', 'publishedAt', 'postedAt'];
+  for (const field of dateFields) {
+    if (item[field]) {
+      parts.push(`**${field}**: ${item[field]}`);
+      break;
     }
   }
 
@@ -253,19 +329,6 @@ function extractTextContent(item: ApifyDatasetItem, outputFields: string[]): str
   }
 
   return parts.join('\n\n');
-}
-
-function generateDocumentName(scraperType: string, item: ApifyDatasetItem, index: number): string {
-  // Try to create a meaningful name from the item
-  if (item.title) return String(item.title).substring(0, 100);
-  if (item.shortCode) return `Post ${item.shortCode}`;
-  if (item.id) return `Item ${item.id}`;
-  if (item.url) {
-    const url = String(item.url);
-    return url.length > 50 ? url.substring(0, 50) + '...' : url;
-  }
-
-  return `${scraperType.replace(/_/g, ' ')} - Item ${index + 1}`;
 }
 
 function extractUrl(item: ApifyDatasetItem): string | undefined {
