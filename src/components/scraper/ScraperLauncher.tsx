@@ -24,6 +24,7 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   { type: 'tiktok_comments', status: 'enabled', category: 'social' },
   { type: 'linkedin_company_posts', status: 'enabled', category: 'social' },
   { type: 'linkedin_comments', status: 'enabled', category: 'social' },
+  { type: 'reddit_posts', status: 'enabled', category: 'social' },
   // linkedin_company_insights: disabled - requires paid Apify subscription
   { type: 'facebook_posts', status: 'pending', category: 'social' },
   { type: 'facebook_comments', status: 'pending', category: 'social' },
@@ -33,11 +34,11 @@ const ALL_SCRAPERS: ScraperConfig[] = [
 
   // Reviews
   { type: 'trustpilot_reviews', status: 'enabled', category: 'reviews' },
-  { type: 'g2_reviews', status: 'pending', category: 'reviews' },
-  { type: 'capterra_reviews', status: 'pending', category: 'reviews' },
+  { type: 'g2_reviews', status: 'enabled', category: 'reviews' },
+  { type: 'capterra_reviews', status: 'enabled', category: 'reviews' },
   { type: 'appstore_reviews', status: 'enabled', category: 'reviews' },
   { type: 'playstore_reviews', status: 'enabled', category: 'reviews' },
-  { type: 'google_maps_reviews', status: 'pending', category: 'reviews' },
+  { type: 'google_maps_reviews', status: 'enabled', category: 'reviews' },
 
   // Web & News
   { type: 'website', status: 'enabled', category: 'web' },
@@ -73,6 +74,7 @@ const SCRAPER_ICONS: Record<string, React.ReactNode> = {
   linkedin_company_insights: <Briefcase size={20} />,
   facebook_posts: <Facebook size={20} />,
   facebook_comments: <MessageSquare size={20} />,
+  reddit_posts: <MessageSquare size={20} />,
   youtube_channel_videos: <Youtube size={20} />,
   youtube_comments: <MessageSquare size={20} />,
   youtube_transcripts: <Youtube size={20} />,
@@ -96,6 +98,7 @@ const SCRAPER_COLORS: Record<string, { bg: string; text: string; border: string 
   linkedin_company_insights: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
   facebook_posts: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
   facebook_comments: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
+  reddit_posts: { bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200' },
   youtube_channel_videos: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },
   youtube_comments: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },
   youtube_transcripts: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },

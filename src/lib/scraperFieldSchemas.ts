@@ -1183,6 +1183,82 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   },
 
   // ==========================================
+  // REDDIT POSTS & COMMENTS
+  // ==========================================
+  reddit_posts: {
+    type: 'reddit_posts',
+    fields: {
+      searches: {
+        key: 'searches',
+        type: 'text-array',
+        label: 'Búsquedas en Reddit',
+        description: 'Subreddits, URLs de posts o términos de búsqueda',
+        placeholder: 'r/personalfinance\nr/fintech\nhttps://reddit.com/r/...',
+        helpText: 'Una búsqueda por línea. Puedes usar subreddits (r/nombre), URLs de posts o términos de búsqueda.',
+        required: true,
+        examples: [
+          'r/personalfinance',
+          'r/fintech',
+          'r/CreditCards',
+          'best banking app',
+        ],
+      },
+      maxItems: {
+        key: 'maxItems',
+        type: 'number',
+        label: 'Máximo de posts',
+        description: 'Número máximo de posts a extraer',
+        helpText: 'Recomendado: 20-100 posts',
+        defaultValue: 50,
+        validation: {
+          min: 1,
+          max: 1000,
+        },
+      },
+      maxComments: {
+        key: 'maxComments',
+        type: 'number',
+        label: 'Comentarios por post',
+        description: 'Número máximo de comentarios a extraer por post (0 = no extraer)',
+        helpText: 'Deja en 0 para solo obtener posts sin comentarios',
+        defaultValue: 20,
+        validation: {
+          min: 0,
+          max: 500,
+        },
+      },
+      sort: {
+        key: 'sort',
+        type: 'select',
+        label: 'Ordenar por',
+        description: 'Cómo ordenar los resultados',
+        options: [
+          { value: 'new', label: 'Más recientes', description: 'Posts más nuevos primero' },
+          { value: 'hot', label: 'Populares (Hot)', description: 'Posts con más actividad actual' },
+          { value: 'top', label: 'Mejores (Top)', description: 'Posts con más votos' },
+          { value: 'relevance', label: 'Relevancia', description: 'Por relevancia de búsqueda' },
+        ],
+        defaultValue: 'new',
+      },
+      time: {
+        key: 'time',
+        type: 'select',
+        label: 'Periodo de tiempo',
+        description: 'Filtrar por antigüedad (solo aplica con sort=top)',
+        options: [
+          { value: 'all', label: 'Todo el tiempo' },
+          { value: 'year', label: 'Último año' },
+          { value: 'month', label: 'Último mes' },
+          { value: 'week', label: 'Última semana' },
+          { value: 'day', label: 'Últimas 24 horas' },
+          { value: 'hour', label: 'Última hora' },
+        ],
+        defaultValue: 'all',
+      },
+    },
+  },
+
+  // ==========================================
   // GOOGLE NEWS
   // ==========================================
   google_news: {

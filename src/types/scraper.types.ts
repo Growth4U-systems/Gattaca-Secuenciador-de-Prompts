@@ -39,6 +39,7 @@ export type ScraperType =
   | 'facebook_posts'
   | 'facebook_comments'
   | 'linkedin_company_insights'
+  | 'reddit_posts'
   // YouTube
   | 'youtube_channel_videos'
   | 'youtube_comments'

@@ -35,6 +35,9 @@ export const APIFY_ACTORS = {
 
   // News
   GOOGLE_NEWS: 'lhotanok~google-news-scraper',
+
+  // Reddit
+  REDDIT_POSTS: 'trudax~reddit-scraper',
 } as const;
 
 // ============================================
@@ -185,6 +188,27 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
       defaults: {},
     },
     outputFields: ['name', 'description', 'industry', 'employeeCount', 'headquarters', 'website'],
+  },
+
+  reddit_posts: {
+    type: 'reddit_posts',
+    name: 'Reddit Posts & Comments',
+    description: 'Busca posts y comentarios en Reddit por subreddit, búsqueda o URL',
+    provider: 'apify',
+    actorId: APIFY_ACTORS.REDDIT_POSTS,
+    category: 'social',
+    inputSchema: {
+      required: ['searches'],
+      optional: ['maxItems', 'maxComments', 'sort', 'time', 'type'],
+      defaults: {
+        maxItems: 50,
+        maxComments: 20,
+        sort: 'new',
+        time: 'all',
+        type: 'community',
+      },
+    },
+    outputFields: ['title', 'body', 'url', 'author', 'score', 'numComments', 'createdAt', 'subreddit', 'comments'],
   },
 
   // ==========================================
@@ -491,7 +515,7 @@ export function buildScraperInput(
   // Some fields need to be arrays even if user passes a string
   const arrayFields = ['username', 'profiles', 'postURLs', 'postIds', 'startUrls',
     'youtube_channels', 'languages', 'stars', 'videoUrls', 'channelUrls', 'companyUrls', 'queries',
-    'hashtags', 'searchQueries', 'placeUrls'];
+    'hashtags', 'searchQueries', 'placeUrls', 'searches'];
 
   for (const field of arrayFields) {
     if (merged[field] !== undefined) {
