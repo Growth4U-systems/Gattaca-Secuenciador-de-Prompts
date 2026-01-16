@@ -15,8 +15,11 @@ import {
   AlertTriangle,
   Loader2,
   FileSpreadsheet,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
 } from 'lucide-react'
-import type { NicheFinderResults, ExtractedNiche } from '@/types/scraper.types'
+import type { NicheFinderResults, ExtractedNiche, AnalysisStepOutput } from '@/types/scraper.types'
 import NicheTable from './NicheTable'
 import NicheDetail from './NicheDetail'
 
@@ -37,6 +40,7 @@ export default function NicheResultsDashboard({
   const [selectedNiche, setSelectedNiche] = useState<ExtractedNiche | null>(null)
   const [exporting, setExporting] = useState(false)
   const [exportSuccess, setExportSuccess] = useState<string | null>(null)
+  const [expandedStep, setExpandedStep] = useState<number | null>(null)
 
   // Fetch results
   useEffect(() => {
@@ -284,10 +288,10 @@ export default function NicheResultsDashboard({
             {formatCost(results.costs.total)} total
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-3 bg-blue-50 rounded-lg">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-blue-700">SERP (Serper)</span>
+              <span className="text-sm text-blue-700">SERP</span>
               <span className="font-semibold text-blue-900">
                 {formatCost(results.costs.serp)}
               </span>
@@ -303,7 +307,7 @@ export default function NicheResultsDashboard({
           </div>
           <div className="p-3 bg-green-50 rounded-lg">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-green-700">Scraping (Firecrawl)</span>
+              <span className="text-sm text-green-700">Scraping</span>
               <span className="font-semibold text-green-900">
                 {formatCost(results.costs.firecrawl)}
               </span>
@@ -319,7 +323,7 @@ export default function NicheResultsDashboard({
           </div>
           <div className="p-3 bg-purple-50 rounded-lg">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-purple-700">LLM Extracción</span>
+              <span className="text-sm text-purple-700">Extracción</span>
               <span className="font-semibold text-purple-900">
                 {formatCost(results.costs.llm)}
               </span>
@@ -333,8 +337,107 @@ export default function NicheResultsDashboard({
               />
             </div>
           </div>
+          <div className="p-3 bg-amber-50 rounded-lg">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-amber-700">Análisis LLM</span>
+              <span className="font-semibold text-amber-900">
+                {formatCost(results.costs.llm_analysis || 0)}
+              </span>
+            </div>
+            <div className="mt-1 h-2 bg-amber-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-amber-500 rounded-full"
+                style={{
+                  width: `${results.costs.total > 0 ? ((results.costs.llm_analysis || 0) / results.costs.total) * 100 : 0}%`,
+                }}
+              />
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* LLM Analysis Steps */}
+      {results.analysis_steps && results.analysis_steps.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles size={18} className="text-amber-600" />
+            <h3 className="font-semibold text-gray-900">Análisis LLM (Steps 1-3)</h3>
+          </div>
+          <div className="space-y-3">
+            {results.analysis_steps.map((step) => (
+              <div
+                key={step.step_number}
+                className="border border-gray-200 rounded-lg overflow-hidden"
+              >
+                <button
+                  onClick={() =>
+                    setExpandedStep(expandedStep === step.step_number ? null : step.step_number)
+                  }
+                  className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-sm font-medium ${
+                        step.status === 'completed'
+                          ? 'bg-green-100 text-green-700'
+                          : step.status === 'failed'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-gray-200 text-gray-600'
+                      }`}
+                    >
+                      {step.step_number}
+                    </span>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">
+                        {step.step_name === 'clean_filter' && 'Limpiar y Filtrar Nichos'}
+                        {step.step_name === 'scoring' && 'Scoring (Deep Research)'}
+                        {step.step_name === 'consolidate' && 'Tabla Final Consolidada'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {step.model} |{' '}
+                        {step.tokens_input && step.tokens_output
+                          ? `${(step.tokens_input + step.tokens_output).toLocaleString()} tokens`
+                          : 'N/A'}{' '}
+                        | {formatCost(step.cost_usd || 0)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {step.status === 'completed' ? (
+                      <CheckCircle size={18} className="text-green-600" />
+                    ) : step.status === 'failed' ? (
+                      <XCircle size={18} className="text-red-600" />
+                    ) : (
+                      <Loader2 size={18} className="animate-spin text-gray-400" />
+                    )}
+                    {expandedStep === step.step_number ? (
+                      <ChevronUp size={18} className="text-gray-400" />
+                    ) : (
+                      <ChevronDown size={18} className="text-gray-400" />
+                    )}
+                  </div>
+                </button>
+
+                {expandedStep === step.step_number && step.output_content && (
+                  <div className="p-4 border-t border-gray-200 bg-white">
+                    <div className="max-h-96 overflow-y-auto">
+                      <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded-lg">
+                        {step.output_content}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {expandedStep === step.step_number && step.error_message && (
+                  <div className="p-4 border-t border-gray-200 bg-red-50">
+                    <p className="text-sm text-red-700">{step.error_message}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main Content: Table + Detail */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

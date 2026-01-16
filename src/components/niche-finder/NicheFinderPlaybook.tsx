@@ -46,7 +46,7 @@ interface CostEstimate {
   estimated_urls: number
 }
 
-type ExecutionPhase = 'idle' | 'serp_running' | 'serp_done' | 'scraping' | 'scrape_done' | 'extracting' | 'completed' | 'failed'
+type ExecutionPhase = 'idle' | 'serp_running' | 'serp_done' | 'scraping' | 'scrape_done' | 'extracting' | 'extract_done' | 'analyzing_1' | 'analyzing_2' | 'analyzing_3' | 'completed' | 'failed'
 
 // Indicadores predefinidos
 const INDICATOR_PRESETS = {
@@ -338,6 +338,18 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
         throw new Error(extractData.error || 'Error en extracción')
       }
 
+      setExecutionPhase('analyzing_1')
+
+      // Run LLM analysis phases (Steps 1-3)
+      const analyzeResponse = await fetch(`/api/niche-finder/jobs/${startData.jobId}/analyze`, {
+        method: 'POST',
+      })
+
+      const analyzeData = await analyzeResponse.json()
+      if (!analyzeData.success) {
+        throw new Error(analyzeData.error || 'Error en análisis LLM')
+      }
+
       // Polling will handle the completion
 
     } catch (error) {
@@ -352,15 +364,23 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
   const getPhaseInfo = () => {
     switch (executionPhase) {
       case 'serp_running':
-        return { label: 'Buscando URLs...', progress: 20 }
+        return { label: 'Buscando URLs...', progress: 10 }
       case 'serp_done':
-        return { label: 'URLs encontradas', progress: 30 }
+        return { label: 'URLs encontradas', progress: 15 }
       case 'scraping':
-        return { label: 'Scrapeando contenido...', progress: 50 }
+        return { label: 'Scrapeando contenido...', progress: 25 }
       case 'scrape_done':
-        return { label: 'Contenido obtenido', progress: 70 }
+        return { label: 'Contenido obtenido', progress: 35 }
       case 'extracting':
-        return { label: 'Extrayendo nichos...', progress: 85 }
+        return { label: 'Extrayendo nichos...', progress: 45 }
+      case 'extract_done':
+        return { label: 'Nichos extraídos', progress: 50 }
+      case 'analyzing_1':
+        return { label: 'Step 1: Limpiando y filtrando...', progress: 60 }
+      case 'analyzing_2':
+        return { label: 'Step 2: Scoring (Deep Research)...', progress: 75 }
+      case 'analyzing_3':
+        return { label: 'Step 3: Consolidando tabla final...', progress: 90 }
       case 'completed':
         return { label: 'Completado', progress: 100 }
       case 'failed':
@@ -747,18 +767,27 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
           </div>
 
           {/* Phase indicators */}
-          <div className="flex justify-between mt-4 text-xs text-gray-500">
-            <span className={executionPhase === 'serp_running' ? 'text-blue-600 font-medium' : ''}>
+          <div className="grid grid-cols-7 gap-1 mt-4 text-xs text-gray-500">
+            <span className={`text-center ${['serp_running', 'serp_done'].includes(executionPhase) ? 'text-blue-600 font-medium' : ''}`}>
               SERP
             </span>
-            <span className={executionPhase === 'scraping' ? 'text-blue-600 font-medium' : ''}>
+            <span className={`text-center ${['scraping', 'scrape_done'].includes(executionPhase) ? 'text-blue-600 font-medium' : ''}`}>
               Scraping
             </span>
-            <span className={executionPhase === 'extracting' ? 'text-blue-600 font-medium' : ''}>
+            <span className={`text-center ${['extracting', 'extract_done'].includes(executionPhase) ? 'text-blue-600 font-medium' : ''}`}>
               Extracción
             </span>
-            <span className={executionPhase === 'completed' ? 'text-green-600 font-medium' : ''}>
-              Completado
+            <span className={`text-center ${executionPhase === 'analyzing_1' ? 'text-blue-600 font-medium' : ''}`}>
+              Step 1
+            </span>
+            <span className={`text-center ${executionPhase === 'analyzing_2' ? 'text-blue-600 font-medium' : ''}`}>
+              Step 2
+            </span>
+            <span className={`text-center ${executionPhase === 'analyzing_3' ? 'text-blue-600 font-medium' : ''}`}>
+              Step 3
+            </span>
+            <span className={`text-center ${executionPhase === 'completed' ? 'text-green-600 font-medium' : ''}`}>
+              ✓
             </span>
           </div>
         </div>

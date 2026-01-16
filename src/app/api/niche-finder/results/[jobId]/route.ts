@@ -40,6 +40,13 @@ export async function GET(request: NextRequest, { params }: Params) {
       throw new Error(`Failed to fetch niches: ${nichesError.message}`)
     }
 
+    // Get LLM analysis step outputs
+    const { data: stepOutputs } = await supabase
+      .from('niche_finder_step_outputs')
+      .select('*')
+      .eq('job_id', jobId)
+      .order('step_number', { ascending: true })
+
     // Get costs
     const { data: costs } = await supabase
       .from('niche_finder_costs')
@@ -50,6 +57,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       serp: 0,
       firecrawl: 0,
       llm: 0,
+      llm_analysis: 0,
       total: 0,
     }
 
@@ -57,6 +65,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       if (cost.cost_type === 'serp') totalCosts.serp += cost.cost_usd
       else if (cost.cost_type === 'firecrawl') totalCosts.firecrawl += cost.cost_usd
       else if (cost.cost_type === 'llm_extraction') totalCosts.llm += cost.cost_usd
+      else if (cost.cost_type?.startsWith('llm_analysis_')) totalCosts.llm_analysis += cost.cost_usd
       totalCosts.total += cost.cost_usd
     }
 
@@ -69,6 +78,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
     const results: NicheFinderResults = {
       job_id: jobId,
+      status: job.status,
       niches: niches || [],
       urls: {
         found: job.urls_found || 0,
@@ -78,6 +88,20 @@ export async function GET(request: NextRequest, { params }: Params) {
       },
       costs: totalCosts,
       duration_ms,
+      // Include LLM analysis step outputs
+      analysis_steps: (stepOutputs || []).map((step) => ({
+        step_number: step.step_number,
+        step_name: step.step_name,
+        status: step.status,
+        model: step.model,
+        tokens_input: step.tokens_input,
+        tokens_output: step.tokens_output,
+        cost_usd: step.cost_usd,
+        output_content: step.output_content,
+        error_message: step.error_message,
+        started_at: step.started_at,
+        completed_at: step.completed_at,
+      })),
     }
 
     return NextResponse.json(results)
