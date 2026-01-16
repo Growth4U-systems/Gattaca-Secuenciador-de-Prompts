@@ -356,17 +356,20 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
   website: {
     type: 'website',
     name: 'Website Scraper',
-    description: 'Scrape website content as markdown using Firecrawl',
+    description: 'Extrae contenido de páginas web: una sola página, múltiples páginas (crawl), o mapa de URLs',
     provider: 'firecrawl',
     actorId: 'firecrawl',
     category: 'web',
     inputSchema: {
       required: ['url'],
-      optional: ['formats', 'onlyMainContent', 'waitFor'],
+      optional: ['mode', 'limit', 'maxDepth', 'includePaths', 'excludePaths', 'formats', 'onlyMainContent', 'waitFor'],
       defaults: {
+        mode: 'scrape',
         formats: ['markdown'],
         onlyMainContent: true,
         waitFor: 0,
+        limit: 10,
+        maxDepth: 2,
       },
     },
     outputFields: ['markdown', 'metadata'],
