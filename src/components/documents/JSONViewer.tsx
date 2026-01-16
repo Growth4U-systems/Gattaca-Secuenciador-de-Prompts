@@ -216,7 +216,7 @@ export default function JSONViewer({ content, filename }: JSONViewerProps) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-4 mb-4 flex-shrink-0">
         <div className="flex items-center gap-2">
@@ -315,15 +315,15 @@ export default function JSONViewer({ content, filename }: JSONViewerProps) {
 
       {/* Content */}
       {viewMode === 'tree' && (
-        <div className="flex-1 overflow-auto bg-white p-4 rounded-xl border border-gray-200 font-mono text-sm">
+        <div className="flex-1 min-h-0 overflow-auto bg-white p-4 rounded-xl border border-gray-200 font-mono text-sm">
           <JSONNode data={parsed} defaultExpanded={true} />
         </div>
       )}
 
       {viewMode === 'table' && isArray && (
         <>
-          <div className="flex-1 overflow-auto border border-gray-200 rounded-xl bg-white">
-            <table className="w-full border-collapse">
+          <div className="flex-1 min-h-0 overflow-auto border border-gray-200 rounded-xl bg-white">
+            <table className="min-w-full border-collapse">
               <thead className="sticky top-0 bg-gray-50 z-10">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 border-b border-gray-200 bg-gray-50">
@@ -390,7 +390,7 @@ export default function JSONViewer({ content, filename }: JSONViewerProps) {
       )}
 
       {viewMode === 'raw' && (
-        <pre className="flex-1 overflow-auto text-sm text-gray-700 whitespace-pre-wrap font-mono bg-white p-4 rounded-xl border border-gray-200">
+        <pre className="flex-1 min-h-0 overflow-auto text-sm text-gray-700 whitespace-pre-wrap font-mono bg-white p-4 rounded-xl border border-gray-200">
           {JSON.stringify(parsed, null, 2)}
         </pre>
       )}
