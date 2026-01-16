@@ -32,6 +32,9 @@ export const APIFY_ACTORS = {
   APPSTORE_REVIEWS: '4qRgh5vXXsv0bKa1l',
   PLAYSTORE_REVIEWS: 'Bs72sDKr8fGe3d5Ti',
   GOOGLE_MAPS_REVIEWS: 'thEbk6nzmhRsChwBS',
+
+  // News
+  GOOGLE_NEWS: 'lhotanok~google-news-scraper',
 } as const;
 
 // ============================================
@@ -401,26 +404,51 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
   },
 
   // ==========================================
+  // NEWS
+  // ==========================================
+
+  google_news: {
+    type: 'google_news',
+    name: 'Google News',
+    description: 'Busca noticias en Google News por término de búsqueda',
+    provider: 'apify',
+    actorId: APIFY_ACTORS.GOOGLE_NEWS,
+    category: 'web',
+    inputSchema: {
+      required: ['query'],
+      optional: ['language', 'country', 'maxItems'],
+      defaults: {
+        language: 'es',
+        country: 'ES',
+        maxItems: 50,
+      },
+    },
+    outputFields: ['title', 'link', 'source', 'date', 'snippet', 'imageUrl'],
+  },
+
+  // ==========================================
   // CUSTOM
   // ==========================================
 
   news_bing: {
     type: 'news_bing',
-    name: 'News (Bing)',
-    description: 'Search and scrape news articles from Bing News',
+    name: 'Bing News (con contenido)',
+    description: 'Busca noticias en Bing News con extracción completa del contenido de cada artículo',
     provider: 'custom',
-    actorId: 'news-bing',
-    category: 'custom',
+    actorId: 'scrape-bing-news',
+    category: 'web',
     inputSchema: {
       required: ['queries'],
-      optional: ['country', 'maxPages', 'maxArticles'],
+      optional: ['country', 'dateRange', 'maxPages', 'maxArticles', 'extractContent'],
       defaults: {
         country: 'es-ES',
+        dateRange: 'anytime',
         maxPages: 10,
         maxArticles: 50,
+        extractContent: true,
       },
     },
-    outputFields: ['title', 'url', 'content', 'date', 'source'],
+    outputFields: ['title', 'url', 'source', 'snippet', 'publishedAt', 'content', 'imageUrl', 'query', 'country'],
   },
 };
 

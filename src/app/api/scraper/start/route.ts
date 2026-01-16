@@ -246,8 +246,7 @@ async function handleSingleScraper(
         // TODO: Implement Mangools
         return NextResponse.json({ success: false, error: 'Mangools not yet implemented' }, { status: 501 });
       case 'custom':
-        // TODO: Implement custom scrapers
-        return NextResponse.json({ success: false, error: 'Custom scrapers not yet implemented' }, { status: 501 });
+        return await executeCustomScraper(supabase, job as ScraperJob, finalInput, targetName, targetCategory, tags, userId);
       default:
         return NextResponse.json({ success: false, error: `Unsupported provider: ${template.provider}` }, { status: 400 });
     }
@@ -380,7 +379,17 @@ async function launchBatchJobs(
             userId
           );
           break;
-        // Add other providers as needed
+        case 'custom':
+          await executeCustomScraper(
+            supabase,
+            job,
+            job.input_config,
+            job.target_name,
+            job.target_category,
+            undefined, // Tags will be auto-generated
+            userId
+          );
+          break;
       }
     } catch (error) {
       console.error(`[scraper/start] Error launching job ${job.id}:`, error);
@@ -962,4 +971,217 @@ async function launchApifyActor(
     job_id: job.id,
     completed: false, // Apify is async, not completed yet
   });
+}
+
+// ============================================
+// CUSTOM SCRAPER EXECUTOR (Edge Functions)
+// ============================================
+
+async function executeCustomScraper(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  job: ScraperJob,
+  input: Record<string, unknown>,
+  targetName?: string,
+  targetCategory?: string,
+  providedTags?: string[],
+  userId?: string
+): Promise<NextResponse<StartScraperResponse>> {
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error('Supabase configuration missing');
+  }
+
+  // Update job to running
+  await supabase
+    .from('scraper_jobs')
+    .update({
+      status: 'running',
+      started_at: new Date().toISOString(),
+      target_name: targetName,
+      target_category: targetCategory || 'research',
+    })
+    .eq('id', job.id);
+
+  // Call the Edge Function
+  const edgeFunctionUrl = `${SUPABASE_URL}/functions/v1/${job.actor_id}`;
+
+  try {
+    const response = await fetch(edgeFunctionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify(input),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Edge Function error: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+
+    // Check if the Edge Function returned an error
+    if (!result.success) {
+      throw new Error(result.error || 'Edge Function execution failed');
+    }
+
+    // Process the results based on scraper type
+    const articles = result.articles || [];
+    const effectiveTargetName = targetName || (input.queries as string[])?.[0] || 'News';
+
+    // Format content for document
+    let documentContent: string;
+    if (job.scraper_type === 'news_bing') {
+      documentContent = formatBingNewsResults(articles, effectiveTargetName, input);
+    } else {
+      documentContent = JSON.stringify(result, null, 2);
+    }
+
+    // Generate document metadata
+    const documentName = generateDocumentName(job.scraper_type, effectiveTargetName);
+    const documentTags = providedTags?.length
+      ? providedTags
+      : generateAutoTags(job.scraper_type, effectiveTargetName);
+    const documentBrief = await generateDocumentBrief(documentContent, job.scraper_type, effectiveTargetName);
+
+    // Save document using admin client
+    const adminClient = createAdminClient();
+
+    const { data: doc, error: docError } = await adminClient
+      .from('knowledge_base_docs')
+      .insert({
+        project_id: job.project_id,
+        filename: documentName,
+        extracted_content: documentContent,
+        description: documentBrief,
+        category: targetCategory || job.target_category || 'research',
+        tags: documentTags,
+        source_type: 'scraper',
+        source_job_id: job.id,
+        source_metadata: {
+          scraper_type: job.scraper_type,
+          scraped_at: new Date().toISOString(),
+          target_name: effectiveTargetName,
+          articles_count: articles.length,
+          queries: input.queries,
+          country: input.country,
+          date_range: input.dateRange,
+          errors: result.errors || [],
+        },
+      })
+      .select()
+      .single();
+
+    if (docError) {
+      console.error('[scraper/start] Failed to save custom scraper document:', docError);
+      throw new Error(`Failed to save document: ${docError.message}`);
+    }
+
+    // Update job as completed
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'completed',
+        result_count: articles.length,
+        result_preview: articles.slice(0, 5).map((a: Record<string, unknown>) => ({
+          title: a.title || 'Sin título',
+          url: a.url,
+          source: a.source,
+        })),
+        completed_at: new Date().toISOString(),
+        provider_metadata: {
+          document_id: doc?.id,
+          articles_count: articles.length,
+          errors_count: result.errors?.length || 0,
+        },
+      })
+      .eq('id', job.id);
+
+    return NextResponse.json({
+      success: true,
+      job_id: job.id,
+      completed: true,
+    });
+
+  } catch (error) {
+    // Update job with error
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'failed',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', job.id);
+
+    throw error;
+  }
+}
+
+// Format Bing News results for document storage
+function formatBingNewsResults(
+  articles: Array<{
+    title: string;
+    url: string;
+    source: string;
+    snippet: string;
+    publishedAt: string | null;
+    content: string | null;
+    imageUrl: string | null;
+    query: string;
+    country: string;
+  }>,
+  targetName: string,
+  input: Record<string, unknown>
+): string {
+  const header = `# Noticias: ${targetName}
+
+**Fecha de extracción:** ${new Date().toLocaleString('es-ES')}
+**Búsquedas:** ${(input.queries as string[])?.join(', ') || 'N/A'}
+**País:** ${input.country || 'es-ES'}
+**Rango de fechas:** ${input.dateRange || 'Sin filtro'}
+**Total de artículos:** ${articles.length}
+
+---
+
+`;
+
+  const articlesContent = articles.map((article, index) => {
+    const parts = [
+      `## ${index + 1}. ${article.title}`,
+      '',
+      `**Fuente:** ${article.source}`,
+      `**URL:** ${article.url}`,
+    ];
+
+    if (article.publishedAt) {
+      parts.push(`**Fecha de publicación:** ${new Date(article.publishedAt).toLocaleDateString('es-ES')}`);
+    }
+
+    if (article.snippet) {
+      parts.push(`**Resumen:** ${article.snippet}`);
+    }
+
+    parts.push('');
+
+    if (article.content) {
+      parts.push('### Contenido completo');
+      parts.push('');
+      parts.push(article.content);
+    } else {
+      parts.push('*Contenido no extraído*');
+    }
+
+    parts.push('');
+    parts.push('---');
+    parts.push('');
+
+    return parts.join('\n');
+  }).join('\n');
+
+  return header + articlesContent;
 }

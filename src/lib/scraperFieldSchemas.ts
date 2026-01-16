@@ -1183,7 +1183,64 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   },
 
   // ==========================================
-  // NEWS BING
+  // GOOGLE NEWS
+  // ==========================================
+  google_news: {
+    type: 'google_news',
+    fields: {
+      query: {
+        key: 'query',
+        type: 'text',
+        label: 'Término de búsqueda',
+        description: 'Palabra clave o frase para buscar noticias',
+        placeholder: 'Revolut España',
+        helpText: 'Escribe la búsqueda como en Google News',
+        required: true,
+        examples: [
+          'Revolut España',
+          'fintech noticias',
+          'bancos digitales',
+        ],
+      },
+      language: {
+        key: 'language',
+        type: 'select',
+        label: 'Idioma',
+        description: 'Idioma de las noticias',
+        options: LANGUAGE_OPTIONS,
+        defaultValue: 'es',
+      },
+      country: {
+        key: 'country',
+        type: 'select',
+        label: 'País',
+        description: 'País para los resultados',
+        options: [
+          { value: 'ES', label: 'España' },
+          { value: 'MX', label: 'México' },
+          { value: 'AR', label: 'Argentina' },
+          { value: 'US', label: 'Estados Unidos' },
+          { value: 'GB', label: 'Reino Unido' },
+        ],
+        defaultValue: 'ES',
+      },
+      maxItems: {
+        key: 'maxItems',
+        type: 'number',
+        label: 'Máximo de artículos',
+        description: 'Número máximo de artículos a obtener',
+        helpText: 'Recomendado: 20-100 artículos',
+        defaultValue: 50,
+        validation: {
+          min: 1,
+          max: 500,
+        },
+      },
+    },
+  },
+
+  // ==========================================
+  // NEWS BING (con extracción de contenido)
   // ==========================================
   news_bing: {
     type: 'news_bing',
@@ -1191,36 +1248,57 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
       queries: {
         key: 'queries',
         type: 'text-array',
-        label: 'T\u00e9rminos de b\u00fasqueda',
-        description: 'Palabras clave para buscar noticias',
-        placeholder: 'Revolut Espa\u00f1a\nbancos digitales 2024',
-        helpText: 'Una b\u00fasqueda por l\u00ednea',
+        label: 'Términos de búsqueda',
+        description: 'Palabras clave o empresas para buscar noticias',
+        placeholder: 'Revolut España\nN26 noticias\nfintech 2024',
+        helpText: 'Una búsqueda por línea. Puedes buscar empresas, temas o frases.',
         required: true,
         examples: [
-          'Revolut Espa\u00f1a',
+          'Revolut España',
           'fintech noticias',
           'N26 cierre cuentas',
+          '"banca digital" España',
         ],
       },
       country: {
         key: 'country',
         type: 'select',
-        label: 'Pa\u00eds/Idioma',
-        description: 'Configura el pa\u00eds y el idioma de las noticias',
+        label: 'País/Idioma',
+        description: 'Configura el mercado y el idioma de las noticias',
         options: [
-          { value: 'es-ES', label: 'Espa\u00f1a (Espa\u00f1ol)' },
-          { value: 'es-MX', label: 'M\u00e9xico (Espa\u00f1ol)' },
-          { value: 'en-US', label: 'Estados Unidos (Ingl\u00e9s)' },
-          { value: 'en-GB', label: 'Reino Unido (Ingl\u00e9s)' },
+          { value: 'es-ES', label: 'España (Español)' },
+          { value: 'es-MX', label: 'México (Español)' },
+          { value: 'es-AR', label: 'Argentina (Español)' },
+          { value: 'es-CO', label: 'Colombia (Español)' },
+          { value: 'en-US', label: 'Estados Unidos (Inglés)' },
+          { value: 'en-GB', label: 'Reino Unido (Inglés)' },
+          { value: 'pt-BR', label: 'Brasil (Portugués)' },
+          { value: 'de-DE', label: 'Alemania (Alemán)' },
+          { value: 'fr-FR', label: 'Francia (Francés)' },
         ],
         defaultValue: 'es-ES',
+      },
+      dateRange: {
+        key: 'dateRange',
+        type: 'select',
+        label: 'Rango de fechas',
+        description: 'Filtrar noticias por antigüedad',
+        helpText: 'Permite buscar noticias históricas o recientes',
+        options: [
+          { value: 'anytime', label: 'Cualquier momento', description: 'Sin filtro de fecha' },
+          { value: 'past_day', label: 'Últimas 24 horas', description: 'Noticias de hoy' },
+          { value: 'past_week', label: 'Última semana', description: 'Últimos 7 días' },
+          { value: 'past_month', label: 'Último mes', description: 'Últimos 30 días' },
+          { value: 'past_year', label: 'Último año', description: 'Últimos 12 meses' },
+        ],
+        defaultValue: 'anytime',
       },
       maxPages: {
         key: 'maxPages',
         type: 'number',
-        label: 'P\u00e1ginas de resultados',
-        description: 'N\u00famero de p\u00e1ginas de resultados a procesar',
-        helpText: 'Cada p\u00e1gina tiene ~10 resultados',
+        label: 'Páginas de resultados',
+        description: 'Número de páginas de Bing a procesar por cada búsqueda',
+        helpText: 'Cada página tiene ~10 resultados. Más páginas = más noticias históricas.',
         defaultValue: 10,
         validation: {
           min: 1,
@@ -1230,13 +1308,22 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
       maxArticles: {
         key: 'maxArticles',
         type: 'number',
-        label: 'M\u00e1ximo de art\u00edculos',
-        description: 'N\u00famero m\u00e1ximo total de art\u00edculos a extraer',
+        label: 'Máximo de artículos',
+        description: 'Número máximo total de artículos a extraer',
+        helpText: 'Límite total combinando todas las búsquedas',
         defaultValue: 50,
         validation: {
           min: 10,
           max: 200,
         },
+      },
+      extractContent: {
+        key: 'extractContent',
+        type: 'boolean',
+        label: 'Extraer contenido completo',
+        description: 'Visita cada artículo y extrae el texto completo',
+        helpText: 'Si está activo, extrae el contenido completo de cada noticia (más lento pero más útil)',
+        defaultValue: true,
       },
     },
   },
