@@ -2,6 +2,95 @@
 
 Esta documentación contiene los schemas de input exactos para cada actor de Apify y otros servicios de scraping utilizados en Gattaca.
 
+---
+
+## Guía de Desarrollo de Scrapers
+
+### ⚠️ REGLA OBLIGATORIA: Siempre Testear Antes de Habilitar
+
+**NUNCA habilitar un scraper sin testearlo primero.** Todo scraper debe ser probado con datos reales antes de cambiar su status de `'pending'` a `'enabled'` en `ScraperLauncher.tsx`.
+
+### Proceso para Crear/Habilitar un Scraper
+
+#### 1. Verificar el Schema
+- Consultar esta documentación para los valores exactos de cada campo
+- Verificar el schema en `src/lib/scraperFieldSchemas.ts`
+- Verificar el template en `src/lib/scraperTemplates.ts`
+
+#### 2. Testear el Scraper
+Ejecutar un test real usando el script de testing:
+
+```bash
+# Usar el script de test (requiere APIFY_TOKEN en env)
+export APIFY_TOKEN=your_token_here
+
+# Testear App Store Reviews
+node scripts/test-scraper.mjs appstore_reviews 5
+
+# Testear Play Store Reviews
+node scripts/test-scraper.mjs playstore_reviews 5
+
+# Testear cualquier otro scraper
+node scripts/test-scraper.mjs <scraper_type> [max_items]
+```
+
+El script automáticamente:
+- Usa inputs de prueba predefinidos (Revolut como target)
+- Ejecuta el actor de Apify
+- Espera a que termine
+- Muestra los primeros resultados
+- Reporta si el test pasó o falló
+
+**URLs de prueba recomendadas (Revolut):**
+| Plataforma | URL de Test |
+|------------|-------------|
+| App Store | `https://apps.apple.com/es/app/revolut/id932493382` |
+| Play Store | `https://play.google.com/store/apps/details?id=com.revolut.revolut` |
+| Trustpilot | Dominio: `revolut.com` |
+| Instagram | Username: `revolut` |
+| TikTok | Profile: `@revolut` |
+| LinkedIn | Company: `revolut` |
+| YouTube | `https://www.youtube.com/@Revolut` |
+| Facebook | `https://www.facebook.com/Revolut` |
+| G2 | Product: `revolut-business` |
+| Capterra | Company: `revolut` |
+
+#### 3. Verificar el Output
+- Confirmar que el job se ejecuta sin errores
+- Verificar que los datos retornados tienen el formato esperado
+- Guardar un ejemplo del output para referencia
+
+#### 4. Habilitar en la UI
+Solo después de un test exitoso:
+
+```typescript
+// En src/components/scraper/ScraperLauncher.tsx
+// Cambiar de:
+{ type: 'appstore_reviews', status: 'pending', category: 'reviews' },
+// A:
+{ type: 'appstore_reviews', status: 'enabled', category: 'reviews' },
+```
+
+#### 5. Documentar el Test
+Agregar al Changelog de este documento:
+- Fecha del test
+- Actor testeado
+- URL/input usado
+- Resultado (éxito/fallo)
+
+### Archivos Clave del Sistema de Scrapers
+
+| Archivo | Propósito |
+|---------|-----------|
+| `src/components/scraper/ScraperLauncher.tsx` | UI principal, lista de scrapers habilitados |
+| `src/lib/scraperFieldSchemas.ts` | Definición de campos, validación, opciones |
+| `src/lib/scraperTemplates.ts` | Templates con actorId, campos requeridos/opcionales |
+| `src/app/api/scraper/start/route.ts` | API para iniciar jobs |
+| `src/app/api/scraper/status/route.ts` | API para consultar estado |
+| `docs/scrapers_doc.md` | Esta documentación |
+
+---
+
 ## Tabla de Contenidos
 
 1. [Apify - Información General](#apify---información-general)
@@ -732,4 +821,16 @@ GET /actor-runs/{runId}/dataset/items
 
 ## Changelog
 
+- **2025-01-16:** Agregada guía de desarrollo con regla obligatoria de testing antes de habilitar scrapers.
 - **2025-01-16:** Documentación inicial creada con schemas verificados de todos los actores.
+
+---
+
+## Registro de Tests de Scrapers
+
+| Fecha | Scraper | Input de Test | Resultado | Notas |
+|-------|---------|---------------|-----------|-------|
+| 2025-01-15 | TikTok Posts | `@revolut` | ✅ Éxito | 50 posts obtenidos |
+| 2025-01-15 | Trustpilot Reviews | `revolut.com` | ✅ Éxito | 100 reviews obtenidas |
+| *Pendiente* | App Store Reviews | `id932493382` | ⏳ | Habilitado sin test - REQUIERE VERIFICACIÓN |
+| *Pendiente* | Play Store Reviews | `com.revolut.revolut` | ⏳ | Habilitado sin test - REQUIERE VERIFICACIÓN |

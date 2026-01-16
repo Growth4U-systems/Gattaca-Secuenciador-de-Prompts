@@ -21,9 +21,9 @@ export const APIFY_ACTORS = {
   LINKEDIN_COMPANY_INSIGHTS: '6mSoKnECRInl7QUb8',
 
   // YouTube
-  YOUTUBE_CHANNEL_VIDEOS: '6MHGJwYGoF8Cvtkg0',
-  YOUTUBE_COMMENTS: 'mExYO4A2k9976zMfA',
-  YOUTUBE_TRANSCRIPTS: 'L57jETyu9qT6J7bs5',
+  YOUTUBE_CHANNEL_VIDEOS: '67Q6fmd8iedTVcCwY',  // streamers/youtube-channel-scraper
+  YOUTUBE_COMMENTS: 'p7UMdpQnjKmmpR21D',  // streamers/youtube-comments-scraper
+  YOUTUBE_TRANSCRIPTS: 'CTQcdDtqW5dvELvur',  // topaz_sharingan/youtube-transcript-scraper
 
   // Reviews
   G2_REVIEWS: 'kT2dx4xoOebKw6uQB',
@@ -196,11 +196,16 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.YOUTUBE_CHANNEL_VIDEOS,
     category: 'youtube',
     inputSchema: {
-      required: ['youtube_channels'],
-      optional: ['End_date'],
-      defaults: {},
+      required: ['startUrls'],
+      optional: ['maxResults', 'maxResultsShorts', 'maxResultStreams', 'oldestPostDate', 'sortVideosBy'],
+      defaults: {
+        maxResults: 50,
+        maxResultsShorts: 0,
+        maxResultStreams: 0,
+        sortVideosBy: 'NEWEST',
+      },
     },
-    outputFields: ['title', 'description', 'viewCount', 'likeCount', 'publishedAt', 'url'],
+    outputFields: ['title', 'description', 'viewCount', 'likeCount', 'publishedAt', 'url', 'duration', 'thumbnailUrl'],
   },
 
   youtube_comments: {
@@ -212,13 +217,13 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     category: 'youtube',
     inputSchema: {
       required: ['startUrls'],
-      optional: ['maxComments', 'sort'],
+      optional: ['maxComments', 'commentsSortBy'],
       defaults: {
         maxComments: 100,
-        sort: 'top',
+        commentsSortBy: '0',  // Top comments
       },
     },
-    outputFields: ['text', 'author', 'likesCount', 'publishedAt'],
+    outputFields: ['text', 'author', 'likesCount', 'publishedAt', 'replyCount'],
   },
 
   youtube_transcripts: {
@@ -229,13 +234,13 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.YOUTUBE_TRANSCRIPTS,
     category: 'youtube',
     inputSchema: {
-      required: ['videoUrls'],
-      optional: ['language'],
+      required: ['startUrls'],
+      optional: ['timestamps'],
       defaults: {
-        language: 'es',
+        timestamps: true,
       },
     },
-    outputFields: ['transcript', 'language', 'isGenerated'],
+    outputFields: ['transcript', 'timestamps', 'videoUrl', 'title'],
   },
 
   // ==========================================
@@ -479,7 +484,7 @@ export function buildScraperInput(
   // Ensure number fields are numbers
   const numberFields = ['resultsLimit', 'limit', 'count', 'max_reviews', 'maxItems',
     'resultsPerPage', 'commentsPerPost', 'maxReviews', 'maxComments', 'maxPages', 'maxArticles',
-    'maxRepliesPerComment'];
+    'maxRepliesPerComment', 'maxResults', 'maxResultsShorts', 'maxResultStreams'];
 
   for (const field of numberFields) {
     if (merged[field] !== undefined && typeof merged[field] === 'string') {
