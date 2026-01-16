@@ -189,32 +189,43 @@ async function fetchArticleContent(url: string): Promise<{
 function parseBingNewsResults(html: string, query: string, country: string): Omit<NewsArticle, 'content' | 'publishedAt' | 'imageUrl'>[] {
   const articles: Omit<NewsArticle, 'content' | 'publishedAt' | 'imageUrl'>[] = []
 
-  // Pattern to match news article links with class "title"
-  const articlePattern = /<a[^>]*class="title"[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/gi
+  // Pattern to match news article links with class "title" - title is inside <h2>
+  // Format: <a class="title" href="URL"><h2>TITLE</h2></a>
+  const articlePattern = /<a[^>]*class="title"[^>]*href="([^"]+)"[^>]*><h2[^>]*>([^<]+)<\/h2><\/a>/gi
 
   let match
   while ((match = articlePattern.exec(html)) !== null) {
     const url = match[1]
-    const title = match[2].trim()
+    // Decode HTML entities in title
+    const title = match[2]
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .trim()
 
     // Skip if URL is internal Bing link
     if (url.startsWith('/') || url.includes('bing.com')) {
       continue
     }
 
-    // Try to extract source from nearby HTML
-    const sourceMatch = html.slice(Math.max(0, match.index - 500), match.index + 500)
-      .match(/class="source"[^>]*>([^<]+)</i)
+    // Try to extract source from nearby HTML - look for source in the card
+    const contextBefore = html.slice(Math.max(0, match.index - 1000), match.index)
+    const sourceMatch = contextBefore.match(/<a[^>]*aria-label="Buscar noticias de ([^"]+)"/i) ||
+                        contextBefore.match(/class="publogo"[^>]*>[^<]*<\/div>([^<]+)<\/a>/i)
 
-    // Try to extract snippet
-    const snippetMatch = html.slice(match.index, match.index + 1000)
-      .match(/class="snippet"[^>]*>([^<]+)</i)
+    // Try to extract snippet after the title
+    const contextAfter = html.slice(match.index, match.index + 1500)
+    const snippetMatch = contextAfter.match(/class="snippet"[^>]*title="([^"]+)"/i) ||
+                         contextAfter.match(/class="snippet"[^>]*>([^<]+)</i)
 
     articles.push({
       title,
       url,
       source: sourceMatch ? sourceMatch[1].trim() : 'Unknown',
-      snippet: snippetMatch ? snippetMatch[1].trim() : '',
+      snippet: snippetMatch ? snippetMatch[1].replace(/&quot;/g, '"').trim() : '',
       query,
       country,
     })
