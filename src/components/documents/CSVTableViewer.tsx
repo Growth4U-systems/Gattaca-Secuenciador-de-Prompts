@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Download, Table, Code, ChevronLeft, ChevronRight, Search, X, Columns, Check } from 'lucide-react'
+import { Download, Table, Code, ChevronLeft, ChevronRight, Search, X, Columns, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 
 interface CSVTableViewerProps {
   content: string
@@ -73,6 +73,9 @@ export default function CSVTableViewer({ content, filename }: CSVTableViewerProp
   const [currentPage, setCurrentPage] = useState(0)
   const [showColumnFilter, setShowColumnFilter] = useState(false)
   const [visibleColumns, setVisibleColumns] = useState<Set<number>>(new Set())
+  const [sortColumn, setSortColumn] = useState<number | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [columnFilters, setColumnFilters] = useState<Record<number, string>>({})
   const columnFilterRef = useRef<HTMLDivElement>(null)
   const rowsPerPage = 50
 
@@ -107,21 +110,71 @@ export default function CSVTableViewer({ content, filename }: CSVTableViewerProp
     }
   }, [showColumnFilter])
 
-  // Filter rows by search query
-  const filteredRows = useMemo(() => {
-    if (!searchQuery) return rows
-    const query = searchQuery.toLowerCase()
-    return rows.filter(row =>
-      row.some(cell => cell.toLowerCase().includes(query))
-    )
-  }, [rows, searchQuery])
+  // Process rows: column filters -> global search -> sort
+  const processedRows = useMemo(() => {
+    let result = [...rows]
+
+    // 1. Apply column filters
+    Object.entries(columnFilters).forEach(([col, filter]) => {
+      if (filter) {
+        const colIndex = parseInt(col)
+        result = result.filter(row =>
+          row[colIndex]?.toLowerCase().includes(filter.toLowerCase())
+        )
+      }
+    })
+
+    // 2. Apply global search
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter(row =>
+        row.some(cell => cell.toLowerCase().includes(query))
+      )
+    }
+
+    // 3. Apply sort
+    if (sortColumn !== null) {
+      result.sort((a, b) => {
+        const aVal = a[sortColumn] || ''
+        const bVal = b[sortColumn] || ''
+        const cmp = aVal.localeCompare(bVal, undefined, { numeric: true })
+        return sortDirection === 'asc' ? cmp : -cmp
+      })
+    }
+
+    return result
+  }, [rows, columnFilters, searchQuery, sortColumn, sortDirection])
+
+  // Check if any column filter is active
+  const hasActiveColumnFilters = Object.values(columnFilters).some(f => f)
+
+  // Handle header click for sorting
+  const handleHeaderClick = (colIndex: number) => {
+    if (sortColumn === colIndex) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc')
+      } else {
+        setSortColumn(null)
+        setSortDirection('asc')
+      }
+    } else {
+      setSortColumn(colIndex)
+      setSortDirection('asc')
+    }
+  }
+
+  // Clear all column filters
+  const clearAllColumnFilters = () => {
+    setColumnFilters({})
+    setCurrentPage(0)
+  }
 
   // Paginate
-  const totalPages = Math.ceil(filteredRows.length / rowsPerPage)
+  const totalPages = Math.ceil(processedRows.length / rowsPerPage)
   const paginatedRows = useMemo(() => {
     const start = currentPage * rowsPerPage
-    return filteredRows.slice(start, start + rowsPerPage)
-  }, [filteredRows, currentPage, rowsPerPage])
+    return processedRows.slice(start, start + rowsPerPage)
+  }, [processedRows, currentPage, rowsPerPage])
 
   // Download CSV
   const handleDownload = () => {
@@ -172,6 +225,16 @@ export default function CSVTableViewer({ content, filename }: CSVTableViewerProp
   const visibleHeadersWithIndex = headers
     .map((header, index) => ({ header, index }))
     .filter(({ index }) => visibleColumns.has(index))
+
+  // Get sort icon for column
+  const getSortIcon = (colIndex: number) => {
+    if (sortColumn !== colIndex) {
+      return <ArrowUpDown size={10} className="text-gray-300" />
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp size={10} className="text-blue-600" />
+      : <ArrowDown size={10} className="text-blue-600" />
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -268,9 +331,20 @@ export default function CSVTableViewer({ content, filename }: CSVTableViewerProp
 
           {/* Row count */}
           <span className="text-xs text-gray-500">
-            {filteredRows.length} filas
-            {searchQuery && ` (de ${rows.length})`}
+            {processedRows.length} filas
+            {(searchQuery || hasActiveColumnFilters) && ` (de ${rows.length})`}
           </span>
+
+          {/* Clear column filters button */}
+          {hasActiveColumnFilters && (
+            <button
+              onClick={clearAllColumnFilters}
+              className="px-2 py-1 text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 inline-flex items-center gap-1"
+            >
+              <X size={12} />
+              Limpiar filtros
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -316,17 +390,55 @@ export default function CSVTableViewer({ content, filename }: CSVTableViewerProp
         <div className="flex-1 overflow-auto border border-gray-200 rounded-lg bg-white">
           <div className="min-w-max">
             <table className="w-full border-collapse">
-              <thead className="sticky top-0 bg-gray-50 z-10">
-                <tr>
+              <thead className="sticky top-0 z-10">
+                {/* Header row */}
+                <tr className="bg-gray-50">
                   <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-500 border-b border-gray-200 bg-gray-50 sticky left-0 z-20">
                     #
                   </th>
                   {visibleHeadersWithIndex.map(({ header, index }) => (
                     <th
                       key={index}
-                      className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 border-b border-gray-200 bg-gray-50 whitespace-nowrap min-w-[120px]"
+                      onClick={() => handleHeaderClick(index)}
+                      className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 border-b border-gray-200 bg-gray-50 whitespace-nowrap min-w-[120px] cursor-pointer hover:bg-gray-100 select-none"
                     >
-                      {header || `Col ${index + 1}`}
+                      <div className="flex items-center gap-1">
+                        <span className="truncate">{header || `Col ${index + 1}`}</span>
+                        {getSortIcon(index)}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+                {/* Filter row */}
+                <tr className="bg-gray-25">
+                  <th className="px-1 py-1 bg-white border-b border-gray-200 sticky left-0 z-20"></th>
+                  {visibleHeadersWithIndex.map(({ index }) => (
+                    <th key={index} className="px-1 py-1 bg-white border-b border-gray-200">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={columnFilters[index] || ''}
+                          onChange={(e) => {
+                            setColumnFilters({ ...columnFilters, [index]: e.target.value })
+                            setCurrentPage(0)
+                          }}
+                          placeholder="Filtrar..."
+                          className="w-full text-[10px] px-1.5 py-0.5 border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent text-gray-700 placeholder:text-gray-400"
+                        />
+                        {columnFilters[index] && (
+                          <button
+                            onClick={() => {
+                              const newFilters = { ...columnFilters }
+                              delete newFilters[index]
+                              setColumnFilters(newFilters)
+                              setCurrentPage(0)
+                            }}
+                            className="absolute right-0.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600"
+                          >
+                            <X size={10} />
+                          </button>
+                        )}
+                      </div>
                     </th>
                   ))}
                 </tr>
