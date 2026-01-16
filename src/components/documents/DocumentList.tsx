@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { FileText, Trash2, Eye, Link2, Search, Filter, FolderOpen, X, Edit2, Check, Loader2, Tag } from 'lucide-react'
+import { Trash2, Link2, Search, Filter, FolderOpen, X, Edit2, Check, Loader2, Tag, ChevronDown, ChevronRight, Maximize2 } from 'lucide-react'
 import { DocCategory } from '@/types/database.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { useModal } from '@/components/ui'
+import CSVTableViewer from './CSVTableViewer'
+import JSONViewer from './JSONViewer'
 
 interface Document {
   id: string
@@ -69,6 +71,9 @@ export default function DocumentList({
   const [editingDescDocId, setEditingDescDocId] = useState<string | null>(null)
   const [editingDescription, setEditingDescription] = useState('')
   const [savingDescription, setSavingDescription] = useState(false)
+
+  // State for expanded content
+  const [expandedDocId, setExpandedDocId] = useState<string | null>(null)
 
   // Get unique categories
   const categories = useMemo(() => {
@@ -233,6 +238,37 @@ export default function DocumentList({
         {label}
       </span>
     )
+  }
+
+  // Detect content type for inline viewer
+  const getContentType = (content: string | null | undefined): 'json' | 'csv' | 'text' => {
+    if (!content) return 'text'
+    const trimmed = content.trim()
+    const firstLine = content.split('\n')[0] || ''
+
+    // Check if JSON
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        JSON.parse(trimmed)
+        return 'json'
+      } catch {
+        if ((trimmed.startsWith('[') && trimmed.includes(']')) ||
+            (trimmed.startsWith('{') && trimmed.includes('}'))) {
+          return 'json'
+        }
+      }
+    }
+
+    // Check if CSV
+    if (firstLine.includes(',') && firstLine.split(',').length >= 3) {
+      return 'csv'
+    }
+
+    return 'text'
+  }
+
+  const toggleExpand = (docId: string) => {
+    setExpandedDocId(expandedDocId === docId ? null : docId)
   }
 
   if (documents.length === 0) {
@@ -400,259 +436,290 @@ export default function DocumentList({
         </div>
       ) : (
         <div className="space-y-2">
-          {filteredDocs.map((doc) => (
-            <div
-              key={doc.id}
-              className="group bg-white border border-gray-100 rounded-xl px-3 py-2.5 hover:border-blue-200 hover:shadow-sm transition-all"
-            >
-              {/* Main row - single line layout */}
-              <div className="flex items-center gap-3">
-                {/* Icon */}
-                <div className="p-1.5 bg-gray-50 rounded-lg group-hover:bg-blue-50 transition-colors flex-shrink-0">
-                  <FileText size={16} className="text-gray-400 group-hover:text-blue-600" />
-                </div>
+          {filteredDocs.map((doc) => {
+            const isExpanded = expandedDocId === doc.id
+            const contentType = getContentType(doc.extracted_content)
 
-                {/* Title & Badges */}
-                <div className="flex-1 min-w-0 flex items-center gap-2">
-                  {editingDocId === doc.id ? (
-                    <div className="flex items-center gap-2 flex-1">
-                      <input
-                        type="text"
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        onKeyDown={(e) => handleEditKeyDown(e, doc.id)}
-                        className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                        autoFocus
-                        disabled={savingName}
-                      />
-                      <button
-                        onClick={() => handleSaveName(doc.id)}
-                        disabled={savingName || !editingName.trim()}
-                        className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Guardar"
-                      >
-                        {savingName ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                      </button>
-                      <button
-                        onClick={handleCancelEdit}
-                        disabled={savingName}
-                        className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50"
-                        title="Cancelar"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <h3 className="font-medium text-sm text-gray-900 truncate group-hover:text-blue-600 transition-colors">
-                        {doc.filename}
-                      </h3>
-                      {onRename && (
+            return (
+              <div
+                key={doc.id}
+                className={`group bg-white border rounded-xl transition-all ${
+                  isExpanded ? 'border-blue-200 shadow-sm' : 'border-gray-100 hover:border-blue-200 hover:shadow-sm'
+                }`}
+              >
+                {/* Main row - single line layout */}
+                <div
+                  className="flex items-center gap-3 px-3 py-2.5 cursor-pointer"
+                  onClick={() => toggleExpand(doc.id)}
+                >
+                  {/* Expand chevron */}
+                  <div className="flex-shrink-0 text-gray-400">
+                    {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  </div>
+
+                  {/* Title & Badges */}
+                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                    {editingDocId === doc.id ? (
+                      <div className="flex items-center gap-2 flex-1" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => handleEditKeyDown(e, doc.id)}
+                          className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                          autoFocus
+                          disabled={savingName}
+                        />
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleStartEdit(doc) }}
-                          className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                          title="Editar nombre"
+                          onClick={() => handleSaveName(doc.id)}
+                          disabled={savingName || !editingName.trim()}
+                          className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Guardar"
                         >
-                          <Edit2 size={12} />
+                          {savingName ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                         </button>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* Inline badges */}
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {getCategoryBadge(doc.category)}
-                  {doc.token_count && (
-                    <span className="text-xs text-gray-400 whitespace-nowrap">
-                      {formatTokenCount(doc.token_count)}
-                    </span>
-                  )}
-                </div>
-
-                {/* Tags inline */}
-                {doc.tags && doc.tags.length > 0 && (
-                  <div className="hidden sm:flex items-center gap-1 flex-shrink-0">
-                    {doc.tags.slice(0, 3).map((tag, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setTagFilter(tag)}
-                        className={`px-1.5 py-0.5 text-[10px] rounded-full transition-colors ${
-                          tagFilter === tag
-                            ? 'bg-purple-600 text-white'
-                            : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
-                        }`}
-                        title={`Filtrar por "${tag}"`}
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                    {doc.tags.length > 3 && (
-                      <span className="text-[10px] text-gray-400">+{doc.tags.length - 3}</span>
+                        <button
+                          onClick={handleCancelEdit}
+                          disabled={savingName}
+                          className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50"
+                          title="Cancelar"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <h3 className="font-medium text-sm text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                          {doc.filename}
+                        </h3>
+                        {onRename && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleStartEdit(doc) }}
+                            className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                            title="Editar nombre"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                        )}
+                      </>
                     )}
-                    {doc.source_type === 'scraper' && (
-                      <span className="px-1.5 py-0.5 text-[10px] bg-green-50 text-green-600 rounded">
-                        Scraper
+                  </div>
+
+                  {/* Inline badges */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {getCategoryBadge(doc.category)}
+                    {doc.token_count && (
+                      <span className="text-xs text-gray-400 whitespace-nowrap">
+                        {formatTokenCount(doc.token_count)}
                       </span>
                     )}
                   </div>
-                )}
 
-                {/* Campaign dropdown - compact */}
-                {campaigns.length > 0 && onCampaignChange && (
-                  <div className="hidden md:flex items-center gap-1.5 flex-shrink-0">
-                    <Link2 size={12} className="text-gray-300" />
-                    <select
-                      value={doc.campaign_id || ''}
-                      onChange={(e) => handleCampaignChange(doc.id, e.target.value)}
-                      disabled={updatingDoc === doc.id}
-                      className="text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 bg-white focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 max-w-[180px] truncate"
-                    >
-                      <option value="">Documento global (todas las campañas)</option>
-                      {campaigns.map(campaign => (
-                        <option key={campaign.id} value={campaign.id}>
-                          {campaign.ecp_name}
-                        </option>
+                  {/* Tags inline */}
+                  {doc.tags && doc.tags.length > 0 && (
+                    <div className="hidden sm:flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {doc.tags.slice(0, 3).map((tag, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setTagFilter(tag)}
+                          className={`px-1.5 py-0.5 text-[10px] rounded-full transition-colors ${
+                            tagFilter === tag
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
+                          }`}
+                          title={`Filtrar por "${tag}"`}
+                        >
+                          {tag}
+                        </button>
                       ))}
-                    </select>
-                    {updatingDoc === doc.id && <Loader2 size={12} className="text-gray-400 animate-spin" />}
+                      {doc.tags.length > 3 && (
+                        <span className="text-[10px] text-gray-400">+{doc.tags.length - 3}</span>
+                      )}
+                      {doc.source_type === 'scraper' && (
+                        <span className="px-1.5 py-0.5 text-[10px] bg-green-50 text-green-600 rounded">
+                          Scraper
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Campaign dropdown - compact */}
+                  {campaigns.length > 0 && onCampaignChange && (
+                    <div className="hidden md:flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <Link2 size={12} className="text-gray-300" />
+                      <select
+                        value={doc.campaign_id || ''}
+                        onChange={(e) => handleCampaignChange(doc.id, e.target.value)}
+                        disabled={updatingDoc === doc.id}
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 bg-white focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 max-w-[180px] truncate"
+                      >
+                        <option value="">Documento global (todas las campañas)</option>
+                        {campaigns.map(campaign => (
+                          <option key={campaign.id} value={campaign.id}>
+                            {campaign.ecp_name}
+                          </option>
+                        ))}
+                      </select>
+                      {updatingDoc === doc.id && <Loader2 size={12} className="text-gray-400 animate-spin" />}
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => onView(doc)}
+                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="Abrir en pantalla completa"
+                    >
+                      <Maximize2 size={16} />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const confirmed = await modal.confirm({
+                          title: 'Eliminar documento',
+                          message: `¿Eliminar "${doc.filename}"? Esta acción no se puede deshacer.`,
+                          confirmText: 'Eliminar',
+                          cancelText: 'Cancelar',
+                          variant: 'danger',
+                        })
+                        if (confirmed) {
+                          onDelete(doc.id)
+                        }
+                      }}
+                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Eliminar"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
+                </div>
+
+                {/* Description row - only when exists, compact */}
+                {editingDescDocId === doc.id ? (
+                  <div className="mt-2 ml-8 px-3 pb-3 space-y-1.5">
+                    <textarea
+                      value={editingDescription}
+                      onChange={(e) => setEditingDescription(e.target.value)}
+                      onKeyDown={(e) => handleDescKeyDown(e, doc.id)}
+                      placeholder="Describe el contenido del documento..."
+                      rows={2}
+                      className="w-full px-2 py-1.5 text-xs border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 resize-none"
+                      autoFocus
+                      disabled={savingDescription}
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleSaveDescription(doc.id)}
+                        disabled={savingDescription}
+                        className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1"
+                      >
+                        {savingDescription ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                        Guardar
+                      </button>
+                      <button
+                        onClick={handleCancelDescEdit}
+                        disabled={savingDescription}
+                        className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded disabled:opacity-50"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : doc.description && !isExpanded ? (
+                  <div className="ml-8 px-3 pb-2 group/desc">
+                    <p className="text-xs text-gray-500 truncate max-w-2xl">
+                      {doc.description}
+                      {onUpdateDescription && (
+                        <button
+                          onClick={() => handleStartDescEdit(doc)}
+                          className="ml-1.5 text-gray-400 hover:text-blue-600 opacity-0 group-hover/desc:opacity-100 transition-opacity"
+                          title="Editar descripcion"
+                        >
+                          <Edit2 size={10} className="inline" />
+                        </button>
+                      )}
+                    </p>
+                  </div>
+                ) : onUpdateDescription && !isExpanded ? (
+                  <button
+                    onClick={() => handleStartDescEdit(doc)}
+                    className="ml-8 px-3 pb-2 text-[10px] text-gray-400 hover:text-blue-600"
+                  >
+                    + Descripción
+                  </button>
+                ) : null}
+
+                {/* Content match snippet - only when searching */}
+                {searchInContent && searchQuery && !isExpanded && (() => {
+                  const snippet = getContentMatchSnippet(doc.extracted_content, searchQuery)
+                  if (!snippet) return null
+                  const parts = snippet.split(new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
+                  return (
+                    <div className="mx-3 mb-2 ml-8 p-1.5 bg-yellow-50 border border-yellow-100 rounded-lg text-xs text-gray-600">
+                      <span className="text-yellow-600 font-medium mr-1">Coincidencia:</span>
+                      {parts.map((part, i) =>
+                        part.toLowerCase() === searchQuery.toLowerCase()
+                          ? <mark key={i} className="bg-yellow-200 px-0.5 rounded">{part}</mark>
+                          : <span key={i}>{part}</span>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Mobile: Tags & Campaign on second row */}
+                {!isExpanded && (
+                  <>
+                    <div className="sm:hidden px-3 pb-2 ml-5 flex flex-wrap items-center gap-1.5">
+                      {doc.tags && doc.tags.length > 0 && doc.tags.map((tag, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setTagFilter(tag)}
+                          className={`px-1.5 py-0.5 text-[10px] rounded-full ${
+                            tagFilter === tag ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-600'
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                    {campaigns.length > 0 && onCampaignChange && (
+                      <div className="md:hidden px-3 pb-2 ml-5 flex items-center gap-1.5">
+                        <Link2 size={11} className="text-gray-300" />
+                        <select
+                          value={doc.campaign_id || ''}
+                          onChange={(e) => handleCampaignChange(doc.id, e.target.value)}
+                          disabled={updatingDoc === doc.id}
+                          className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 text-gray-600 bg-white"
+                        >
+                          <option value="">Global (todas las campañas)</option>
+                          {campaigns.map(campaign => (
+                            <option key={campaign.id} value={campaign.id}>{campaign.ecp_name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </>
                 )}
 
-                {/* Actions */}
-                <div className="flex items-center gap-0.5 flex-shrink-0">
-                  <button
-                    onClick={() => onView(doc)}
-                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                    title="Ver contenido"
-                  >
-                    <Eye size={16} />
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const confirmed = await modal.confirm({
-                        title: 'Eliminar documento',
-                        message: `¿Eliminar "${doc.filename}"? Esta acción no se puede deshacer.`,
-                        confirmText: 'Eliminar',
-                        cancelText: 'Cancelar',
-                        variant: 'danger',
-                      })
-                      if (confirmed) {
-                        onDelete(doc.id)
-                      }
-                    }}
-                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Eliminar"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Description row - only when exists, compact */}
-              {editingDescDocId === doc.id ? (
-                <div className="mt-2 ml-8 space-y-1.5">
-                  <textarea
-                    value={editingDescription}
-                    onChange={(e) => setEditingDescription(e.target.value)}
-                    onKeyDown={(e) => handleDescKeyDown(e, doc.id)}
-                    placeholder="Describe el contenido del documento..."
-                    rows={2}
-                    className="w-full px-2 py-1.5 text-xs border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 resize-none"
-                    autoFocus
-                    disabled={savingDescription}
-                  />
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleSaveDescription(doc.id)}
-                      disabled={savingDescription}
-                      className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1"
-                    >
-                      {savingDescription ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
-                      Guardar
-                    </button>
-                    <button
-                      onClick={handleCancelDescEdit}
-                      disabled={savingDescription}
-                      className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded disabled:opacity-50"
-                    >
-                      Cancelar
-                    </button>
+                {/* Expanded content */}
+                {isExpanded && doc.extracted_content && (
+                  <div className="border-t border-gray-100 bg-gray-50 rounded-b-xl">
+                    <div className="p-3 max-h-[500px] overflow-hidden flex flex-col">
+                      {contentType === 'json' ? (
+                        <JSONViewer content={doc.extracted_content} filename={doc.filename} />
+                      ) : contentType === 'csv' ? (
+                        <CSVTableViewer content={doc.extracted_content} filename={doc.filename} />
+                      ) : (
+                        <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono bg-white p-3 rounded-lg border border-gray-200 overflow-auto max-h-[450px]">
+                          {doc.extracted_content}
+                        </pre>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ) : doc.description ? (
-                <div className="mt-1 ml-8 group/desc">
-                  <p className="text-xs text-gray-500 truncate max-w-2xl">
-                    {doc.description}
-                    {onUpdateDescription && (
-                      <button
-                        onClick={() => handleStartDescEdit(doc)}
-                        className="ml-1.5 text-gray-400 hover:text-blue-600 opacity-0 group-hover/desc:opacity-100 transition-opacity"
-                        title="Editar descripcion"
-                      >
-                        <Edit2 size={10} className="inline" />
-                      </button>
-                    )}
-                  </p>
-                </div>
-              ) : onUpdateDescription ? (
-                <button
-                  onClick={() => handleStartDescEdit(doc)}
-                  className="mt-1 ml-8 text-[10px] text-gray-400 hover:text-blue-600"
-                >
-                  + Descripción
-                </button>
-              ) : null}
-
-              {/* Content match snippet - only when searching */}
-              {searchInContent && searchQuery && (() => {
-                const snippet = getContentMatchSnippet(doc.extracted_content, searchQuery)
-                if (!snippet) return null
-                const parts = snippet.split(new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
-                return (
-                  <div className="mt-1.5 ml-8 p-1.5 bg-yellow-50 border border-yellow-100 rounded-lg text-xs text-gray-600">
-                    <span className="text-yellow-600 font-medium mr-1">Coincidencia:</span>
-                    {parts.map((part, i) =>
-                      part.toLowerCase() === searchQuery.toLowerCase()
-                        ? <mark key={i} className="bg-yellow-200 px-0.5 rounded">{part}</mark>
-                        : <span key={i}>{part}</span>
-                    )}
-                  </div>
-                )
-              })()}
-
-              {/* Mobile: Tags & Campaign on second row */}
-              <div className="sm:hidden mt-2 ml-8 flex flex-wrap items-center gap-1.5">
-                {doc.tags && doc.tags.length > 0 && doc.tags.map((tag, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setTagFilter(tag)}
-                    className={`px-1.5 py-0.5 text-[10px] rounded-full ${
-                      tagFilter === tag ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-600'
-                    }`}
-                  >
-                    {tag}
-                  </button>
-                ))}
+                )}
               </div>
-              {campaigns.length > 0 && onCampaignChange && (
-                <div className="md:hidden mt-1.5 ml-8 flex items-center gap-1.5">
-                  <Link2 size={11} className="text-gray-300" />
-                  <select
-                    value={doc.campaign_id || ''}
-                    onChange={(e) => handleCampaignChange(doc.id, e.target.value)}
-                    disabled={updatingDoc === doc.id}
-                    className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 text-gray-600 bg-white"
-                  >
-                    <option value="">Global (todas las campañas)</option>
-                    {campaigns.map(campaign => (
-                      <option key={campaign.id} value={campaign.id}>{campaign.ecp_name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
