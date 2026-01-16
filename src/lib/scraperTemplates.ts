@@ -32,6 +32,9 @@ export const APIFY_ACTORS = {
   APPSTORE_REVIEWS: '4qRgh5vXXsv0bKa1l',
   PLAYSTORE_REVIEWS: 'Bs72sDKr8fGe3d5Ti',
   GOOGLE_MAPS_REVIEWS: 'thEbk6nzmhRsChwBS',
+
+  // News
+  GOOGLE_NEWS: 'lhotanok~google-news-scraper',
 } as const;
 
 // ============================================
@@ -398,6 +401,29 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
       },
     },
     outputFields: ['keyword', 'searchVolume', 'cpc', 'competition', 'trend'],
+  },
+
+  // ==========================================
+  // NEWS
+  // ==========================================
+
+  google_news: {
+    type: 'google_news',
+    name: 'Google News',
+    description: 'Busca y extrae artículos de noticias de Google News por palabras clave',
+    provider: 'apify',
+    actorId: APIFY_ACTORS.GOOGLE_NEWS,
+    category: 'web',
+    inputSchema: {
+      required: ['query'],
+      optional: ['language', 'country', 'maxItems', 'dateRange'],
+      defaults: {
+        language: 'es',
+        country: 'ES',
+        maxItems: 50,
+      },
+    },
+    outputFields: ['title', 'link', 'source', 'publishedAt', 'description', 'image'],
   },
 
   // ==========================================

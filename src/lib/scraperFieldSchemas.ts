@@ -1183,6 +1183,63 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   },
 
   // ==========================================
+  // GOOGLE NEWS
+  // ==========================================
+  google_news: {
+    type: 'google_news',
+    fields: {
+      query: {
+        key: 'query',
+        type: 'text',
+        label: 'Término de búsqueda',
+        description: 'Palabra clave o frase para buscar noticias',
+        placeholder: 'Revolut España',
+        helpText: 'Escribe la búsqueda como en Google News',
+        required: true,
+        examples: [
+          'Revolut España',
+          'fintech noticias',
+          'bancos digitales',
+        ],
+      },
+      language: {
+        key: 'language',
+        type: 'select',
+        label: 'Idioma',
+        description: 'Idioma de las noticias',
+        options: LANGUAGE_OPTIONS,
+        defaultValue: 'es',
+      },
+      country: {
+        key: 'country',
+        type: 'select',
+        label: 'País',
+        description: 'País para los resultados',
+        options: [
+          { value: 'ES', label: 'España' },
+          { value: 'MX', label: 'México' },
+          { value: 'AR', label: 'Argentina' },
+          { value: 'US', label: 'Estados Unidos' },
+          { value: 'GB', label: 'Reino Unido' },
+        ],
+        defaultValue: 'ES',
+      },
+      maxItems: {
+        key: 'maxItems',
+        type: 'number',
+        label: 'Máximo de artículos',
+        description: 'Número máximo de artículos a obtener',
+        helpText: 'Recomendado: 20-100 artículos',
+        defaultValue: 50,
+        validation: {
+          min: 1,
+          max: 500,
+        },
+      },
+    },
+  },
+
+  // ==========================================
   // NEWS BING
   // ==========================================
   news_bing: {

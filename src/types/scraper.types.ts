@@ -53,6 +53,8 @@ export type ScraperType =
   // Web & SEO
   | 'website'
   | 'seo_keywords'
+  // News
+  | 'google_news'
   // Custom
   | 'news_bing';
 
