@@ -56,6 +56,7 @@ export async function getUserApiKey({
 }: GetApiKeyOptions): Promise<string | null> {
   // First, try to get user's personal key
   try {
+    console.log(`[getUserApiKey] Looking for ${serviceName} key for user ${userId}`);
     const { data: keyRecord, error } = await supabase
       .from('user_api_keys')
       .select('api_key_encrypted')
@@ -63,6 +64,8 @@ export async function getUserApiKey({
       .eq('service_name', serviceName)
       .eq('is_active', true)
       .single();
+
+    console.log(`[getUserApiKey] Query result - found: ${!!keyRecord}, error: ${error?.message || 'none'}`);
 
     if (!error && keyRecord?.api_key_encrypted) {
       const decrypted = decrypt(keyRecord.api_key_encrypted);
