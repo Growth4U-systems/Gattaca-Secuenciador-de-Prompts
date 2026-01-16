@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Search,
   Play,
@@ -13,9 +13,44 @@ import {
   Settings,
   ChevronDown,
   ChevronUp,
+  Eye,
 } from 'lucide-react'
 import { useToast } from '@/components/ui'
 import NicheResultsDashboard from './NicheResultsDashboard'
+
+// Mapeo de contextos de vida a foros temáticos sugeridos
+const THEMATIC_FORUMS_MAP: Record<string, string[]> = {
+  familia: ['enfemenino.com', 'bebesymas.com'],
+  hijos: ['bebesymas.com', 'serpadres.es'],
+  niños: ['bebesymas.com', 'serpadres.es'],
+  bebés: ['bebesymas.com', 'serpadres.es'],
+  bebé: ['bebesymas.com', 'serpadres.es'],
+  universidad: ['forocoches.com/foro/estudiantes', 'mediavida.com'],
+  estudiante: ['forocoches.com/foro/estudiantes', 'mediavida.com'],
+  boda: ['bodas.net', 'zankyou.es'],
+  casamiento: ['bodas.net', 'zankyou.es'],
+  matrimonio: ['bodas.net', 'zankyou.es'],
+  trabajo: ['forocoches.com', 'linkedin.com'],
+  empleo: ['forocoches.com', 'infojobs.net'],
+  autónomo: ['infoautonomos.com', 'forocoches.com'],
+  freelancer: ['domestika.org', 'forocoches.com'],
+  empresa: ['forocoches.com', 'rankia.com'],
+  negocio: ['forocoches.com', 'rankia.com'],
+  inversión: ['rankia.com', 'finect.com'],
+  ahorro: ['rankia.com', 'finect.com'],
+  finanzas: ['rankia.com', 'finect.com'],
+  dinero: ['rankia.com', 'forocoches.com'],
+  vivienda: ['idealista.com/foro', 'fotocasa.es/foro'],
+  piso: ['idealista.com/foro', 'fotocasa.es/foro'],
+  alquiler: ['idealista.com/foro', 'fotocasa.es/foro'],
+  hipoteca: ['rankia.com', 'idealista.com/foro'],
+  vacaciones: ['tripadvisor.es', 'losviajeros.com'],
+  viaje: ['tripadvisor.es', 'losviajeros.com'],
+  coche: ['forocoches.com', 'km77.com'],
+  salud: ['enfemenino.com', 'doctoralia.es'],
+  deporte: ['foroatletismo.com', 'burbuja.info'],
+  jubilación: ['rankia.com', 'jubilaciondefuturo.es'],
+}
 
 interface NicheFinderPlaybookProps {
   projectId: string
@@ -88,15 +123,74 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
   // AI suggestions
   const [suggestingContexts, setSuggestingContexts] = useState(false)
   const [suggestingWords, setSuggestingWords] = useState(false)
+  const [suggestingForums, setSuggestingForums] = useState(false)
+
+  // AI-suggested thematic forums (user can approve/remove)
+  const [aiSuggestedForums, setAiSuggestedForums] = useState<Array<{domain: string, context: string, reason: string}>>([])
+  const [approvedForums, setApprovedForums] = useState<string[]>([])
 
   // Results
   const [showResults, setShowResults] = useState(false)
 
+  // Preview
+  const [showPreview, setShowPreview] = useState(false)
+
+  // Calculate suggested thematic forums based on selected contexts + AI approved forums
+  const suggestedThematicForums = useMemo(() => {
+    const forums = new Map<string, string[]>() // forum -> contexts that suggest it
+
+    // Add forums from the hardcoded map
+    lifeContexts.forEach(ctx => {
+      const ctxLower = ctx.toLowerCase()
+      Object.entries(THEMATIC_FORUMS_MAP).forEach(([keyword, forumList]) => {
+        if (ctxLower.includes(keyword) || keyword.includes(ctxLower)) {
+          forumList.forEach(forum => {
+            const existing = forums.get(forum) || []
+            if (!existing.includes(ctx)) {
+              forums.set(forum, [...existing, ctx])
+            }
+          })
+        }
+      })
+    })
+
+    // Add AI-approved forums
+    approvedForums.forEach(forum => {
+      const aiSuggestion = aiSuggestedForums.find(f => f.domain === forum)
+      if (aiSuggestion && !forums.has(forum)) {
+        forums.set(forum, [aiSuggestion.context || 'IA'])
+      }
+    })
+
+    return forums
+  }, [lifeContexts, approvedForums, aiSuggestedForums])
+
+  // Generate sample queries for preview
+  const sampleQueries = useMemo(() => {
+    const queries: string[] = []
+    const ctx = lifeContexts[0] || 'contexto'
+    const word = productWords[0] || 'palabra'
+    const indicator = selectedIndicators[0]
+
+    if (sources.reddit) {
+      queries.push(`site:reddit.com "${ctx}" "${word}"${indicator ? ` "${indicator}"` : ''}`)
+    }
+    if (sources.thematic_forums && suggestedThematicForums.size > 0) {
+      const firstForum = Array.from(suggestedThematicForums.keys())[0]
+      queries.push(`site:${firstForum} "${ctx}" "${word}"`)
+    }
+    if (sources.general_forums.length > 0) {
+      queries.push(`site:${sources.general_forums[0]} "${ctx}" "${word}"`)
+    }
+
+    return queries
+  }, [lifeContexts, productWords, selectedIndicators, sources, suggestedThematicForums])
+
   // Calculate combinations
   const totalCombinations = lifeContexts.length * productWords.length
-  const totalQueries = totalCombinations * (sources.reddit ? 1 : 0) +
-    totalCombinations * (sources.thematic_forums ? 1 : 0) +
-    totalCombinations * sources.general_forums.length
+  const thematicForumsCount = sources.thematic_forums ? suggestedThematicForums.size : 0
+  const sourcesCount = (sources.reddit ? 1 : 0) + thematicForumsCount + sources.general_forums.length
+  const totalQueries = totalCombinations * sourcesCount
 
   // Poll job status
   useEffect(() => {
@@ -172,18 +266,34 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
     return () => clearTimeout(debounce)
   }, [estimateCost])
 
-  // Add context
+  // Add context - supports multiple words separated by comma
   const handleAddContext = () => {
-    if (newContext.trim() && !lifeContexts.includes(newContext.trim())) {
-      setLifeContexts([...lifeContexts, newContext.trim()])
+    if (newContext.trim()) {
+      // Parse multiple words separated by comma
+      const newContexts = newContext
+        .split(',')
+        .map(c => c.trim())
+        .filter(c => c && !lifeContexts.includes(c))
+
+      if (newContexts.length > 0) {
+        setLifeContexts([...lifeContexts, ...newContexts])
+      }
       setNewContext('')
     }
   }
 
-  // Add product word
+  // Add product word - supports multiple words separated by comma
   const handleAddProductWord = () => {
-    if (newProductWord.trim() && !productWords.includes(newProductWord.trim())) {
-      setProductWords([...productWords, newProductWord.trim()])
+    if (newProductWord.trim()) {
+      // Parse multiple words separated by comma
+      const newWords = newProductWord
+        .split(',')
+        .map(w => w.trim())
+        .filter(w => w && !productWords.includes(w))
+
+      if (newWords.length > 0) {
+        setProductWords([...productWords, ...newWords])
+      }
       setNewProductWord('')
     }
   }
@@ -219,6 +329,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
           type: 'life_contexts',
           existing: lifeContexts,
           product_words: productWords,
+          project_id: projectId,
         }),
       })
 
@@ -227,10 +338,17 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
         const newContexts = data.suggestions.filter(
           (s: string) => !lifeContexts.includes(s)
         )
-        setLifeContexts([...lifeContexts, ...newContexts.slice(0, 5)])
-        toast.success('Sugerencias añadidas', `Se añadieron ${Math.min(newContexts.length, 5)} contextos`)
+        if (newContexts.length > 0) {
+          setLifeContexts([...lifeContexts, ...newContexts.slice(0, 5)])
+          toast.success('Sugerencias añadidas', `Se añadieron ${Math.min(newContexts.length, 5)} contextos`)
+        } else {
+          toast.warning('Sin sugerencias', 'No se encontraron nuevos contextos')
+        }
+      } else {
+        toast.error('Error', data.error || 'No se pudieron obtener sugerencias')
       }
     } catch (error) {
+      console.error('Suggest contexts error:', error)
       toast.error('Error', 'No se pudieron obtener sugerencias')
     } finally {
       setSuggestingContexts(false)
@@ -248,6 +366,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
           type: 'product_words',
           existing: productWords,
           life_contexts: lifeContexts,
+          project_id: projectId,
         }),
       })
 
@@ -256,14 +375,83 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
         const newWords = data.suggestions.filter(
           (s: string) => !productWords.includes(s)
         )
-        setProductWords([...productWords, ...newWords.slice(0, 5)])
-        toast.success('Sugerencias añadidas', `Se añadieron ${Math.min(newWords.length, 5)} palabras`)
+        if (newWords.length > 0) {
+          setProductWords([...productWords, ...newWords.slice(0, 5)])
+          toast.success('Sugerencias añadidas', `Se añadieron ${Math.min(newWords.length, 5)} palabras`)
+        } else {
+          toast.warning('Sin sugerencias', 'No se encontraron nuevas palabras')
+        }
+      } else {
+        toast.error('Error', data.error || 'No se pudieron obtener sugerencias')
       }
     } catch (error) {
+      console.error('Suggest product words error:', error)
       toast.error('Error', 'No se pudieron obtener sugerencias')
     } finally {
       setSuggestingWords(false)
     }
+  }
+
+  // AI suggest thematic forums
+  const suggestThematicForums = async () => {
+    if (lifeContexts.length === 0 && productWords.length === 0) {
+      toast.warning('Añade contextos', 'Primero añade contextos de vida o palabras del producto')
+      return
+    }
+
+    setSuggestingForums(true)
+    try {
+      const response = await fetch('/api/niche-finder/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'thematic_forums',
+          existing: [...Array.from(suggestedThematicForums.keys()), ...approvedForums],
+          life_contexts: lifeContexts,
+          product_words: productWords,
+          project_id: projectId,
+        }),
+      })
+
+      const data = await response.json()
+      if (data.success && data.suggestions) {
+        const newForums = data.suggestions.filter(
+          (f: {domain: string}) => !approvedForums.includes(f.domain) && !suggestedThematicForums.has(f.domain)
+        )
+        if (newForums.length > 0) {
+          setAiSuggestedForums(prev => [...prev, ...newForums])
+          toast.success('Foros sugeridos', `Se encontraron ${newForums.length} foros. Aprueba los que quieras usar.`)
+        } else {
+          toast.warning('Sin sugerencias', 'No se encontraron nuevos foros temáticos')
+        }
+      } else {
+        toast.error('Error', data.error || 'No se pudieron obtener sugerencias')
+      }
+    } catch (error) {
+      console.error('Suggest forums error:', error)
+      toast.error('Error', 'No se pudieron obtener sugerencias de foros')
+    } finally {
+      setSuggestingForums(false)
+    }
+  }
+
+  // Approve an AI-suggested forum
+  const approveForum = (domain: string) => {
+    if (!approvedForums.includes(domain)) {
+      setApprovedForums([...approvedForums, domain])
+    }
+    // Remove from pending suggestions
+    setAiSuggestedForums(prev => prev.filter(f => f.domain !== domain))
+  }
+
+  // Reject an AI-suggested forum
+  const rejectForum = (domain: string) => {
+    setAiSuggestedForums(prev => prev.filter(f => f.domain !== domain))
+  }
+
+  // Remove an approved forum
+  const removeApprovedForum = (domain: string) => {
+    setApprovedForums(prev => prev.filter(f => f !== domain))
   }
 
   // Start execution
@@ -278,18 +466,20 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
     setShowResults(false)
 
     try {
-      // Start job
+      // Start job - wrap config data in config object as expected by API
       const startResponse = await fetch('/api/niche-finder/jobs/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: projectId,
-          life_contexts: lifeContexts,
-          product_words: productWords,
-          indicators: selectedIndicators,
-          sources,
-          serp_pages: serpPages,
-          batch_size: batchSize,
+          config: {
+            life_contexts: lifeContexts,
+            product_words: productWords,
+            indicators: selectedIndicators,
+            sources,
+            serp_pages: serpPages,
+            batch_size: batchSize,
+          },
         }),
       })
 
@@ -298,7 +488,8 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
         throw new Error(startData.error || 'Error al iniciar job')
       }
 
-      setCurrentJobId(startData.jobId)
+      // Handle both job_id and jobId for compatibility
+      setCurrentJobId(startData.job_id || startData.jobId)
 
       // Run SERP phase
       const serpResponse = await fetch(`/api/niche-finder/jobs/${startData.jobId}/serp`, {
@@ -542,7 +733,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
       </div>
 
       {/* Combinations Preview */}
-      {totalCombinations > 0 && (
+      {(lifeContexts.length > 0 || productWords.length > 0) && (
         <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -551,10 +742,15 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
               </div>
               <div>
                 <p className="font-semibold text-orange-900">
-                  {totalCombinations} combinaciones × {Math.max(1, (sources.reddit ? 1 : 0) + (sources.thematic_forums ? 1 : 0) + sources.general_forums.length)} fuentes
+                  {lifeContexts.length} contextos × {productWords.length} palabras = {totalCombinations} combinaciones
                 </p>
                 <p className="text-sm text-orange-700">
-                  = {totalQueries} queries de búsqueda
+                  × {sourcesCount} fuentes = <strong>{totalQueries} queries</strong> de búsqueda
+                </p>
+                <p className="text-xs text-orange-600 mt-1">
+                  Fuentes: {sources.reddit ? 'Reddit' : ''}{sources.reddit && (thematicForumsCount > 0 || sources.general_forums.length > 0) ? ', ' : ''}
+                  {thematicForumsCount > 0 ? `${thematicForumsCount} foros temáticos` : ''}{thematicForumsCount > 0 && sources.general_forums.length > 0 ? ', ' : ''}
+                  {sources.general_forums.length > 0 ? `${sources.general_forums.length} foros generales` : ''}
                 </p>
               </div>
             </div>
@@ -575,8 +771,8 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
           Fuentes de Datos
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Reddit */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Row 1: Reddit + General Forums */}
           <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
             <input
               type="checkbox"
@@ -587,20 +783,6 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
             <div>
               <p className="font-medium text-gray-900">Reddit</p>
               <p className="text-xs text-gray-500">Búsqueda general</p>
-            </div>
-          </label>
-
-          {/* Thematic Forums */}
-          <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-            <input
-              type="checkbox"
-              checked={sources.thematic_forums}
-              onChange={(e) => setSources({ ...sources, thematic_forums: e.target.checked })}
-              className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
-            />
-            <div>
-              <p className="font-medium text-gray-900">Foros Temáticos</p>
-              <p className="text-xs text-gray-500">Según contexto de vida</p>
             </div>
           </label>
 
@@ -645,18 +827,131 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
               </button>
             </div>
           </div>
+
+          {/* Row 2: Thematic Forums (full width) */}
+          <div className="p-3 border border-gray-200 rounded-lg md:col-span-2">
+            <div className="flex items-center justify-between mb-2">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sources.thematic_forums}
+                  onChange={(e) => setSources({ ...sources, thematic_forums: e.target.checked })}
+                  className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                />
+                <div>
+                  <p className="font-medium text-gray-900">Foros Temáticos</p>
+                  <p className="text-xs text-gray-500">Según contexto de vida ({suggestedThematicForums.size} foros)</p>
+                </div>
+              </label>
+              <button
+                onClick={suggestThematicForums}
+                disabled={suggestingForums || (lifeContexts.length === 0 && productWords.length === 0)}
+                className="px-3 py-1.5 text-xs bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {suggestingForums ? <Loader2 size={12} className="animate-spin" /> : <Lightbulb size={12} />}
+                Sugerir con IA
+              </button>
+            </div>
+
+            {/* AI Suggestions pending approval */}
+            {aiSuggestedForums.length > 0 && (
+              <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <p className="text-xs font-medium text-purple-800 mb-2">Sugerencias de IA (aprobar o rechazar):</p>
+                <div className="space-y-2">
+                  {aiSuggestedForums.map((forum) => (
+                    <div key={forum.domain} className="flex items-center justify-between p-2 bg-white rounded border border-purple-100">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{forum.domain}</p>
+                        <p className="text-xs text-gray-500">{forum.reason}</p>
+                        {forum.context && (
+                          <p className="text-xs text-purple-600">Contexto: {forum.context}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => approveForum(forum.domain)}
+                          className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
+                        >
+                          ✓ Aprobar
+                        </button>
+                        <button
+                          onClick={() => rejectForum(forum.domain)}
+                          className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* List of all thematic forums that will be searched */}
+            {sources.thematic_forums && suggestedThematicForums.size > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-medium text-gray-700 mb-2">Foros que se buscarán:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {Array.from(suggestedThematicForums.entries()).map(([forum, contexts]) => (
+                    <span
+                      key={forum}
+                      className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${
+                        approvedForums.includes(forum)
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-blue-50 text-blue-700'
+                      }`}
+                      title={`Sugerido por: ${contexts.join(', ')}`}
+                    >
+                      {forum}
+                      {approvedForums.includes(forum) && (
+                        <button
+                          onClick={() => removeApprovedForum(forum)}
+                          className="text-purple-500 hover:text-purple-700 ml-1"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {sources.thematic_forums && suggestedThematicForums.size === 0 && lifeContexts.length > 0 && (
+              <p className="mt-2 text-xs text-amber-600">
+                No se encontraron foros temáticos para estos contextos. Usa &quot;Sugerir con IA&quot; para buscar foros relevantes.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Indicators (Optional) */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <h3 className="font-semibold text-gray-900 mb-2">
-          Indicadores de Problema
-          <span className="text-gray-400 font-normal text-sm ml-2">(opcional)</span>
-        </h3>
-        <p className="text-sm text-gray-500 mb-4">
-          Palabras que indican frustración o necesidad para refinar la búsqueda
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-semibold text-gray-900">
+            Indicadores de Problema
+            <span className="text-gray-400 font-normal text-sm ml-2">(opcional)</span>
+          </h3>
+          {selectedIndicators.length > 0 && (
+            <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">
+              {selectedIndicators.length} seleccionados
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-gray-500 mb-2">
+          Palabras que indican frustración o necesidad. Se añadirán a las queries de búsqueda.
         </p>
+
+        {/* Show selected indicators with example query */}
+        {selectedIndicators.length > 0 && lifeContexts.length > 0 && productWords.length > 0 && (
+          <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+            <p className="text-xs font-medium text-orange-700 mb-1">Query con indicadores:</p>
+            <code className="text-xs text-orange-900">
+              &quot;{lifeContexts[0]}&quot; &quot;{productWords[0]}&quot; &quot;{selectedIndicators[0]}&quot; site:reddit.com
+            </code>
+          </div>
+        )}
 
         <div className="space-y-3">
           {Object.entries(INDICATOR_PRESETS).map(([category, indicators]) => (
@@ -674,10 +969,11 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
                     onClick={() => toggleIndicator(indicator)}
                     className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
                       selectedIndicators.includes(indicator)
-                        ? 'bg-orange-600 text-white'
+                        ? 'bg-orange-600 text-white shadow-sm'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
+                    {selectedIndicators.includes(indicator) && '✓ '}
                     {indicator}
                   </button>
                 ))}
@@ -736,6 +1032,77 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
           </div>
         )}
       </div>
+
+      {/* Search Preview */}
+      {totalCombinations > 0 && !isExecuting && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-blue-900 flex items-center gap-2">
+              <Eye size={18} />
+              Preview de Búsqueda
+            </h3>
+            <button
+              onClick={() => setShowPreview(!showPreview)}
+              className="text-sm text-blue-600 hover:text-blue-700"
+            >
+              {showPreview ? 'Ocultar detalles' : 'Ver detalles'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <p className="font-medium text-gray-700">Combinaciones</p>
+              <p className="text-blue-900 text-lg font-semibold">
+                {totalCombinations}
+                <span className="text-xs font-normal text-gray-500 ml-1">
+                  ({lifeContexts.length} × {productWords.length})
+                </span>
+              </p>
+            </div>
+            <div>
+              <p className="font-medium text-gray-700">Total queries</p>
+              <p className="text-blue-900 text-lg font-semibold">{totalQueries}</p>
+            </div>
+            <div>
+              <p className="font-medium text-gray-700">Fuentes</p>
+              <ul className="text-blue-900 text-sm">
+                {sources.reddit && <li>• Reddit</li>}
+                {sources.thematic_forums && (
+                  <li>• Foros temáticos ({suggestedThematicForums.size || 1})</li>
+                )}
+                {sources.general_forums.length > 0 && (
+                  <li>• Foros generales ({sources.general_forums.length})</li>
+                )}
+              </ul>
+            </div>
+            <div>
+              <p className="font-medium text-gray-700">Coste estimado</p>
+              <p className="text-blue-900 text-xl font-bold">
+                ${costEstimate?.total.toFixed(2) || '---'}
+              </p>
+            </div>
+          </div>
+
+          {/* Query examples */}
+          {showPreview && (
+            <div className="mt-4 p-4 bg-white/60 rounded-lg">
+              <p className="text-xs font-medium text-gray-600 mb-2">Ejemplo de queries que se ejecutarán:</p>
+              <div className="space-y-2">
+                {sampleQueries.map((query, idx) => (
+                  <code key={idx} className="block text-xs text-gray-700 bg-white/80 p-2 rounded">
+                    {query}
+                  </code>
+                ))}
+              </div>
+              {selectedIndicators.length > 0 && (
+                <p className="mt-3 text-xs text-gray-500">
+                  <strong>Indicadores seleccionados:</strong> {selectedIndicators.join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Execution Status */}
       {isExecuting && (

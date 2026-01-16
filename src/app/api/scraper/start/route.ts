@@ -463,8 +463,8 @@ async function executeFirecrawl(
     .from('knowledge_base_docs')
     .insert({
       project_id: job.project_id,
-      name: documentName,
-      content: documentContent,
+      filename: documentName,
+      extracted_content: documentContent,
       description: documentBrief,
       category: targetCategory || job.target_category || 'research',
       tags: documentTags,
