@@ -14,6 +14,8 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
+  Sparkles,
+  RotateCcw,
 } from 'lucide-react'
 import { useToast } from '@/components/ui'
 import NicheResultsDashboard from './NicheResultsDashboard'
@@ -134,8 +136,11 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
   const [manualThematicForums, setManualThematicForums] = useState<string[]>([])
   const [newThematicForum, setNewThematicForum] = useState('')
 
-  // Excluded thematic forums (from auto-suggested)
+  // Excluded thematic forums (temporary - only for this session, can be restored)
   const [excludedThematicForums, setExcludedThematicForums] = useState<string[]>([])
+
+  // Deep search for forums (using powerful web search model like Perplexity)
+  const [deepSearchingForums, setDeepSearchingForums] = useState(false)
 
   // Results
   const [showResults, setShowResults] = useState(false)
@@ -339,16 +344,70 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
     }
   }
 
-  // Remove thematic forum (either manual or exclude auto-suggested)
+  // Remove thematic forum (either manual or exclude auto-suggested temporarily)
   const removeThematicForum = (forum: string) => {
     if (manualThematicForums.includes(forum)) {
       setManualThematicForums(manualThematicForums.filter(f => f !== forum))
     } else {
-      // It's an auto-suggested forum, exclude it
+      // It's an auto-suggested forum, exclude it temporarily
       setExcludedThematicForums([...excludedThematicForums, forum])
     }
     // Also remove from approved if it was AI-approved
     setApprovedForums(approvedForums.filter(f => f !== forum))
+  }
+
+  // Restore an excluded forum
+  const restoreThematicForum = (forum: string) => {
+    setExcludedThematicForums(excludedThematicForums.filter(f => f !== forum))
+  }
+
+  // Restore all excluded forums
+  const restoreAllExcludedForums = () => {
+    setExcludedThematicForums([])
+  }
+
+  // Deep search for forums using powerful web search (Perplexity-style)
+  const deepSearchForums = async () => {
+    if (lifeContexts.length === 0 && productWords.length === 0) {
+      toast.warning('Sin contexto', 'Agrega contextos de vida o palabras de producto primero')
+      return
+    }
+
+    setDeepSearchingForums(true)
+    try {
+      const response = await fetch('/api/niche-finder/deep-search-forums', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          life_contexts: lifeContexts,
+          product_words: productWords,
+          existing_forums: [...Array.from(suggestedThematicForums.keys()), ...sources.general_forums],
+          country: 'España',
+          project_id: projectId,
+        }),
+      })
+
+      const data = await response.json()
+      if (data.success && data.forums) {
+        // Add discovered forums to AI suggestions for approval
+        const newForums = data.forums.filter(
+          (f: { domain: string }) => !suggestedThematicForums.has(f.domain) && !sources.general_forums.includes(f.domain)
+        )
+        if (newForums.length > 0) {
+          setAiSuggestedForums(prev => [...prev, ...newForums])
+          toast.success('Foros encontrados', `Se encontraron ${newForums.length} foros relevantes. Revisa las sugerencias.`)
+        } else {
+          toast.info('Sin nuevos foros', 'No se encontraron foros adicionales')
+        }
+      } else {
+        toast.error('Error', data.error || 'No se pudieron buscar foros')
+      }
+    } catch (error) {
+      console.error('Deep search forums error:', error)
+      toast.error('Error', 'Error al buscar foros con búsqueda avanzada')
+    } finally {
+      setDeepSearchingForums(false)
+    }
   }
 
   // Toggle indicator
@@ -965,14 +1024,25 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
                   <p className="text-xs text-gray-500">Según contexto de vida ({suggestedThematicForums.size} foros)</p>
                 </div>
               </label>
-              <button
-                onClick={suggestThematicForums}
-                disabled={suggestingForums || (lifeContexts.length === 0 && productWords.length === 0)}
-                className="px-3 py-1.5 text-xs bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 disabled:opacity-50 inline-flex items-center gap-1.5"
-              >
-                {suggestingForums ? <Loader2 size={12} className="animate-spin" /> : <Lightbulb size={12} />}
-                Sugerir con IA
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={suggestThematicForums}
+                  disabled={suggestingForums || (lifeContexts.length === 0 && productWords.length === 0)}
+                  className="px-3 py-1.5 text-xs bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 disabled:opacity-50 inline-flex items-center gap-1.5"
+                >
+                  {suggestingForums ? <Loader2 size={12} className="animate-spin" /> : <Lightbulb size={12} />}
+                  Sugerir
+                </button>
+                <button
+                  onClick={deepSearchForums}
+                  disabled={deepSearchingForums || (lifeContexts.length === 0 && productWords.length === 0)}
+                  className="px-3 py-1.5 text-xs bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 inline-flex items-center gap-1.5 shadow-sm"
+                  title="Búsqueda avanzada con modelo de web search potente"
+                >
+                  {deepSearchingForums ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  Deep Search
+                </button>
+              </div>
             </div>
 
             {/* AI Suggestions pending approval */}
@@ -1053,12 +1123,45 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
                     +
                   </button>
                 </div>
+
+                {/* Excluded forums - can be restored */}
+                {excludedThematicForums.length > 0 && (
+                  <div className="mt-2 p-2 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs text-gray-500">Foros ocultos (solo esta sesión):</p>
+                      <button
+                        onClick={restoreAllExcludedForums}
+                        className="text-xs text-blue-600 hover:text-blue-700 inline-flex items-center gap-1"
+                      >
+                        <RotateCcw size={10} />
+                        Restaurar todos
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {excludedThematicForums.map(forum => (
+                        <span
+                          key={forum}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 text-gray-500 rounded text-xs line-through"
+                        >
+                          {forum}
+                          <button
+                            onClick={() => restoreThematicForum(forum)}
+                            className="text-blue-500 hover:text-blue-700"
+                            title="Restaurar foro"
+                          >
+                            <RotateCcw size={10} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {sources.thematic_forums && suggestedThematicForums.size === 0 && lifeContexts.length > 0 && (
               <p className="mt-2 text-xs text-amber-600">
-                No se encontraron foros temáticos para estos contextos. Usa &quot;Sugerir con IA&quot; para buscar foros relevantes.
+                No se encontraron foros temáticos para estos contextos. Usa &quot;Deep Search&quot; para buscar foros con IA avanzada.
               </p>
             )}
           </div>
