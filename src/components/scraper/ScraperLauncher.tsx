@@ -94,29 +94,31 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
     }
   }, [pollingInterval])
 
-  // Poll for job status
+  // Poll for job status - uses /api/scraper/poll which checks Apify status and updates DB
   const startPolling = (jobId: string) => {
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`/api/scraper/status?job_id=${jobId}`)
+        // Use /poll endpoint which actively checks Apify status and updates the DB
+        const response = await fetch(`/api/scraper/poll?jobId=${jobId}`)
         const data = await response.json()
 
-        if (data.success && data.job) {
-          setJobStatus(data.job.status)
+        if (data.status) {
+          setJobStatus(data.status)
 
-          if (data.job.status === 'completed') {
+          if (data.completed) {
             clearInterval(interval)
-            setCurrentStep('completed')
-          } else if (data.job.status === 'failed') {
-            clearInterval(interval)
-            setError(data.job.error_message || 'El scraper falló')
-            setCurrentStep('error')
+            if (data.status === 'completed') {
+              setCurrentStep('completed')
+            } else if (data.status === 'failed') {
+              setError(data.error || 'El scraper falló')
+              setCurrentStep('error')
+            }
           }
         }
       } catch (err) {
         console.error('Error polling job status:', err)
       }
-    }, 3000) // Poll every 3 seconds
+    }, 5000) // Poll every 5 seconds (Apify runs take time)
 
     setPollingInterval(interval)
   }
