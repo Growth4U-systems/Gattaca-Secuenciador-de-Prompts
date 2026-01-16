@@ -31,7 +31,9 @@ export async function POST(request: NextRequest) {
   let openrouterApiKey: string | null = null
   try {
     const supabase = await createServerClient()
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+    console.log('[suggest] Session check - user:', session?.user?.id, 'error:', sessionError?.message)
 
     if (session?.user?.id) {
       openrouterApiKey = await getUserApiKey({
@@ -39,9 +41,12 @@ export async function POST(request: NextRequest) {
         serviceName: 'openrouter',
         supabase,
       })
+      console.log('[suggest] getUserApiKey result:', openrouterApiKey ? 'found key' : 'no key found')
+    } else {
+      console.log('[suggest] No session found, will fall back to env var')
     }
   } catch (e) {
-    console.warn('Could not get user session for API key lookup:', e)
+    console.warn('[suggest] Could not get user session for API key lookup:', e)
   }
 
   // Fallback to environment variable if no user key found
