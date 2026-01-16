@@ -35,8 +35,8 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   { type: 'trustpilot_reviews', status: 'enabled', category: 'reviews' },
   { type: 'g2_reviews', status: 'pending', category: 'reviews' },
   { type: 'capterra_reviews', status: 'pending', category: 'reviews' },
-  { type: 'appstore_reviews', status: 'pending', category: 'reviews' },
-  { type: 'playstore_reviews', status: 'pending', category: 'reviews' },
+  { type: 'appstore_reviews', status: 'enabled', category: 'reviews' },
+  { type: 'playstore_reviews', status: 'enabled', category: 'reviews' },
   { type: 'google_maps_reviews', status: 'pending', category: 'reviews' },
 
   // Web
