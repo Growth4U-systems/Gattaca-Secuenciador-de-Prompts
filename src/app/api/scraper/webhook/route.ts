@@ -266,32 +266,46 @@ async function fetchAndSaveResults(
   const description = `${allItems.length} ${sourceName.toLowerCase()} de ${targetName}, extraídos el ${new Date().toLocaleDateString('es-ES')}. Incluye información como ratings, fechas, y contenido textual.`;
 
   // Insert ONE consolidated document
-  const { error: docError } = await supabase.from('knowledge_base_docs').insert({
-    project_id: job.project_id,
-    filename: documentName,  // Column is 'filename' not 'name'
-    extracted_content: consolidatedContent,  // Column is 'extracted_content' not 'content'
-    description: description,
-    category: job.target_category || 'research',
-    tags: tags,
-    source_type: 'scraper',
-    source_job_id: job.id,
-    source_url: extractUrl(allItems[0]),
-    source_metadata: {
-      scraper_type: job.scraper_type,
-      scraped_at: new Date().toISOString(),
-      total_items: allItems.length,
-      target_name: targetName,
-      output_format: outputConfig.format,
-      // Store raw data as preview (first 10 items)
-      raw_preview: allItems.slice(0, 10),
-    },
-  });
+  console.log(`[webhook] Inserting document "${documentName}" into knowledge_base_docs...`);
+  const { data: insertedDoc, error: docError } = await supabase
+    .from('knowledge_base_docs')
+    .insert({
+      project_id: job.project_id,
+      filename: documentName,
+      extracted_content: consolidatedContent,
+      description: description,
+      category: job.target_category || 'research',
+      tags: tags,
+      source_type: 'scraper',
+      source_job_id: job.id,
+      source_url: extractUrl(allItems[0]),
+      source_metadata: {
+        scraper_type: job.scraper_type,
+        scraped_at: new Date().toISOString(),
+        total_items: allItems.length,
+        target_name: targetName,
+        output_format: outputConfig.format,
+        raw_preview: allItems.slice(0, 10),
+      },
+    })
+    .select('id')
+    .single();
 
   if (docError) {
-    console.error('[webhook] Error inserting consolidated document:', docError);
-  } else {
-    console.log(`[webhook] Created consolidated document "${documentName}" with ${allItems.length} items for job ${job.id}`);
+    console.error('[webhook] ERROR inserting document:', docError);
+    // Mark job as failed if document couldn't be saved
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'failed',
+        error_message: `Error al guardar documento: ${docError.message}`,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', job.id);
+    return;
   }
+
+  console.log(`[webhook] SUCCESS! Created document "${documentName}" (id: ${insertedDoc?.id}) with ${allItems.length} items for job ${job.id}`);
 
   // Update job as completed
   await supabase
