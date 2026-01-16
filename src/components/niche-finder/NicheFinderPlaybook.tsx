@@ -191,7 +191,9 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
   const totalCombinations = lifeContexts.length * productWords.length
   const thematicForumsCount = sources.thematic_forums ? suggestedThematicForums.size : 0
   const sourcesCount = (sources.reddit ? 1 : 0) + thematicForumsCount + sources.general_forums.length
-  const totalQueries = totalCombinations * sourcesCount
+  const baseQueries = totalCombinations * sourcesCount
+  const indicatorQueries = selectedIndicators.length * totalCombinations * sourcesCount
+  const totalQueries = baseQueries + indicatorQueries
 
   // Poll job status
   useEffect(() => {
@@ -715,7 +717,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
               onChange={(e) => setNewContext(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddContext()}
               placeholder="familia, hijos, universidad..."
-              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
             />
             <button
               onClick={handleAddContext}
@@ -770,7 +772,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
               onChange={(e) => setNewProductWord(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddProductWord()}
               placeholder="pagos, ahorro, gastos..."
-              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
             />
             <button
               onClick={handleAddProductWord}
@@ -897,7 +899,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
                 onChange={(e) => setNewForum(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddForum()}
                 placeholder="dominio.com"
-                className="flex-1 px-2 py-1 border border-gray-200 rounded text-xs"
+                className="flex-1 px-2 py-1 border border-gray-200 rounded text-xs text-gray-900"
               />
               <button
                 onClick={handleAddForum}
@@ -1007,63 +1009,44 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
         </div>
       </div>
 
-      {/* Indicators - Improved explanation */}
+      {/* Indicators - Compact design */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold text-gray-900">
-            🔍 Indicadores de Problema
-            <span className="text-gray-400 font-normal text-sm ml-2">(opcional pero recomendado)</span>
-          </h3>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="font-semibold text-gray-900">
+              🔍 Indicadores de Problema
+            </h3>
+            <p className="text-xs text-gray-500">Palabras que indican frustración o necesidad de ayuda</p>
+          </div>
           {selectedIndicators.length > 0 && (
-            <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">
-              +{selectedIndicators.length * totalCombinations * sourcesCount} queries adicionales
+            <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full font-medium">
+              {selectedIndicators.length} seleccionados → +{indicatorQueries} queries
             </span>
           )}
         </div>
 
-        {/* Explanation box */}
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-800 font-medium mb-2">¿Cómo funcionan los indicadores?</p>
-          <div className="text-xs text-blue-700 space-y-1">
-            <p>Los indicadores <strong>añaden búsquedas adicionales</strong> para encontrar gente frustrada:</p>
-            <div className="mt-2 space-y-1 font-mono bg-blue-100/50 p-2 rounded">
-              <p className="text-blue-600">📌 Búsqueda base:</p>
-              <p className="ml-2">{`site:foro.com "${lifeContexts[0] || 'contexto'}" "${productWords[0] || 'palabra'}"`}</p>
-              {selectedIndicators.length > 0 && (
-                <>
-                  <p className="text-orange-600 mt-2">📌 + Búsqueda con indicador:</p>
-                  <p className="ml-2">{`site:foro.com "${lifeContexts[0] || 'contexto'}" "${productWords[0] || 'palabra'}" "${selectedIndicators[0]}"`}</p>
-                </>
-              )}
-            </div>
-            <p className="mt-2 text-blue-600">
-              💡 Sin indicadores encuentras conversaciones generales. Con indicadores encuentras específicamente gente con problemas.
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-3">
+        {/* Compact indicator grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
           {Object.entries(INDICATOR_PRESETS).map(([category, indicators]) => (
-            <div key={category}>
-              <p className="text-xs font-medium text-gray-500 uppercase mb-2">
+            <div key={category} className="p-2 bg-gray-50 rounded-lg">
+              <p className="text-xs font-medium text-gray-600 mb-1.5">
                 {category === 'frustration' && '😤 Frustración'}
-                {category === 'help' && '🙋 Pidiendo Ayuda'}
-                {category === 'problem' && '⚠️ Reportando Problema'}
-                {category === 'need' && '🔎 Buscando Alternativa'}
+                {category === 'help' && '🙋 Ayuda'}
+                {category === 'problem' && '⚠️ Problema'}
+                {category === 'need' && '🔎 Búsqueda'}
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1">
                 {indicators.map((indicator) => (
                   <button
                     key={indicator}
                     onClick={() => toggleIndicator(indicator)}
-                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                    className={`px-2 py-0.5 rounded text-xs transition-colors ${
                       selectedIndicators.includes(indicator)
-                        ? 'bg-orange-600 text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        ? 'bg-orange-600 text-white'
+                        : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                     }`}
                   >
-                    {selectedIndicators.includes(indicator) && '✓ '}
-                    &quot;{indicator}&quot;
+                    {indicator}
                   </button>
                 ))}
               </div>
@@ -1071,15 +1054,15 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
           ))}
         </div>
 
-        {/* Summary when indicators are selected */}
+        {/* Live preview of how indicators affect queries */}
         {selectedIndicators.length > 0 && (
-          <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-            <p className="text-xs font-medium text-orange-800">
-              ✅ Se buscarán conversaciones donde la gente dice: {selectedIndicators.map(i => `"${i}"`).join(', ')}
+          <div className="p-3 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-lg">
+            <p className="text-xs font-medium text-orange-800 mb-2">
+              ✅ Queries con indicadores buscarán: {selectedIndicators.map(i => `"${i}"`).join(', ')}
             </p>
-            <p className="text-xs text-orange-600 mt-1">
-              Esto genera {selectedIndicators.length * totalCombinations * sourcesCount} queries adicionales a las {totalCombinations * sourcesCount} base
-            </p>
+            <div className="text-xs font-mono bg-white/60 p-2 rounded text-gray-600">
+              <span className="text-gray-400">Ejemplo:</span> site:reddit.com &quot;{lifeContexts[0] || 'contexto'}&quot; &quot;{productWords[0] || 'palabra'}&quot; <span className="text-orange-600 font-semibold">&quot;{selectedIndicators[0]}&quot;</span>
+            </div>
           </div>
         )}
       </div>
@@ -1107,7 +1090,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
                 <select
                   value={serpPages}
                   onChange={(e) => setSerpPages(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900"
                 >
                   <option value={3}>3 páginas (30 resultados)</option>
                   <option value={5}>5 páginas (50 resultados)</option>
@@ -1122,7 +1105,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
                 <select
                   value={batchSize}
                   onChange={(e) => setBatchSize(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900"
                 >
                   <option value={5}>5 (más lento, menos errores)</option>
                   <option value={10}>10 (balanceado)</option>
@@ -1152,7 +1135,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
-              <p className="font-medium text-gray-700">Combinaciones</p>
+              <p className="font-medium text-gray-700">Combinaciones A×B</p>
               <p className="text-blue-900 text-lg font-semibold">
                 {totalCombinations}
                 <span className="text-xs font-normal text-gray-500 ml-1">
@@ -1163,16 +1146,19 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
             <div>
               <p className="font-medium text-gray-700">Total queries</p>
               <p className="text-blue-900 text-lg font-semibold">{totalQueries}</p>
+              <p className="text-xs text-gray-500">
+                {baseQueries} base{indicatorQueries > 0 && ` + ${indicatorQueries} indicadores`}
+              </p>
             </div>
             <div>
-              <p className="font-medium text-gray-700">Fuentes</p>
-              <ul className="text-blue-900 text-sm">
+              <p className="font-medium text-gray-700">Fuentes ({sourcesCount})</p>
+              <ul className="text-blue-900 text-xs">
                 {sources.reddit && <li>• Reddit</li>}
-                {sources.thematic_forums && (
-                  <li>• Foros temáticos ({suggestedThematicForums.size || 1})</li>
+                {sources.thematic_forums && suggestedThematicForums.size > 0 && (
+                  <li>• {suggestedThematicForums.size} foros temáticos</li>
                 )}
                 {sources.general_forums.length > 0 && (
-                  <li>• Foros generales ({sources.general_forums.length})</li>
+                  <li>• {sources.general_forums.length} foros generales</li>
                 )}
               </ul>
             </div>
@@ -1181,6 +1167,24 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
               <p className="text-blue-900 text-xl font-bold">
                 ${costEstimate?.total.toFixed(2) || '---'}
               </p>
+            </div>
+          </div>
+
+          {/* Desglose visual de queries */}
+          <div className="mt-4 p-3 bg-white/70 rounded-lg border border-blue-100">
+            <p className="text-xs font-medium text-gray-600 mb-2">📊 Desglose de queries:</p>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                {totalCombinations} combinaciones × {sourcesCount} fuentes = {baseQueries} queries base
+              </span>
+              {indicatorQueries > 0 && (
+                <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded">
+                  + {selectedIndicators.length} indicadores × {baseQueries} = {indicatorQueries} queries extra
+                </span>
+              )}
+              <span className="px-2 py-1 bg-green-100 text-green-800 rounded font-semibold">
+                = {totalQueries} queries totales
+              </span>
             </div>
           </div>
 
