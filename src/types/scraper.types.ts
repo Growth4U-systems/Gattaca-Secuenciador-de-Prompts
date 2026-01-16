@@ -738,10 +738,28 @@ export interface NicheFinderProgress {
 }
 
 /**
+ * Output de un step de análisis LLM
+ */
+export interface AnalysisStepOutput {
+  step_number: number;
+  step_name: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  model?: string;
+  tokens_input?: number;
+  tokens_output?: number;
+  cost_usd?: number;
+  output_content?: string;
+  error_message?: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+/**
  * Resultados de un job completado
  */
 export interface NicheFinderResults {
   job_id: string;
+  status: string;
   niches: ExtractedNiche[];
   urls: {
     found: number;
@@ -753,7 +771,10 @@ export interface NicheFinderResults {
     serp: number;
     firecrawl: number;
     llm: number;
+    llm_analysis: number;
     total: number;
   };
   duration_ms: number;
+  // LLM Analysis step outputs (Steps 1-3)
+  analysis_steps?: AnalysisStepOutput[];
 }
