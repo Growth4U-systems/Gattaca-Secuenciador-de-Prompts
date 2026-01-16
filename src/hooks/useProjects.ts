@@ -131,6 +131,7 @@ export async function createProject(data: {
   name: string
   description?: string
   client_id: string
+  playbook_type?: 'ecp' | 'competitor_analysis' | 'niche_finder'
 }) {
   const supabase = createClient()
 
@@ -149,6 +150,7 @@ export async function createProject(data: {
       name: data.name,
       description: data.description,
       client_id: data.client_id,
+      playbook_type: data.playbook_type || 'ecp',
       slug,
       status: 'active',
       goals: [],
