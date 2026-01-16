@@ -212,8 +212,8 @@ async function fetchAndSaveApifyResults(
 
     return {
       project_id: job.project_id,
-      name: generateDocumentName(job.scraper_type, item, index),
-      content: textContent,
+      filename: generateDocumentName(job.scraper_type, item, index),  // Column is 'filename' not 'name'
+      extracted_content: textContent,  // Column is 'extracted_content' not 'content'
       category: job.target_category || 'research',
       source_type: 'scraper',
       source_job_id: job.id,
