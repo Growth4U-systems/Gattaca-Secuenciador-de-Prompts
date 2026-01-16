@@ -9,7 +9,7 @@ const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const ALGORITHM = 'aes-256-gcm';
 
 // Supported services
-const SUPPORTED_SERVICES = ['apify', 'firecrawl'] as const;
+const SUPPORTED_SERVICES = ['apify', 'firecrawl', 'openrouter', 'perplexity'] as const;
 type ServiceName = (typeof SUPPORTED_SERVICES)[number];
 
 // ============================================
