@@ -237,12 +237,16 @@ async function fetchAndSaveResults(
 
   // Get output config from job metadata (default to JSON)
   const providerMeta = job.provider_metadata as Record<string, unknown> | null;
+  console.log('[webhook] provider_metadata:', JSON.stringify(providerMeta, null, 2));
+
   const outputConfig: ScraperOutputConfig = (providerMeta?.output_config as ScraperOutputConfig) || {
     format: 'json',
   };
+  console.log('[webhook] Using output format:', outputConfig.format);
 
   // Format content based on user selection
   const consolidatedContent = formatScraperOutput(allItems, outputConfig);
+  console.log('[webhook] Content length:', consolidatedContent.length, 'first 200 chars:', consolidatedContent.substring(0, 200));
 
   // Get target name from job or generate from first item
   const targetName = job.target_name ||
