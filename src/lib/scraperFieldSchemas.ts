@@ -1188,43 +1188,44 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   reddit_posts: {
     type: 'reddit_posts',
     fields: {
+      startUrls: {
+        key: 'startUrls',
+        type: 'url-array',
+        label: 'URLs de Reddit',
+        description: 'URLs de subreddits, usuarios o posts específicos',
+        placeholder: 'https://www.reddit.com/r/personalfinance\nhttps://www.reddit.com/user/username',
+        helpText: 'Una URL por línea. Puedes usar URLs de subreddits, usuarios o posts.',
+        required: true,
+        examples: [
+          'https://www.reddit.com/r/personalfinance',
+          'https://www.reddit.com/r/fintech',
+          'https://www.reddit.com/user/example_user',
+        ],
+      },
       searches: {
         key: 'searches',
         type: 'text-array',
-        label: 'Búsquedas en Reddit',
-        description: 'Subreddits, URLs de posts o términos de búsqueda',
-        placeholder: 'r/personalfinance\nr/fintech\nhttps://reddit.com/r/...',
-        helpText: 'Una búsqueda por línea. Puedes usar subreddits (r/nombre), URLs de posts o términos de búsqueda.',
-        required: true,
+        label: 'Términos de búsqueda',
+        description: 'Palabras clave para buscar en Reddit (opcional)',
+        placeholder: 'fintech apps\nbest banking app\ncrypto wallet',
+        helpText: 'Búsquedas adicionales. Una por línea.',
+        required: false,
         examples: [
-          'r/personalfinance',
-          'r/fintech',
-          'r/CreditCards',
           'best banking app',
+          'fintech review',
+          'mobile banking',
         ],
       },
       maxItems: {
         key: 'maxItems',
         type: 'number',
-        label: 'Máximo de posts',
-        description: 'Número máximo de posts a extraer',
-        helpText: 'Recomendado: 20-100 posts',
-        defaultValue: 50,
+        label: 'Resultados por tipo',
+        description: 'Número de resultados por cada tipo (posts, usuarios, etc.)',
+        helpText: 'Máximo 100 por tipo. $0.002/item (1000 gratis/mes)',
+        defaultValue: 25,
         validation: {
           min: 1,
-          max: 1000,
-        },
-      },
-      maxComments: {
-        key: 'maxComments',
-        type: 'number',
-        label: 'Comentarios por post',
-        description: 'Número máximo de comentarios a extraer por post (0 = no extraer)',
-        helpText: 'Deja en 0 para solo obtener posts sin comentarios',
-        defaultValue: 20,
-        validation: {
-          min: 0,
-          max: 500,
+          max: 100,
         },
       },
       sort: {
@@ -1236,7 +1237,8 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
           { value: 'new', label: 'Más recientes', description: 'Posts más nuevos primero' },
           { value: 'hot', label: 'Populares (Hot)', description: 'Posts con más actividad actual' },
           { value: 'top', label: 'Mejores (Top)', description: 'Posts con más votos' },
-          { value: 'relevance', label: 'Relevancia', description: 'Por relevancia de búsqueda' },
+          { value: 'controversial', label: 'Controversiales', description: 'Posts más debatidos' },
+          { value: 'rising', label: 'En ascenso', description: 'Posts ganando popularidad' },
         ],
         defaultValue: 'new',
       },
@@ -1244,7 +1246,7 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         key: 'time',
         type: 'select',
         label: 'Periodo de tiempo',
-        description: 'Filtrar por antigüedad (solo aplica con sort=top)',
+        description: 'Filtrar por antigüedad',
         options: [
           { value: 'all', label: 'Todo el tiempo' },
           { value: 'year', label: 'Último año' },
@@ -1254,6 +1256,48 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
           { value: 'hour', label: 'Última hora' },
         ],
         defaultValue: 'all',
+      },
+      includeNSFW: {
+        key: 'includeNSFW',
+        type: 'boolean',
+        label: 'Incluir NSFW',
+        description: 'Incluir contenido para adultos',
+        defaultValue: false,
+      },
+      skipComments: {
+        key: 'skipComments',
+        type: 'boolean',
+        label: 'Omitir comentarios',
+        description: 'No extraer comentarios de los posts',
+        helpText: 'Activa para obtener solo posts sin sus comentarios',
+        defaultValue: false,
+      },
+    },
+  },
+
+  // ==========================================
+  // LINKEDIN COMPANY PROFILE
+  // ==========================================
+  linkedin_company_profile: {
+    type: 'linkedin_company_profile',
+    fields: {
+      urls: {
+        key: 'urls',
+        type: 'url-array',
+        label: 'URLs de Empresas',
+        description: 'URLs de las páginas de empresa en LinkedIn',
+        placeholder: 'https://www.linkedin.com/company/revolut',
+        helpText: 'Una URL por línea. Formato: https://www.linkedin.com/company/nombre',
+        required: true,
+        examples: [
+          'https://www.linkedin.com/company/revolut',
+          'https://www.linkedin.com/company/wise',
+          'https://www.linkedin.com/company/n26',
+        ],
+        validation: {
+          pattern: /^https?:\/\/(www\.)?linkedin\.com\/company\/.+/i,
+          patternMessage: 'Debe ser una URL válida de empresa en LinkedIn (linkedin.com/company/...)',
+        },
       },
     },
   },

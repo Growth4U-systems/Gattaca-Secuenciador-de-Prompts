@@ -19,6 +19,7 @@ export const APIFY_ACTORS = {
   FACEBOOK_POSTS: 'KoJrdxJCTtpon81KY',
   FACEBOOK_COMMENTS: 'us5srxAYnsrkgUv2v',
   LINKEDIN_COMPANY_INSIGHTS: '6mSoKnECRInl7QUb8',
+  LINKEDIN_COMPANY_PROFILE: 'dev_fusion~linkedin-company-scraper',  // Pay-per-use: $8/1000 results
 
   // YouTube
   YOUTUBE_CHANNEL_VIDEOS: '67Q6fmd8iedTVcCwY',  // streamers/youtube-channel-scraper
@@ -37,7 +38,7 @@ export const APIFY_ACTORS = {
   GOOGLE_NEWS: 'lhotanok~google-news-scraper',
 
   // Reddit
-  REDDIT_POSTS: 'trudax~reddit-scraper',
+  REDDIT_POSTS: 'practicaltools~apify-reddit-api',  // Pay-per-use: $0.002/item, 1000 free/month
 } as const;
 
 // ============================================
@@ -193,22 +194,37 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
   reddit_posts: {
     type: 'reddit_posts',
     name: 'Reddit Posts & Comments',
-    description: 'Busca posts y comentarios en Reddit por subreddit, búsqueda o URL',
+    description: 'Busca posts y comentarios en Reddit por subreddit, búsqueda o URL. $0.002/item (1000 gratis/mes)',
     provider: 'apify',
     actorId: APIFY_ACTORS.REDDIT_POSTS,
     category: 'social',
     inputSchema: {
-      required: ['searches'],
-      optional: ['maxItems', 'maxComments', 'sort', 'time', 'type'],
+      required: ['startUrls'],
+      optional: ['searches', 'maxItems', 'sort', 'time', 'includeNSFW', 'skipComments'],
       defaults: {
-        maxItems: 50,
-        maxComments: 20,
+        maxItems: 25,
         sort: 'new',
         time: 'all',
-        type: 'community',
+        includeNSFW: false,
+        skipComments: false,
       },
     },
-    outputFields: ['title', 'body', 'url', 'author', 'score', 'numComments', 'createdAt', 'subreddit', 'comments'],
+    outputFields: ['title', 'selftext', 'url', 'author', 'score', 'numComments', 'createdAt', 'subreddit', 'comments'],
+  },
+
+  linkedin_company_profile: {
+    type: 'linkedin_company_profile',
+    name: 'LinkedIn Company Profile',
+    description: 'Obtiene perfil de empresa: empleados, followers, headquarters y especialidades. $8/1000 resultados',
+    provider: 'apify',
+    actorId: APIFY_ACTORS.LINKEDIN_COMPANY_PROFILE,
+    category: 'social',
+    inputSchema: {
+      required: ['urls'],
+      optional: [],
+      defaults: {},
+    },
+    outputFields: ['companyName', 'websiteUrl', 'industry', 'employeeCount', 'followerCount', 'description', 'tagline', 'headquarter', 'foundedOn', 'specialities', 'logo', 'affiliatedOrganizations'],
   },
 
   // ==========================================
@@ -515,7 +531,7 @@ export function buildScraperInput(
   // Some fields need to be arrays even if user passes a string
   const arrayFields = ['username', 'profiles', 'postURLs', 'postIds', 'startUrls',
     'youtube_channels', 'languages', 'stars', 'videoUrls', 'channelUrls', 'companyUrls', 'queries',
-    'hashtags', 'searchQueries', 'placeUrls', 'searches'];
+    'hashtags', 'searchQueries', 'placeUrls', 'searches', 'urls'];
 
   for (const field of arrayFields) {
     if (merged[field] !== undefined) {
@@ -562,6 +578,18 @@ export function buildScraperInput(
     // Remove separate language/country fields since they're now in URLs
     delete merged.language;
     delete merged.country;
+  }
+
+  // Special handling for Reddit: startUrls needs to be array of {url: string} objects
+  if (type === 'reddit_posts' && merged.startUrls && Array.isArray(merged.startUrls)) {
+    merged.startUrls = (merged.startUrls as (string | {url: string})[]).map(item => {
+      // If already an object with url property, keep it
+      if (typeof item === 'object' && item !== null && 'url' in item) {
+        return item;
+      }
+      // Convert string to object format
+      return { url: item as string };
+    });
   }
 
   return merged;
