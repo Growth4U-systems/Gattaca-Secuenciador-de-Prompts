@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { parseNicheExtractionOutput, prepareExtractionPrompt } from '@/lib/scraper/extractor'
-import { DEFAULT_EXTRACTION_PROMPT } from '@/lib/templates/niche-finder-playbook'
+import { EXTRACTION_PROMPT } from '@/lib/templates/niche-finder-playbook'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const batchSize = job.config?.batch_size || 10
     const model = job.config?.extraction_model || 'openai/gpt-4o-mini'
-    const extractionPrompt = job.config?.extraction_prompt || DEFAULT_EXTRACTION_PROMPT
+    const extractionPrompt = job.config?.extraction_prompt || EXTRACTION_PROMPT
 
     // Get project variables
     const project = job.projects
