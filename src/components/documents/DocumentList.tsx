@@ -228,8 +228,8 @@ export default function DocumentList({
     const label = category.charAt(0).toUpperCase() + category.slice(1)
 
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${style.bg} ${style.text}`}>
-        <span>{style.icon}</span>
+      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${style.bg} ${style.text}`}>
+        <span className="text-[10px]">{style.icon}</span>
         {label}
       </span>
     )
@@ -399,225 +399,134 @@ export default function DocumentList({
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {filteredDocs.map((doc) => (
             <div
               key={doc.id}
-              className="group bg-white border border-gray-100 rounded-2xl p-4 hover:border-blue-200 hover:shadow-md transition-all"
+              className="group bg-white border border-gray-100 rounded-xl px-3 py-2.5 hover:border-blue-200 hover:shadow-sm transition-all"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-gray-100 rounded-lg group-hover:bg-blue-100 transition-colors">
-                      <FileText size={18} className="text-gray-500 group-hover:text-blue-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      {editingDocId === doc.id ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            onKeyDown={(e) => handleEditKeyDown(e, doc.id)}
-                            className="flex-1 px-3 py-1.5 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                            autoFocus
-                            disabled={savingName}
-                          />
-                          <button
-                            onClick={() => handleSaveName(doc.id)}
-                            disabled={savingName || !editingName.trim()}
-                            className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Guardar"
-                          >
-                            {savingName ? (
-                              <Loader2 size={16} className="animate-spin" />
-                            ) : (
-                              <Check size={16} />
-                            )}
-                          </button>
-                          <button
-                            onClick={handleCancelEdit}
-                            disabled={savingName}
-                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
-                            title="Cancelar"
-                          >
-                            <X size={16} />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-medium text-gray-900 truncate group-hover:text-blue-600 transition-colors">
-                            {doc.filename}
-                          </h3>
-                          {onRename && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleStartEdit(doc)
-                              }}
-                              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded opacity-0 group-hover:opacity-100 transition-all"
-                              title="Editar nombre"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      <div className="flex items-center flex-wrap gap-2 mt-1">
-                        {getCategoryBadge(doc.category)}
-                        {doc.token_count && (
-                          <span className="text-xs text-gray-500">
-                            {formatTokenCount(doc.token_count)} tokens
-                          </span>
-                        )}
-                        {doc.file_size_bytes && (
-                          <span className="text-xs text-gray-400">
-                            {(doc.file_size_bytes / 1024 / 1024).toFixed(2)} MB
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+              {/* Main row - single line layout */}
+              <div className="flex items-center gap-3">
+                {/* Icon */}
+                <div className="p-1.5 bg-gray-50 rounded-lg group-hover:bg-blue-50 transition-colors flex-shrink-0">
+                  <FileText size={16} className="text-gray-400 group-hover:text-blue-600" />
+                </div>
 
-                  {/* Document Description */}
-                  {editingDescDocId === doc.id ? (
-                    <div className="mt-2 space-y-2">
-                      <textarea
-                        value={editingDescription}
-                        onChange={(e) => setEditingDescription(e.target.value)}
-                        onKeyDown={(e) => handleDescKeyDown(e, doc.id)}
-                        placeholder="Describe el contenido del documento para facilitar su busqueda y asignacion automatica..."
-                        rows={2}
-                        className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 resize-none"
+                {/* Title & Badges */}
+                <div className="flex-1 min-w-0 flex items-center gap-2">
+                  {editingDocId === doc.id ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <input
+                        type="text"
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        onKeyDown={(e) => handleEditKeyDown(e, doc.id)}
+                        className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                         autoFocus
-                        disabled={savingDescription}
+                        disabled={savingName}
                       />
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleSaveDescription(doc.id)}
-                          disabled={savingDescription}
-                          className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1"
-                        >
-                          {savingDescription ? (
-                            <Loader2 size={12} className="animate-spin" />
-                          ) : (
-                            <Check size={12} />
-                          )}
-                          Guardar
-                        </button>
-                        <button
-                          onClick={handleCancelDescEdit}
-                          disabled={savingDescription}
-                          className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg disabled:opacity-50"
-                        >
-                          Cancelar
-                        </button>
-                        <span className="text-xs text-gray-400 ml-auto">Cmd+Enter para guardar</span>
-                      </div>
-                    </div>
-                  ) : doc.description ? (
-                    <div className="mt-2 group/desc">
-                      <p className="text-sm text-gray-600 italic">
-                        {doc.description}
-                        {onUpdateDescription && (
-                          <button
-                            onClick={() => handleStartDescEdit(doc)}
-                            className="ml-2 text-gray-400 hover:text-blue-600 opacity-0 group-hover/desc:opacity-100 transition-opacity"
-                            title="Editar descripcion"
-                          >
-                            <Edit2 size={12} className="inline" />
-                          </button>
-                        )}
-                      </p>
-                    </div>
-                  ) : onUpdateDescription ? (
-                    <button
-                      onClick={() => handleStartDescEdit(doc)}
-                      className="mt-2 text-xs text-gray-400 hover:text-blue-600 hover:underline"
-                    >
-                      + Agregar descripcion
-                    </button>
-                  ) : null}
-
-                  {/* Document Tags */}
-                  {doc.tags && doc.tags.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                      <Tag size={12} className="text-gray-400" />
-                      {doc.tags.map((tag, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setTagFilter(tag)}
-                          className={`px-2 py-0.5 text-xs rounded-full transition-colors ${
-                            tagFilter === tag
-                              ? 'bg-purple-600 text-white'
-                              : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
-                          }`}
-                          title={`Filtrar por "${tag}"`}
-                        >
-                          {tag}
-                        </button>
-                      ))}
-                      {doc.source_type === 'scraper' && (
-                        <span className="ml-1 px-1.5 py-0.5 text-xs bg-green-50 text-green-700 rounded">
-                          Scraper
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Content match snippet */}
-                  {searchInContent && searchQuery && (() => {
-                    const snippet = getContentMatchSnippet(doc.extracted_content, searchQuery)
-                    if (!snippet) return null
-                    const parts = snippet.split(new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
-                    return (
-                      <div className="mt-2 p-2 bg-yellow-50 border border-yellow-100 rounded-xl text-xs text-gray-700">
-                        <span className="text-yellow-700 font-medium mr-1">Coincidencia:</span>
-                        {parts.map((part, i) =>
-                          part.toLowerCase() === searchQuery.toLowerCase()
-                            ? <mark key={i} className="bg-yellow-300 px-0.5 rounded">{part}</mark>
-                            : <span key={i}>{part}</span>
-                        )}
-                      </div>
-                    )
-                  })()}
-
-                  {/* Campaign Assignment */}
-                  {campaigns.length > 0 && onCampaignChange && (
-                    <div className="flex items-center gap-2 mt-3">
-                      <Link2 size={14} className="text-gray-400" />
-                      <select
-                        value={doc.campaign_id || ''}
-                        onChange={(e) => handleCampaignChange(doc.id, e.target.value)}
-                        disabled={updatingDoc === doc.id}
-                        className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 bg-white focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                      <button
+                        onClick={() => handleSaveName(doc.id)}
+                        disabled={savingName || !editingName.trim()}
+                        className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Guardar"
                       >
-                        <option value="">Documento global (todas las campañas)</option>
-                        {campaigns.map(campaign => (
-                          <option key={campaign.id} value={campaign.id}>
-                            {campaign.ecp_name}
-                          </option>
-                        ))}
-                      </select>
-                      {updatingDoc === doc.id && (
-                        <span className="text-xs text-gray-500">Guardando...</span>
-                      )}
-                      {doc.campaign_id && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-lg">
-                          Asignado
-                        </span>
-                      )}
+                        {savingName ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                      </button>
+                      <button
+                        onClick={handleCancelEdit}
+                        disabled={savingName}
+                        className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50"
+                        title="Cancelar"
+                      >
+                        <X size={14} />
+                      </button>
                     </div>
+                  ) : (
+                    <>
+                      <h3 className="font-medium text-sm text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                        {doc.filename}
+                      </h3>
+                      {onRename && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleStartEdit(doc) }}
+                          className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                          title="Editar nombre"
+                        >
+                          <Edit2 size={12} />
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
 
-                <div className="flex items-center gap-1">
+                {/* Inline badges */}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {getCategoryBadge(doc.category)}
+                  {doc.token_count && (
+                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                      {formatTokenCount(doc.token_count)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Tags inline */}
+                {doc.tags && doc.tags.length > 0 && (
+                  <div className="hidden sm:flex items-center gap-1 flex-shrink-0">
+                    {doc.tags.slice(0, 3).map((tag, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setTagFilter(tag)}
+                        className={`px-1.5 py-0.5 text-[10px] rounded-full transition-colors ${
+                          tagFilter === tag
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
+                        }`}
+                        title={`Filtrar por "${tag}"`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                    {doc.tags.length > 3 && (
+                      <span className="text-[10px] text-gray-400">+{doc.tags.length - 3}</span>
+                    )}
+                    {doc.source_type === 'scraper' && (
+                      <span className="px-1.5 py-0.5 text-[10px] bg-green-50 text-green-600 rounded">
+                        Scraper
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Campaign dropdown - compact */}
+                {campaigns.length > 0 && onCampaignChange && (
+                  <div className="hidden md:flex items-center gap-1.5 flex-shrink-0">
+                    <Link2 size={12} className="text-gray-300" />
+                    <select
+                      value={doc.campaign_id || ''}
+                      onChange={(e) => handleCampaignChange(doc.id, e.target.value)}
+                      disabled={updatingDoc === doc.id}
+                      className="text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 bg-white focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 max-w-[180px] truncate"
+                    >
+                      <option value="">Documento global (todas las campañas)</option>
+                      {campaigns.map(campaign => (
+                        <option key={campaign.id} value={campaign.id}>
+                          {campaign.ecp_name}
+                        </option>
+                      ))}
+                    </select>
+                    {updatingDoc === doc.id && <Loader2 size={12} className="text-gray-400 animate-spin" />}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex items-center gap-0.5 flex-shrink-0">
                   <button
                     onClick={() => onView(doc)}
-                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                     title="Ver contenido"
                   >
-                    <Eye size={18} />
+                    <Eye size={16} />
                   </button>
                   <button
                     onClick={async () => {
@@ -632,13 +541,116 @@ export default function DocumentList({
                         onDelete(doc.id)
                       }
                     }}
-                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                     title="Eliminar"
                   >
-                    <Trash2 size={18} />
+                    <Trash2 size={16} />
                   </button>
                 </div>
               </div>
+
+              {/* Description row - only when exists, compact */}
+              {editingDescDocId === doc.id ? (
+                <div className="mt-2 ml-8 space-y-1.5">
+                  <textarea
+                    value={editingDescription}
+                    onChange={(e) => setEditingDescription(e.target.value)}
+                    onKeyDown={(e) => handleDescKeyDown(e, doc.id)}
+                    placeholder="Describe el contenido del documento..."
+                    rows={2}
+                    className="w-full px-2 py-1.5 text-xs border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 resize-none"
+                    autoFocus
+                    disabled={savingDescription}
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleSaveDescription(doc.id)}
+                      disabled={savingDescription}
+                      className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1"
+                    >
+                      {savingDescription ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                      Guardar
+                    </button>
+                    <button
+                      onClick={handleCancelDescEdit}
+                      disabled={savingDescription}
+                      className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded disabled:opacity-50"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : doc.description ? (
+                <div className="mt-1 ml-8 group/desc">
+                  <p className="text-xs text-gray-500 truncate max-w-2xl">
+                    {doc.description}
+                    {onUpdateDescription && (
+                      <button
+                        onClick={() => handleStartDescEdit(doc)}
+                        className="ml-1.5 text-gray-400 hover:text-blue-600 opacity-0 group-hover/desc:opacity-100 transition-opacity"
+                        title="Editar descripcion"
+                      >
+                        <Edit2 size={10} className="inline" />
+                      </button>
+                    )}
+                  </p>
+                </div>
+              ) : onUpdateDescription ? (
+                <button
+                  onClick={() => handleStartDescEdit(doc)}
+                  className="mt-1 ml-8 text-[10px] text-gray-400 hover:text-blue-600"
+                >
+                  + Descripción
+                </button>
+              ) : null}
+
+              {/* Content match snippet - only when searching */}
+              {searchInContent && searchQuery && (() => {
+                const snippet = getContentMatchSnippet(doc.extracted_content, searchQuery)
+                if (!snippet) return null
+                const parts = snippet.split(new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
+                return (
+                  <div className="mt-1.5 ml-8 p-1.5 bg-yellow-50 border border-yellow-100 rounded-lg text-xs text-gray-600">
+                    <span className="text-yellow-600 font-medium mr-1">Coincidencia:</span>
+                    {parts.map((part, i) =>
+                      part.toLowerCase() === searchQuery.toLowerCase()
+                        ? <mark key={i} className="bg-yellow-200 px-0.5 rounded">{part}</mark>
+                        : <span key={i}>{part}</span>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* Mobile: Tags & Campaign on second row */}
+              <div className="sm:hidden mt-2 ml-8 flex flex-wrap items-center gap-1.5">
+                {doc.tags && doc.tags.length > 0 && doc.tags.map((tag, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setTagFilter(tag)}
+                    className={`px-1.5 py-0.5 text-[10px] rounded-full ${
+                      tagFilter === tag ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-600'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+              {campaigns.length > 0 && onCampaignChange && (
+                <div className="md:hidden mt-1.5 ml-8 flex items-center gap-1.5">
+                  <Link2 size={11} className="text-gray-300" />
+                  <select
+                    value={doc.campaign_id || ''}
+                    onChange={(e) => handleCampaignChange(doc.id, e.target.value)}
+                    disabled={updatingDoc === doc.id}
+                    className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 text-gray-600 bg-white"
+                  >
+                    <option value="">Global (todas las campañas)</option>
+                    {campaigns.map(campaign => (
+                      <option key={campaign.id} value={campaign.id}>{campaign.ecp_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           ))}
         </div>
