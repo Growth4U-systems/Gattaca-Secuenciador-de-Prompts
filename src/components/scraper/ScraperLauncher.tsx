@@ -27,9 +27,9 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   { type: 'linkedin_company_insights', status: 'pending', category: 'social' },
   { type: 'facebook_posts', status: 'pending', category: 'social' },
   { type: 'facebook_comments', status: 'pending', category: 'social' },
-  { type: 'youtube_channel_videos', status: 'pending', category: 'social' },
-  { type: 'youtube_comments', status: 'pending', category: 'social' },
-  { type: 'youtube_transcripts', status: 'pending', category: 'social' },
+  { type: 'youtube_channel_videos', status: 'enabled', category: 'social' },
+  { type: 'youtube_comments', status: 'enabled', category: 'social' },
+  { type: 'youtube_transcripts', status: 'enabled', category: 'social' },
 
   // Reviews
   { type: 'trustpilot_reviews', status: 'enabled', category: 'reviews' },

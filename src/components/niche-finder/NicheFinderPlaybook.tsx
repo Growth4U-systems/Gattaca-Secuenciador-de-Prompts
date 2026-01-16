@@ -130,13 +130,20 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
   const [aiSuggestedForums, setAiSuggestedForums] = useState<Array<{domain: string, context: string, reason: string}>>([])
   const [approvedForums, setApprovedForums] = useState<string[]>([])
 
+  // Manual thematic forums (user can add/remove)
+  const [manualThematicForums, setManualThematicForums] = useState<string[]>([])
+  const [newThematicForum, setNewThematicForum] = useState('')
+
+  // Excluded thematic forums (from auto-suggested)
+  const [excludedThematicForums, setExcludedThematicForums] = useState<string[]>([])
+
   // Results
   const [showResults, setShowResults] = useState(false)
 
   // Preview
   const [showPreview, setShowPreview] = useState(false)
 
-  // Calculate suggested thematic forums based on selected contexts + AI approved forums
+  // Calculate suggested thematic forums based on selected contexts + AI approved forums + manual
   const suggestedThematicForums = useMemo(() => {
     const forums = new Map<string, string[]>() // forum -> contexts that suggest it
 
@@ -146,9 +153,11 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
       Object.entries(THEMATIC_FORUMS_MAP).forEach(([keyword, forumList]) => {
         if (ctxLower.includes(keyword) || keyword.includes(ctxLower)) {
           forumList.forEach(forum => {
-            const existing = forums.get(forum) || []
-            if (!existing.includes(ctx)) {
-              forums.set(forum, [...existing, ctx])
+            if (!excludedThematicForums.includes(forum)) {
+              const existing = forums.get(forum) || []
+              if (!existing.includes(ctx)) {
+                forums.set(forum, [...existing, ctx])
+              }
             }
           })
         }
@@ -157,14 +166,23 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
 
     // Add AI-approved forums
     approvedForums.forEach(forum => {
-      const aiSuggestion = aiSuggestedForums.find(f => f.domain === forum)
-      if (aiSuggestion && !forums.has(forum)) {
-        forums.set(forum, [aiSuggestion.context || 'IA'])
+      if (!excludedThematicForums.includes(forum)) {
+        const aiSuggestion = aiSuggestedForums.find(f => f.domain === forum)
+        if (aiSuggestion && !forums.has(forum)) {
+          forums.set(forum, [aiSuggestion.context || 'IA'])
+        }
+      }
+    })
+
+    // Add manual thematic forums
+    manualThematicForums.forEach(forum => {
+      if (!forums.has(forum)) {
+        forums.set(forum, ['manual'])
       }
     })
 
     return forums
-  }, [lifeContexts, approvedForums, aiSuggestedForums])
+  }, [lifeContexts, approvedForums, aiSuggestedForums, manualThematicForums, excludedThematicForums])
 
   // Generate sample queries for preview
   const sampleQueries = useMemo(() => {
@@ -310,6 +328,27 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
       })
       setNewForum('')
     }
+  }
+
+  // Handle add thematic forum manually
+  const handleAddThematicForum = () => {
+    const forum = newThematicForum.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '')
+    if (forum && !manualThematicForums.includes(forum) && !suggestedThematicForums.has(forum)) {
+      setManualThematicForums([...manualThematicForums, forum])
+      setNewThematicForum('')
+    }
+  }
+
+  // Remove thematic forum (either manual or exclude auto-suggested)
+  const removeThematicForum = (forum: string) => {
+    if (manualThematicForums.includes(forum)) {
+      setManualThematicForums(manualThematicForums.filter(f => f !== forum))
+    } else {
+      // It's an auto-suggested forum, exclude it
+      setExcludedThematicForums([...excludedThematicForums, forum])
+    }
+    // Also remove from approved if it was AI-approved
+    setApprovedForums(approvedForums.filter(f => f !== forum))
   }
 
   // Toggle indicator
@@ -970,32 +1009,49 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
               </div>
             )}
 
-            {/* List of all thematic forums that will be searched */}
-            {sources.thematic_forums && suggestedThematicForums.size > 0 && (
+            {/* List of all thematic forums that will be searched - EDITABLE */}
+            {sources.thematic_forums && (
               <div className="mt-3">
                 <p className="text-xs font-medium text-gray-700 mb-2">Foros que se buscarán:</p>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 mb-2">
                   {Array.from(suggestedThematicForums.entries()).map(([forum, contexts]) => (
                     <span
                       key={forum}
                       className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${
-                        approvedForums.includes(forum)
+                        manualThematicForums.includes(forum)
+                          ? 'bg-green-100 text-green-700'
+                          : approvedForums.includes(forum)
                           ? 'bg-purple-100 text-purple-700'
                           : 'bg-blue-50 text-blue-700'
                       }`}
-                      title={`Sugerido por: ${contexts.join(', ')}`}
+                      title={`${manualThematicForums.includes(forum) ? 'Manual' : contexts.join(', ')}`}
                     >
                       {forum}
-                      {approvedForums.includes(forum) && (
-                        <button
-                          onClick={() => removeApprovedForum(forum)}
-                          className="text-purple-500 hover:text-purple-700 ml-1"
-                        >
-                          <X size={12} />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => removeThematicForum(forum)}
+                        className="opacity-60 hover:opacity-100 ml-0.5"
+                      >
+                        <X size={12} />
+                      </button>
                     </span>
                   ))}
+                </div>
+                {/* Input para agregar foro temático manualmente */}
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={newThematicForum}
+                    onChange={(e) => setNewThematicForum(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddThematicForum()}
+                    placeholder="Agregar foro temático (ej: bodas.net)"
+                    className="flex-1 px-2 py-1 border border-gray-200 rounded text-xs text-gray-900"
+                  />
+                  <button
+                    onClick={handleAddThematicForum}
+                    className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200"
+                  >
+                    +
+                  </button>
                 </div>
               </div>
             )}
