@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { X, Search, Loader2, Check, AlertCircle, Globe, MessageSquare, Star, Briefcase, Play, Tag, ArrowLeft, HelpCircle, Info } from 'lucide-react'
-import { ScraperType, ScraperTemplate } from '@/types/scraper.types'
+import { ScraperType, ScraperTemplate, ScraperOutputFormat, ScraperOutputConfig } from '@/types/scraper.types'
 import { SCRAPER_TEMPLATES } from '@/lib/scraperTemplates'
 import { DocCategory } from '@/types/database.types'
 import { SCRAPER_FIELD_SCHEMAS, FieldSchema, validateField, validateAllFields } from '@/lib/scraperFieldSchemas'
@@ -54,6 +54,11 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [showExamples, setShowExamples] = useState<string | null>(null)
+
+  // Output format configuration
+  const [outputFormat, setOutputFormat] = useState<ScraperOutputFormat>('json')
+  const [selectedFields, setSelectedFields] = useState<string[]>([])  // Empty = all fields
+  const [availableFields, setAvailableFields] = useState<string[]>([])
 
   // Get selected template
   const template = selectedScraper ? SCRAPER_TEMPLATES[selectedScraper] : null
@@ -180,6 +185,13 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
     setFieldErrors({})
 
     try {
+      // Build output config
+      const outputConfig: ScraperOutputConfig = {
+        format: outputFormat,
+        fields: selectedFields.length > 0 ? selectedFields : undefined,
+        flatten: outputFormat === 'csv',
+      }
+
       const response = await fetch('/api/scraper/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -190,6 +202,7 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
           target_name: targetName,
           target_category: category,
           tags,
+          output_config: outputConfig,
         }),
       })
 
@@ -755,6 +768,76 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
                     Añadir
                   </button>
                 </div>
+              </div>
+
+              {/* Output Format - Apify style */}
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Formato de salida
+                </label>
+                <div className="grid grid-cols-5 gap-2">
+                  {[
+                    { value: 'json', label: 'JSON', desc: 'Datos estructurados' },
+                    { value: 'jsonl', label: 'JSONL', desc: 'Una línea por item' },
+                    { value: 'csv', label: 'CSV', desc: 'Tabla para Excel' },
+                    { value: 'markdown', label: 'Markdown', desc: 'Texto legible' },
+                    { value: 'xml', label: 'XML', desc: 'Formato XML' },
+                  ].map((format) => (
+                    <button
+                      key={format.value}
+                      type="button"
+                      onClick={() => setOutputFormat(format.value as ScraperOutputFormat)}
+                      className={`p-2 rounded-lg border text-center transition-all ${
+                        outputFormat === format.value
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="font-medium text-sm">{format.label}</div>
+                      <div className="text-[10px] text-gray-500 mt-0.5">{format.desc}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Field selector for CSV/JSON */}
+                {(outputFormat === 'csv' || outputFormat === 'json') && template?.outputFields && template.outputFields.length > 0 && (
+                  <div className="mt-3">
+                    <label className="block text-xs text-gray-500 mb-2">
+                      Campos a incluir (dejar vacío = todos)
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {template.outputFields.map((field) => (
+                        <button
+                          key={field}
+                          type="button"
+                          onClick={() => {
+                            if (selectedFields.includes(field)) {
+                              setSelectedFields(selectedFields.filter(f => f !== field))
+                            } else {
+                              setSelectedFields([...selectedFields, field])
+                            }
+                          }}
+                          className={`px-2 py-1 rounded text-xs transition-all ${
+                            selectedFields.includes(field)
+                              ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                              : 'bg-gray-100 text-gray-600 border border-transparent hover:bg-gray-200'
+                          }`}
+                        >
+                          {field}
+                        </button>
+                      ))}
+                    </div>
+                    {selectedFields.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFields([])}
+                        className="mt-2 text-xs text-blue-600 hover:text-blue-700"
+                      >
+                        Limpiar selección (usar todos)
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

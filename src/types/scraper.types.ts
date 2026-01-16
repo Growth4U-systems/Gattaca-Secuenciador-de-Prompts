@@ -200,6 +200,18 @@ export interface CreateCompanyProfileInput {
 }
 
 // ============================================
+// OUTPUT FORMAT TYPES
+// ============================================
+
+export type ScraperOutputFormat = 'json' | 'jsonl' | 'csv' | 'markdown' | 'xml';
+
+export interface ScraperOutputConfig {
+  format: ScraperOutputFormat;
+  fields?: string[];  // Specific fields to include (empty = all)
+  flatten?: boolean;  // Flatten nested objects for CSV
+}
+
+// ============================================
 // API REQUEST/RESPONSE TYPES
 // ============================================
 
@@ -212,6 +224,8 @@ export interface StartScraperRequest {
   target_name?: string;
   target_category?: string;
   tags?: string[];
+  // Output configuration
+  output_config?: ScraperOutputConfig;
   // Batch of scrapers
   batch?: {
     name?: string;
