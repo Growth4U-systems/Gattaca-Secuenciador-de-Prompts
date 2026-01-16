@@ -33,7 +33,8 @@ const APIFY_ACTORS = {
   appstore_reviews: '4qRgh5vXXsv0bKa1l',
   playstore_reviews: 'Bs72sDKr8fGe3d5Ti',
   google_maps_reviews: 'thEbk6nzmhRsChwBS',
-  reddit_posts: 'trudax~reddit-scraper',
+  reddit_posts: 'practicaltools~apify-reddit-api',  // Pay-per-use: $0.002/item, 1000 free/month
+  linkedin_company_profile: 'dev_fusion~linkedin-company-scraper',  // Pay-per-use: $8/1000 results
 };
 
 // Inputs de test predefinidos para cada scraper (usando Revolut como ejemplo)
@@ -112,11 +113,15 @@ const TEST_INPUTS = {
     language: 'es',
   },
   reddit_posts: {
-    searches: ['r/personalfinance'],
+    startUrls: [{ url: 'https://www.reddit.com/r/personalfinance' }],
     maxItems: 10,
-    maxComments: 5,
     sort: 'new',
     time: 'all',
+    includeNSFW: false,
+    skipComments: false,
+  },
+  linkedin_company_profile: {
+    urls: ['https://www.linkedin.com/company/revolut/'],
   },
 };
 
