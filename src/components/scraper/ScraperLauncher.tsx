@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { X, Search, Loader2, Check, AlertCircle, Globe, MessageSquare, Star, Briefcase, Play, Tag, ArrowLeft, HelpCircle, Info, Youtube, Facebook, MapPin, Smartphone, Clock, Lock } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { X, Search, Loader2, Check, AlertCircle, Globe, MessageSquare, Star, Briefcase, Play, Tag, ArrowLeft, HelpCircle, Info, Youtube, Facebook, MapPin, Smartphone, Clock, Eye, ChevronDown, ChevronRight, CheckSquare, Square } from 'lucide-react'
 import { ScraperType, ScraperTemplate, ScraperOutputFormat, ScraperOutputConfig } from '@/types/scraper.types'
 import { SCRAPER_TEMPLATES } from '@/lib/scraperTemplates'
 import { DocCategory } from '@/types/database.types'
@@ -20,8 +20,8 @@ interface ScraperConfig {
 const ALL_SCRAPERS: ScraperConfig[] = [
   // Social Media
   { type: 'instagram_posts_comments', status: 'enabled', category: 'social' },
-  { type: 'tiktok_posts', status: 'pending', category: 'social' },
-  { type: 'tiktok_comments', status: 'pending', category: 'social' },
+  { type: 'tiktok_posts', status: 'enabled', category: 'social' },
+  { type: 'tiktok_comments', status: 'enabled', category: 'social' },
   { type: 'linkedin_company_posts', status: 'pending', category: 'social' },
   { type: 'linkedin_comments', status: 'pending', category: 'social' },
   { type: 'linkedin_company_insights', status: 'pending', category: 'social' },
@@ -130,8 +130,105 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
   const [selectedFields, setSelectedFields] = useState<string[]>([])  // Empty = all fields
   const [availableFields, setAvailableFields] = useState<string[]>([])
 
+  // URL Preview state (for crawl mode)
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewData, setPreviewData] = useState<{
+    total: number
+    filtered: number
+    included: string[]
+    excluded: string[]
+    sections: Record<string, string[]>
+  } | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set())
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+
   // Get selected template
   const template = selectedScraper ? SCRAPER_TEMPLATES[selectedScraper] : null
+
+  // Load URL preview for crawl mode
+  const loadPreview = useCallback(async () => {
+    if (!inputConfig.url) {
+      setPreviewError('Ingresa una URL primero')
+      return
+    }
+
+    setPreviewLoading(true)
+    setPreviewError(null)
+    setPreviewData(null)
+
+    try {
+      const response = await fetch('/api/scraper/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: inputConfig.url,
+          includePaths: inputConfig.includePaths,
+          excludePaths: inputConfig.excludePaths,
+          limit: inputConfig.limit || 200,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success && data.urls) {
+        setPreviewData(data.urls)
+        // Select all filtered URLs by default
+        setSelectedUrls(new Set(data.urls.included))
+        // Expand first 3 sections by default
+        const sectionsToExpand = Object.keys(data.urls.sections).slice(0, 3)
+        setExpandedSections(new Set(sectionsToExpand))
+        setShowPreview(true)
+      } else {
+        setPreviewError(data.error || 'Error al obtener el preview')
+      }
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : 'Error de conexión')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }, [inputConfig.url, inputConfig.includePaths, inputConfig.excludePaths, inputConfig.limit])
+
+  // Toggle URL selection
+  const toggleUrlSelection = (url: string) => {
+    setSelectedUrls(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(url)) {
+        newSet.delete(url)
+      } else {
+        newSet.add(url)
+      }
+      return newSet
+    })
+  }
+
+  // Toggle section selection (all URLs in section)
+  const toggleSectionSelection = (sectionUrls: string[]) => {
+    setSelectedUrls(prev => {
+      const newSet = new Set(prev)
+      const allSelected = sectionUrls.every(url => newSet.has(url))
+      if (allSelected) {
+        sectionUrls.forEach(url => newSet.delete(url))
+      } else {
+        sectionUrls.forEach(url => newSet.add(url))
+      }
+      return newSet
+    })
+  }
+
+  // Toggle section expansion
+  const toggleSectionExpansion = (section: string) => {
+    setExpandedSections(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(section)) {
+        newSet.delete(section)
+      } else {
+        newSet.add(section)
+      }
+      return newSet
+    })
+  }
 
   // Generate auto tags when scraper and target name change
   useEffect(() => {
@@ -844,6 +941,158 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
                         {renderInputField('maxDepth', false)}
                         {renderInputField('includePaths', false)}
                         {renderInputField('excludePaths', false)}
+
+                        {/* Preview Button */}
+                        <div className="pt-2 border-t border-blue-100">
+                          <button
+                            type="button"
+                            onClick={loadPreview}
+                            disabled={!inputConfig.url || previewLoading}
+                            className="w-full px-4 py-2.5 bg-white border border-blue-200 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 transition-colors"
+                          >
+                            {previewLoading ? (
+                              <>
+                                <Loader2 size={16} className="animate-spin" />
+                                Cargando preview...
+                              </>
+                            ) : (
+                              <>
+                                <Eye size={16} />
+                                Ver URLs que se van a extraer
+                              </>
+                            )}
+                          </button>
+                          {previewError && (
+                            <p className="text-xs text-red-600 mt-2">{previewError}</p>
+                          )}
+                        </div>
+
+                        {/* URL Preview Panel */}
+                        {showPreview && previewData && (
+                          <div className="mt-4 bg-white rounded-lg border border-blue-200 overflow-hidden">
+                            {/* Preview Header */}
+                            <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Eye size={16} className="text-blue-600" />
+                                  <span className="text-sm font-medium text-blue-800">
+                                    Preview de URLs
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPreview(false)}
+                                  className="p-1 hover:bg-blue-100 rounded text-blue-600"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-4 mt-2 text-xs">
+                                <span className="text-blue-600">
+                                  Total descubiertas: <strong>{previewData.total}</strong>
+                                </span>
+                                <span className="text-green-600">
+                                  Incluidas: <strong>{previewData.filtered}</strong>
+                                </span>
+                                <span className="text-gray-500">
+                                  Excluidas: <strong>{previewData.excluded.length}</strong>
+                                </span>
+                                <span className="text-indigo-600">
+                                  Seleccionadas: <strong>{selectedUrls.size}</strong>
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Sections list */}
+                            <div className="max-h-64 overflow-y-auto">
+                              {Object.entries(previewData.sections).map(([section, urls]) => {
+                                const sectionSelected = urls.filter(url => selectedUrls.has(url)).length
+                                const isExpanded = expandedSections.has(section)
+                                const allSelected = urls.every(url => selectedUrls.has(url))
+
+                                return (
+                                  <div key={section} className="border-b border-gray-100 last:border-b-0">
+                                    {/* Section Header */}
+                                    <div
+                                      className="flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-gray-100 cursor-pointer"
+                                      onClick={() => toggleSectionExpansion(section)}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          toggleSectionSelection(urls)
+                                        }}
+                                        className="text-blue-600 hover:text-blue-800"
+                                      >
+                                        {allSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+                                      </button>
+                                      {isExpanded ? <ChevronDown size={14} className="text-gray-400" /> : <ChevronRight size={14} className="text-gray-400" />}
+                                      <span className="text-sm font-medium text-gray-700">/{section}</span>
+                                      <span className="text-xs text-gray-400">
+                                        ({sectionSelected}/{urls.length})
+                                      </span>
+                                    </div>
+
+                                    {/* Section URLs */}
+                                    {isExpanded && (
+                                      <div className="px-4 py-2 space-y-1">
+                                        {urls.map((url) => {
+                                          const isSelected = selectedUrls.has(url)
+                                          const displayUrl = url.replace(/^https?:\/\/[^/]+/, '')
+                                          return (
+                                            <label
+                                              key={url}
+                                              className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-xs ${
+                                                isSelected
+                                                  ? 'bg-green-50 text-green-700'
+                                                  : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                                              }`}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => toggleUrlSelection(url)}
+                                                className="w-3.5 h-3.5 text-green-600 rounded border-gray-300"
+                                              />
+                                              <span className="truncate font-mono" title={url}>
+                                                {displayUrl || '/'}
+                                              </span>
+                                            </label>
+                                          )
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+
+                            {/* Preview Footer */}
+                            <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedUrls(new Set(previewData.included))}
+                                  className="text-xs text-blue-600 hover:text-blue-800"
+                                >
+                                  Seleccionar todas
+                                </button>
+                                <span className="text-gray-300">|</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedUrls(new Set())}
+                                  className="text-xs text-gray-500 hover:text-gray-700"
+                                >
+                                  Deseleccionar todas
+                                </button>
+                              </div>
+                              <span className="text-xs text-gray-500">
+                                Se extraerán {selectedUrls.size} páginas
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
