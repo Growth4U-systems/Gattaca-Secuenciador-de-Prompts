@@ -167,6 +167,13 @@ Respond ONLY with the JSON, no additional text.`
           reason: s.reason || '',
         }))
       return NextResponse.json({ success: true, suggestions: forums })
+    } else if (type === 'general_forums') {
+      // Return general forums (high-traffic, active discussion sites)
+      const existingForums = body.existing || []
+      const forums = (parsedSuggestions.sources || [])
+        .filter(s => s.source_type === 'general_forum' && s.value && !existingForums.includes(s.value))
+        .map(s => s.value)
+      return NextResponse.json({ success: true, suggestions: forums })
     }
 
     // Otherwise return full response (legacy format)

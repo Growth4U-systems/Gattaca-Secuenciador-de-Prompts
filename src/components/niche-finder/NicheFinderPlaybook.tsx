@@ -124,6 +124,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
   const [suggestingContexts, setSuggestingContexts] = useState(false)
   const [suggestingWords, setSuggestingWords] = useState(false)
   const [suggestingForums, setSuggestingForums] = useState(false)
+  const [suggestingGeneralForums, setSuggestingGeneralForums] = useState(false)
 
   // AI-suggested thematic forums (user can approve/remove)
   const [aiSuggestedForums, setAiSuggestedForums] = useState<Array<{domain: string, context: string, reason: string}>>([])
@@ -432,6 +433,75 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
       toast.error('Error', 'No se pudieron obtener sugerencias de foros')
     } finally {
       setSuggestingForums(false)
+    }
+  }
+
+  // AI suggest general forums
+  const suggestGeneralForums = async () => {
+    setSuggestingGeneralForums(true)
+    try {
+      const response = await fetch('/api/niche-finder/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'general_forums',
+          existing: sources.general_forums,
+          life_contexts: lifeContexts,
+          product_words: productWords,
+          project_id: projectId,
+        }),
+      })
+
+      const data = await response.json()
+      if (data.success && data.suggestions) {
+        // Filter to only include verified active forums
+        const VERIFIED_FORUMS = [
+          'forocoches.com', 'mediavida.com', 'burbuja.info', 'rankia.com',
+          'elotrolado.net', 'htcmania.com', 'meneame.net', '3djuegos.com',
+          'vandal.elespanol.com/foro', 'portalcoches.net'
+        ]
+        const newForums = data.suggestions
+          .map((f: string | {domain: string}) => typeof f === 'string' ? f : f.domain)
+          .filter((f: string) =>
+            !sources.general_forums.includes(f) &&
+            VERIFIED_FORUMS.some(vf => f.includes(vf))
+          )
+
+        if (newForums.length > 0) {
+          setSources(prev => ({
+            ...prev,
+            general_forums: [...prev.general_forums, ...newForums.slice(0, 3)]
+          }))
+          toast.success('Foros añadidos', `Se añadieron ${Math.min(newForums.length, 3)} foros activos`)
+        } else {
+          // Add default suggestions if AI didn't find verified ones
+          const defaultSuggestions = VERIFIED_FORUMS.filter(f => !sources.general_forums.includes(f)).slice(0, 2)
+          if (defaultSuggestions.length > 0) {
+            setSources(prev => ({
+              ...prev,
+              general_forums: [...prev.general_forums, ...defaultSuggestions]
+            }))
+            toast.success('Foros añadidos', `Se añadieron ${defaultSuggestions.length} foros populares`)
+          } else {
+            toast.warning('Sin sugerencias', 'Ya tienes los foros principales')
+          }
+        }
+      } else {
+        toast.error('Error', data.error || 'No se pudieron obtener sugerencias')
+      }
+    } catch (error) {
+      console.error('Suggest general forums error:', error)
+      // Fallback: add popular forums directly
+      const fallbackForums = ['burbuja.info', 'rankia.com'].filter(f => !sources.general_forums.includes(f))
+      if (fallbackForums.length > 0) {
+        setSources(prev => ({
+          ...prev,
+          general_forums: [...prev.general_forums, ...fallbackForums]
+        }))
+        toast.success('Foros añadidos', `Se añadieron ${fallbackForums.length} foros populares`)
+      }
+    } finally {
+      setSuggestingGeneralForums(false)
     }
   }
 
@@ -788,7 +858,17 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
 
           {/* General Forums */}
           <div className="p-3 border border-gray-200 rounded-lg">
-            <p className="font-medium text-gray-900 mb-2">Foros Generales</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-medium text-gray-900">Foros Generales</p>
+              <button
+                onClick={suggestGeneralForums}
+                disabled={suggestingGeneralForums}
+                className="px-2 py-1 text-xs bg-purple-50 text-purple-700 rounded hover:bg-purple-100 disabled:opacity-50 inline-flex items-center gap-1"
+              >
+                {suggestingGeneralForums ? <Loader2 size={10} className="animate-spin" /> : <Lightbulb size={10} />}
+                Sugerir
+              </button>
+            </div>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {sources.general_forums.map((forum) => (
                 <span
@@ -826,6 +906,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
                 +
               </button>
             </div>
+            <p className="text-xs text-gray-400 mt-1">💡 Solo foros activos con discusiones reales (no blogs)</p>
           </div>
 
           {/* Row 2: Thematic Forums (full width) */}
@@ -926,41 +1007,49 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
         </div>
       </div>
 
-      {/* Indicators (Optional) */}
+      {/* Indicators - Improved explanation */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold text-gray-900">
-            Indicadores de Problema
-            <span className="text-gray-400 font-normal text-sm ml-2">(opcional)</span>
+            🔍 Indicadores de Problema
+            <span className="text-gray-400 font-normal text-sm ml-2">(opcional pero recomendado)</span>
           </h3>
           {selectedIndicators.length > 0 && (
             <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">
-              {selectedIndicators.length} seleccionados
+              +{selectedIndicators.length * totalCombinations * sourcesCount} queries adicionales
             </span>
           )}
         </div>
-        <p className="text-sm text-gray-500 mb-2">
-          Palabras que indican frustración o necesidad. Se añadirán a las queries de búsqueda.
-        </p>
 
-        {/* Show selected indicators with example query */}
-        {selectedIndicators.length > 0 && lifeContexts.length > 0 && productWords.length > 0 && (
-          <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-            <p className="text-xs font-medium text-orange-700 mb-1">Query con indicadores:</p>
-            <code className="text-xs text-orange-900">
-              &quot;{lifeContexts[0]}&quot; &quot;{productWords[0]}&quot; &quot;{selectedIndicators[0]}&quot; site:reddit.com
-            </code>
+        {/* Explanation box */}
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm text-blue-800 font-medium mb-2">¿Cómo funcionan los indicadores?</p>
+          <div className="text-xs text-blue-700 space-y-1">
+            <p>Los indicadores <strong>añaden búsquedas adicionales</strong> para encontrar gente frustrada:</p>
+            <div className="mt-2 space-y-1 font-mono bg-blue-100/50 p-2 rounded">
+              <p className="text-blue-600">📌 Búsqueda base:</p>
+              <p className="ml-2">{`site:foro.com "${lifeContexts[0] || 'contexto'}" "${productWords[0] || 'palabra'}"`}</p>
+              {selectedIndicators.length > 0 && (
+                <>
+                  <p className="text-orange-600 mt-2">📌 + Búsqueda con indicador:</p>
+                  <p className="ml-2">{`site:foro.com "${lifeContexts[0] || 'contexto'}" "${productWords[0] || 'palabra'}" "${selectedIndicators[0]}"`}</p>
+                </>
+              )}
+            </div>
+            <p className="mt-2 text-blue-600">
+              💡 Sin indicadores encuentras conversaciones generales. Con indicadores encuentras específicamente gente con problemas.
+            </p>
           </div>
-        )}
+        </div>
 
         <div className="space-y-3">
           {Object.entries(INDICATOR_PRESETS).map(([category, indicators]) => (
             <div key={category}>
               <p className="text-xs font-medium text-gray-500 uppercase mb-2">
-                {category === 'frustration' && 'Frustración'}
-                {category === 'help' && 'Ayuda'}
-                {category === 'problem' && 'Problema'}
-                {category === 'need' && 'Necesidad'}
+                {category === 'frustration' && '😤 Frustración'}
+                {category === 'help' && '🙋 Pidiendo Ayuda'}
+                {category === 'problem' && '⚠️ Reportando Problema'}
+                {category === 'need' && '🔎 Buscando Alternativa'}
               </p>
               <div className="flex flex-wrap gap-2">
                 {indicators.map((indicator) => (
@@ -974,13 +1063,25 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
                     }`}
                   >
                     {selectedIndicators.includes(indicator) && '✓ '}
-                    {indicator}
+                    &quot;{indicator}&quot;
                   </button>
                 ))}
               </div>
             </div>
           ))}
         </div>
+
+        {/* Summary when indicators are selected */}
+        {selectedIndicators.length > 0 && (
+          <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+            <p className="text-xs font-medium text-orange-800">
+              ✅ Se buscarán conversaciones donde la gente dice: {selectedIndicators.map(i => `"${i}"`).join(', ')}
+            </p>
+            <p className="text-xs text-orange-600 mt-1">
+              Esto genera {selectedIndicators.length * totalCombinations * sourcesCount} queries adicionales a las {totalCombinations * sourcesCount} base
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Advanced Settings */}
