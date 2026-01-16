@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { createClient as createAdminClient } from '@/lib/supabase-server-admin';
 import { randomUUID } from 'crypto';
 import {
   StartScraperRequest,
@@ -458,13 +459,16 @@ async function executeFirecrawl(
   // Generate brief with LLM (async but we wait for it)
   const documentBrief = await generateDocumentBrief(documentContent, job.scraper_type, effectiveTargetName);
 
+  // Use admin client to bypass RLS when saving document
+  const adminClient = createAdminClient();
+
   // Save result to knowledge_base_docs with auto-generated name, tags, and brief
-  const { data: doc, error: docError } = await supabase
+  const { data: doc, error: docError } = await adminClient
     .from('knowledge_base_docs')
     .insert({
       project_id: job.project_id,
-      name: documentName,
-      content: documentContent,
+      filename: documentName,
+      extracted_content: documentContent,
       description: documentBrief,
       category: targetCategory || job.target_category || 'research',
       tags: documentTags,
@@ -483,6 +487,7 @@ async function executeFirecrawl(
 
   if (docError) {
     console.error('[scraper/start] Failed to save document:', docError);
+    throw new Error(`Failed to save document: ${docError.message}`);
   }
 
   // Update job as completed

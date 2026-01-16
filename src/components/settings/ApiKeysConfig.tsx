@@ -36,6 +36,13 @@ const SERVICE_INFO: Record<string, ServiceInfo> = {
     docsUrl: 'https://www.firecrawl.dev/app/api-keys',
     placeholder: 'fc-xxxxxxxxxxxx',
   },
+  serper: {
+    name: 'serper',
+    label: 'Serper',
+    description: 'Búsquedas en Google (SERP) para el Buscador de Nichos - $0.004/query',
+    docsUrl: 'https://serper.dev/api-key',
+    placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+  },
 };
 
 export default function ApiKeysConfig() {

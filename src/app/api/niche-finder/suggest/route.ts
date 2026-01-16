@@ -1,34 +1,85 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { SuggestSourcesRequest, SuggestSourcesResponse } from '@/types/scraper.types'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(
-  request: NextRequest
-): Promise<NextResponse<SuggestSourcesResponse | { error: string }>> {
+// Extended request type that supports both component format and direct params
+interface SuggestRequest {
+  // Component format (from NicheFinderPlaybook)
+  type?: 'life_contexts' | 'product_words' | 'thematic_forums'
+  existing?: string[]
+  life_contexts?: string[]
+  product_words?: string[]
+  project_id?: string
+
+  // Direct params format (legacy)
+  industry?: string
+  product_description?: string
+  country?: string
+  existing_life_contexts?: string[]
+  existing_product_words?: string[]
+}
+
+export async function POST(request: NextRequest) {
   const openrouterApiKey = process.env.OPENROUTER_API_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!openrouterApiKey) {
-    return NextResponse.json({ error: 'OpenRouter API key not configured' }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'OpenRouter API key not configured' }, { status: 500 })
   }
 
   try {
-    const body: SuggestSourcesRequest = await request.json()
-    const {
-      industry,
-      product_description,
-      country,
-      existing_life_contexts = [],
-      existing_product_words = [],
-    } = body
+    const body: SuggestRequest = await request.json()
+
+    // Support both component format and direct params format
+    const type = body.type // 'life_contexts' | 'product_words' | undefined
+
+    // Get existing lists from either format
+    let existingLifeContexts = body.existing_life_contexts || []
+    let existingProductWords = body.existing_product_words || []
+
+    // If using component format, populate from existing/life_contexts/product_words
+    if (type === 'life_contexts') {
+      existingLifeContexts = body.existing || []
+      existingProductWords = body.product_words || []
+    } else if (type === 'product_words') {
+      existingProductWords = body.existing || []
+      existingLifeContexts = body.life_contexts || []
+    }
+
+    // Get industry, product, country from body or from project settings
+    let industry = body.industry || ''
+    let productDescription = body.product_description || ''
+    let country = body.country || 'España'
+
+    // If project_id is provided, try to get settings from project
+    if (body.project_id && supabaseUrl && supabaseServiceKey) {
+      try {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey)
+        const { data: project } = await supabase
+          .from('projects')
+          .select('settings, name, description')
+          .eq('id', body.project_id)
+          .single()
+
+        if (project?.settings) {
+          industry = industry || project.settings.industry || ''
+          productDescription = productDescription || project.settings.product || project.description || ''
+          country = country || project.settings.country || 'España'
+        }
+      } catch (e) {
+        console.warn('Could not fetch project settings:', e)
+      }
+    }
 
     const prompt = `You are an expert market researcher. Based on the following product/industry, suggest search parameters for finding customer pain points in forums.
 
-INDUSTRY: ${industry}
-PRODUCT: ${product_description}
+INDUSTRY: ${industry || 'general'}
+PRODUCT: ${productDescription || 'product/service'}
 COUNTRY: ${country}
-${existing_life_contexts.length > 0 ? `EXISTING LIFE CONTEXTS: ${existing_life_contexts.join(', ')}` : ''}
-${existing_product_words.length > 0 ? `EXISTING PRODUCT WORDS: ${existing_product_words.join(', ')}` : ''}
+${existingLifeContexts.length > 0 ? `EXISTING LIFE CONTEXTS: ${existingLifeContexts.join(', ')}` : ''}
+${existingProductWords.length > 0 ? `EXISTING PRODUCT WORDS: ${existingProductWords.join(', ')}` : ''}
 
 Respond in JSON format with this structure:
 {
@@ -44,8 +95,8 @@ Respond in JSON format with this structure:
 }
 
 IMPORTANT:
-- Suggest 5-10 life contexts that represent situations where people might need ${product_description}
-- Suggest 5-10 product words that people would use when discussing problems ${product_description} solves
+- Suggest 5-10 life contexts that represent situations where people might need ${productDescription || 'the product'}
+- Suggest 5-10 product words that people would use when discussing problems ${productDescription || 'the product'} solves
 - Suggest 5-8 forums/subreddits where these people discuss their problems
 - Be specific to ${country} culture and language
 - Don't repeat existing contexts/words
@@ -75,24 +126,55 @@ Respond ONLY with the JSON, no additional text.`
     const content = data.choices?.[0]?.message?.content || '{}'
 
     // Parse JSON from response
-    let suggestions: SuggestSourcesResponse
+    interface ParsedSuggestions {
+      life_contexts?: Array<{ value: string; category?: string; reason?: string }>
+      product_words?: Array<{ value: string; category?: string; reason?: string }>
+      sources?: Array<{ source_type: string; value: string; life_context?: string; reason?: string }>
+    }
+
+    let parsedSuggestions: ParsedSuggestions
     try {
       // Try to extract JSON from the response (in case there's extra text)
       const jsonMatch = content.match(/\{[\s\S]*\}/)
-      suggestions = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(content)
+      parsedSuggestions = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(content)
     } catch (parseError) {
       console.error('Failed to parse LLM response:', content)
       return NextResponse.json(
-        { error: 'Failed to parse suggestions from AI' },
+        { success: false, error: 'Failed to parse suggestions from AI' },
         { status: 500 }
       )
     }
 
-    return NextResponse.json(suggestions)
+    // If type was specified (component format), return suggestions as simple array
+    if (type === 'life_contexts') {
+      const suggestions = (parsedSuggestions.life_contexts || [])
+        .map(c => c.value)
+        .filter(v => v && !existingLifeContexts.includes(v))
+      return NextResponse.json({ success: true, suggestions })
+    } else if (type === 'product_words') {
+      const suggestions = (parsedSuggestions.product_words || [])
+        .map(w => w.value)
+        .filter(v => v && !existingProductWords.includes(v))
+      return NextResponse.json({ success: true, suggestions })
+    } else if (type === 'thematic_forums') {
+      // Return thematic forums with their context mapping
+      const existingForums = body.existing || []
+      const forums = (parsedSuggestions.sources || [])
+        .filter(s => s.source_type === 'thematic_forum' && s.value && !existingForums.includes(s.value))
+        .map(s => ({
+          domain: s.value,
+          context: s.life_context || '',
+          reason: s.reason || '',
+        }))
+      return NextResponse.json({ success: true, suggestions: forums })
+    }
+
+    // Otherwise return full response (legacy format)
+    return NextResponse.json({ success: true, ...parsedSuggestions })
   } catch (error) {
     console.error('Error getting suggestions:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }
