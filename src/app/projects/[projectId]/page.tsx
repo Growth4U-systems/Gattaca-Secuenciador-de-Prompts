@@ -10,6 +10,7 @@ import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
 import DocumentUpload from '@/components/documents/DocumentUpload'
 import DocumentBulkUpload from '@/components/documents/DocumentBulkUpload'
 import DocumentList from '@/components/documents/DocumentList'
+import CSVTableViewer from '@/components/documents/CSVTableViewer'
 import ScraperLauncher from '@/components/scraper/ScraperLauncher'
 import TokenMonitor from '@/components/TokenMonitor'
 import FlowSetup from '@/components/flow/FlowSetup'
@@ -654,29 +655,50 @@ function DocumentsTab({
       )}
 
       {/* Document Viewer Modal */}
-      {viewingDoc && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">{viewingDoc.filename}</h2>
-                <p className="text-sm text-gray-500">{viewingDoc.token_count?.toLocaleString()} tokens</p>
+      {viewingDoc && (() => {
+        // Detect if content looks like CSV
+        const content = viewingDoc.extracted_content || ''
+        const firstLine = content.split('\n')[0] || ''
+        const isCSV = firstLine.includes(',') && firstLine.split(',').length >= 3
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  {isCSV && (
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <Table2 size={20} className="text-green-600" />
+                    </div>
+                  )}
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">{viewingDoc.filename}</h2>
+                    <p className="text-sm text-gray-500">
+                      {viewingDoc.token_count?.toLocaleString()} tokens
+                      {isCSV && <span className="ml-2 text-green-600 font-medium">• CSV</span>}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setViewingDoc(null)}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <button
-                onClick={() => setViewingDoc(null)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
-              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono bg-white p-4 rounded-xl border border-gray-200">
-                {viewingDoc.extracted_content}
-              </pre>
+              <div className="p-6 overflow-hidden flex-1 bg-gray-50 flex flex-col">
+                {isCSV ? (
+                  <CSVTableViewer content={content} filename={viewingDoc.filename} />
+                ) : (
+                  <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono bg-white p-4 rounded-xl border border-gray-200 overflow-auto flex-1">
+                    {content}
+                  </pre>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Scraper Launcher Modal */}
       {showScraperLauncher && (
