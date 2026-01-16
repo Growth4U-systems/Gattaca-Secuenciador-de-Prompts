@@ -192,6 +192,15 @@ const INSTAGRAM_RESULTS_TYPE_OPTIONS: SelectOption[] = [
 ];
 
 // ============================================
+// FIRECRAWL MODE OPTIONS
+// ============================================
+const FIRECRAWL_MODE_OPTIONS: SelectOption[] = [
+  { value: 'scrape', label: 'Página única', description: 'Extrae solo la URL indicada' },
+  { value: 'crawl', label: 'Crawl (múltiples páginas)', description: 'Navega y extrae varias páginas del sitio' },
+  { value: 'map', label: 'Mapa de URLs', description: 'Descubre todas las URLs del sitio sin extraer contenido' },
+];
+
+// ============================================
 // SCRAPER-SPECIFIC FIELD SCHEMAS
 // ============================================
 
@@ -206,13 +215,13 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         key: 'url',
         type: 'url',
         label: 'URL del sitio web',
-        description: 'La URL completa de la p\u00e1gina web que quieres extraer',
-        placeholder: 'https://ejemplo.com/pagina',
+        description: 'La URL base del sitio que quieres extraer',
+        placeholder: 'https://ejemplo.com',
         helpText: 'Incluye https:// al inicio',
         required: true,
         validation: {
           pattern: /^https?:\/\/.+/,
-          patternMessage: 'Debe ser una URL v\u00e1lida (https://...)',
+          patternMessage: 'Debe ser una URL válida (https://...)',
         },
         examples: [
           'https://www.revolut.com/es-ES/',
@@ -220,14 +229,77 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
           'https://wise.com/es/',
         ],
       },
+      mode: {
+        key: 'mode',
+        type: 'select',
+        label: 'Modo de extracción',
+        description: 'Cómo quieres extraer el contenido',
+        options: FIRECRAWL_MODE_OPTIONS,
+        defaultValue: 'scrape',
+        helpText: 'Página única para una sola URL, Crawl para varias páginas',
+      },
+      // Crawl-specific fields
+      includePaths: {
+        key: 'includePaths',
+        type: 'text-array',
+        label: 'Incluir rutas (regex)',
+        description: 'Solo extraer páginas que coincidan con estos patrones',
+        placeholder: 'pricing.*\nproduct.*\nabout',
+        helpText: 'Un patrón por línea. Ej: "pricing.*" incluye /pricing, /pricing/enterprise, etc.',
+        examples: [
+          'pricing.*',
+          'product/.*',
+          'features',
+          'about|team|careers',
+        ],
+      },
+      excludePaths: {
+        key: 'excludePaths',
+        type: 'text-array',
+        label: 'Excluir rutas (regex)',
+        description: 'No extraer páginas que coincidan con estos patrones',
+        placeholder: 'blog.*\nlegal.*\nterms',
+        helpText: 'Un patrón por línea. Ej: "blog.*" excluye /blog y sus subpáginas.',
+        examples: [
+          'blog.*',
+          'legal.*',
+          'help/.*',
+          'privacy|terms|cookies',
+        ],
+      },
+      limit: {
+        key: 'limit',
+        type: 'number',
+        label: 'Límite de páginas',
+        description: 'Número máximo de páginas a extraer',
+        helpText: 'Recomendado: 10-50 para empezar. Máximo: 100.',
+        defaultValue: 10,
+        validation: {
+          min: 1,
+          max: 100,
+        },
+      },
+      maxDepth: {
+        key: 'maxDepth',
+        type: 'number',
+        label: 'Profundidad máxima',
+        description: 'Cuántos niveles de links seguir desde la URL inicial',
+        helpText: '1 = solo la página inicial, 2 = +links directos, 3+ = más profundidad',
+        defaultValue: 2,
+        validation: {
+          min: 1,
+          max: 5,
+        },
+      },
+      // Common fields
       formats: {
         key: 'formats',
         type: 'multi-select',
         label: 'Formatos de salida',
-        description: 'En qu\u00e9 formato quieres el contenido extra\u00eddo',
+        description: 'En qué formato quieres el contenido extraído',
         options: [
           { value: 'markdown', label: 'Markdown', description: 'Texto formateado (recomendado)' },
-          { value: 'html', label: 'HTML', description: 'C\u00f3digo HTML completo' },
+          { value: 'html', label: 'HTML', description: 'Código HTML completo' },
           { value: 'text', label: 'Texto plano', description: 'Sin formato' },
         ],
         defaultValue: ['markdown'],
@@ -244,7 +316,7 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         type: 'number',
         label: 'Esperar (ms)',
         description: 'Milisegundos a esperar para que cargue JavaScript',
-        helpText: 'Usa 0 para p\u00e1ginas est\u00e1ticas, 2000-5000 para SPAs',
+        helpText: 'Usa 0 para páginas estáticas, 2000-5000 para SPAs',
         defaultValue: 0,
         validation: {
           min: 0,

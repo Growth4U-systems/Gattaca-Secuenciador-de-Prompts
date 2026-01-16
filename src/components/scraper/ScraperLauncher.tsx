@@ -824,14 +824,57 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
                 {/* Required fields */}
                 {template.inputSchema.required.map((key) => renderInputField(key, true))}
 
-                {/* Optional fields (collapsed by default) */}
+                {/* For website scraper, show mode selector and conditional fields */}
+                {selectedScraper === 'website' && (
+                  <>
+                    {/* Mode selector */}
+                    {renderInputField('mode', false)}
+
+                    {/* Crawl-specific fields - only show when mode is 'crawl' */}
+                    {inputConfig.mode === 'crawl' && (
+                      <div className="space-y-4 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                        <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
+                          <Globe size={16} />
+                          Configuración del Crawl
+                        </div>
+                        <p className="text-xs text-blue-600">
+                          El crawler navegará el sitio y extraerá múltiples páginas. Usa los filtros para enfocarte en secciones específicas.
+                        </p>
+                        {renderInputField('limit', false)}
+                        {renderInputField('maxDepth', false)}
+                        {renderInputField('includePaths', false)}
+                        {renderInputField('excludePaths', false)}
+                      </div>
+                    )}
+
+                    {/* Map mode info */}
+                    {inputConfig.mode === 'map' && (
+                      <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
+                        <div className="flex items-center gap-2 text-sm font-medium text-amber-800 mb-2">
+                          <Search size={16} />
+                          Modo Mapa de URLs
+                        </div>
+                        <p className="text-xs text-amber-700">
+                          Descubre todas las URLs del sitio sin extraer contenido. Útil para planificar qué páginas scrapear después.
+                        </p>
+                        {renderInputField('limit', false)}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Optional fields (collapsed by default) - exclude website-specific fields already shown */}
                 {template.inputSchema.optional.length > 0 && (
                   <details className="group">
                     <summary className="cursor-pointer text-sm text-blue-600 hover:text-blue-700 font-medium">
-                      Opciones avanzadas ({template.inputSchema.optional.length})
+                      Opciones avanzadas ({selectedScraper === 'website'
+                        ? template.inputSchema.optional.filter(k => !['mode', 'limit', 'maxDepth', 'includePaths', 'excludePaths'].includes(k)).length
+                        : template.inputSchema.optional.length})
                     </summary>
                     <div className="mt-3 space-y-4 pl-4 border-l-2 border-gray-100">
-                      {template.inputSchema.optional.map((key) => renderInputField(key, false))}
+                      {template.inputSchema.optional
+                        .filter(key => selectedScraper !== 'website' || !['mode', 'limit', 'maxDepth', 'includePaths', 'excludePaths'].includes(key))
+                        .map((key) => renderInputField(key, false))}
                     </div>
                   </details>
                 )}

@@ -397,8 +397,34 @@ async function launchBatchJobs(
 }
 
 // ============================================
-// FIRECRAWL EXECUTOR (Sync - returns immediately)
+// FIRECRAWL EXECUTOR (Supports scrape, crawl, and map modes)
 // ============================================
+
+// Types for Firecrawl responses
+interface FirecrawlCrawlResponse {
+  success: boolean;
+  id?: string;
+  status?: string;
+  completed?: number;
+  total?: number;
+  data?: Array<{
+    markdown?: string;
+    html?: string;
+    metadata?: {
+      title?: string;
+      description?: string;
+      sourceURL?: string;
+      [key: string]: unknown;
+    };
+  }>;
+  error?: string;
+}
+
+interface FirecrawlMapResponse {
+  success: boolean;
+  links?: string[];
+  error?: string;
+}
 
 async function executeFirecrawl(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -429,7 +455,31 @@ async function executeFirecrawl(
     throw new Error('Missing url in input');
   }
 
-  // Call Firecrawl API
+  const mode = (input.mode as string) || 'scrape';
+
+  // Route to appropriate handler based on mode
+  switch (mode) {
+    case 'crawl':
+      return await executeFirecrawlCrawl(supabase, job, input, url, firecrawlApiKey, targetName, targetCategory, providedTags);
+    case 'map':
+      return await executeFirecrawlMap(supabase, job, input, url, firecrawlApiKey, targetName, targetCategory, providedTags);
+    case 'scrape':
+    default:
+      return await executeFirecrawlScrape(supabase, job, input, url, firecrawlApiKey, targetName, targetCategory, providedTags);
+  }
+}
+
+// Single page scrape (original behavior)
+async function executeFirecrawlScrape(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  job: ScraperJob,
+  input: Record<string, unknown>,
+  url: string,
+  firecrawlApiKey: string,
+  targetName?: string,
+  targetCategory?: string,
+  providedTags?: string[]
+): Promise<NextResponse<StartScraperResponse>> {
   const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
     method: 'POST',
     headers: {
@@ -450,19 +500,15 @@ async function executeFirecrawl(
     throw new Error(result.error || 'Firecrawl scrape failed');
   }
 
-  // Generate document name, tags, and brief
   const effectiveTargetName = targetName || result.data.metadata?.title || new URL(url).hostname;
   const documentName = generateDocumentName(job.scraper_type, effectiveTargetName);
   const documentTags = providedTags?.length ? providedTags : generateAutoTags(job.scraper_type, effectiveTargetName);
   const documentContent = result.data.markdown || '';
 
-  // Generate brief with LLM (async but we wait for it)
   const documentBrief = await generateDocumentBrief(documentContent, job.scraper_type, effectiveTargetName);
 
-  // Use admin client to bypass RLS when saving document
   const adminClient = createAdminClient();
 
-  // Save result to knowledge_base_docs with auto-generated name, tags, and brief
   const { data: doc, error: docError } = await adminClient
     .from('knowledge_base_docs')
     .insert({
@@ -480,6 +526,7 @@ async function executeFirecrawl(
         scraped_at: new Date().toISOString(),
         metadata: result.data.metadata,
         target_name: effectiveTargetName,
+        mode: 'scrape',
       },
     })
     .select()
@@ -490,7 +537,6 @@ async function executeFirecrawl(
     throw new Error(`Failed to save document: ${docError.message}`);
   }
 
-  // Update job as completed
   await supabase
     .from('scraper_jobs')
     .update({
@@ -501,6 +547,7 @@ async function executeFirecrawl(
       provider_metadata: {
         firecrawl_metadata: result.data.metadata,
         document_id: doc?.id,
+        mode: 'scrape',
       },
     })
     .eq('id', job.id);
@@ -508,7 +555,325 @@ async function executeFirecrawl(
   return NextResponse.json({
     success: true,
     job_id: job.id,
-    completed: true, // Firecrawl is sync, so it completes immediately
+    completed: true,
+  });
+}
+
+// Crawl multiple pages
+async function executeFirecrawlCrawl(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  job: ScraperJob,
+  input: Record<string, unknown>,
+  url: string,
+  firecrawlApiKey: string,
+  targetName?: string,
+  targetCategory?: string,
+  providedTags?: string[]
+): Promise<NextResponse<StartScraperResponse>> {
+  // Parse includePaths and excludePaths from text arrays
+  const includePaths = input.includePaths
+    ? (Array.isArray(input.includePaths) ? input.includePaths : [input.includePaths])
+        .filter((p): p is string => typeof p === 'string' && p.trim() !== '')
+    : undefined;
+
+  const excludePaths = input.excludePaths
+    ? (Array.isArray(input.excludePaths) ? input.excludePaths : [input.excludePaths])
+        .filter((p): p is string => typeof p === 'string' && p.trim() !== '')
+    : undefined;
+
+  const crawlBody: Record<string, unknown> = {
+    url,
+    limit: Math.min(Number(input.limit) || 10, 100),
+    maxDepth: Math.min(Number(input.maxDepth) || 2, 5),
+    scrapeOptions: {
+      formats: input.formats || ['markdown'],
+      onlyMainContent: input.onlyMainContent ?? true,
+    },
+  };
+
+  if (includePaths && includePaths.length > 0) {
+    crawlBody.includePaths = includePaths;
+  }
+  if (excludePaths && excludePaths.length > 0) {
+    crawlBody.excludePaths = excludePaths;
+  }
+
+  console.log('[scraper/start] Starting crawl:', JSON.stringify(crawlBody, null, 2));
+
+  // Start the crawl (async operation)
+  const startResponse = await fetch('https://api.firecrawl.dev/v1/crawl', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${firecrawlApiKey}`,
+    },
+    body: JSON.stringify(crawlBody),
+  });
+
+  const startResult = (await startResponse.json()) as FirecrawlCrawlResponse;
+
+  if (!startResult.success || !startResult.id) {
+    throw new Error(startResult.error || 'Failed to start crawl');
+  }
+
+  const crawlId = startResult.id;
+  console.log('[scraper/start] Crawl started with ID:', crawlId);
+
+  // Poll for completion (with timeout)
+  const maxWaitTime = 90000; // 90 seconds
+  const pollInterval = 3000;
+  const startTime = Date.now();
+
+  let crawlResult: FirecrawlCrawlResponse | null = null;
+
+  while (Date.now() - startTime < maxWaitTime) {
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+    const statusResponse = await fetch(`https://api.firecrawl.dev/v1/crawl/${crawlId}`, {
+      headers: { Authorization: `Bearer ${firecrawlApiKey}` },
+    });
+
+    const statusResult = (await statusResponse.json()) as FirecrawlCrawlResponse;
+
+    console.log('[scraper/start] Crawl status:', statusResult.status, `${statusResult.completed || 0}/${statusResult.total || '?'} pages`);
+
+    if (statusResult.status === 'completed') {
+      crawlResult = statusResult;
+      break;
+    } else if (statusResult.status === 'failed') {
+      throw new Error(statusResult.error || 'Crawl failed');
+    }
+
+    // Update job progress
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        provider_metadata: {
+          crawl_id: crawlId,
+          status: statusResult.status,
+          completed: statusResult.completed,
+          total: statusResult.total,
+        },
+      })
+      .eq('id', job.id);
+  }
+
+  if (!crawlResult || !crawlResult.data) {
+    throw new Error('Crawl timed out or returned no data');
+  }
+
+  const pages = crawlResult.data;
+  const effectiveTargetName = targetName || new URL(url).hostname;
+
+  // Build combined content with clear page separators
+  let combinedContent = `# Crawl de ${effectiveTargetName}\n\n`;
+  combinedContent += `**URL base:** ${url}\n`;
+  combinedContent += `**Páginas extraídas:** ${pages.length}\n`;
+  if (includePaths && includePaths.length > 0) {
+    combinedContent += `**Filtro de inclusión:** ${includePaths.join(', ')}\n`;
+  }
+  if (excludePaths && excludePaths.length > 0) {
+    combinedContent += `**Filtro de exclusión:** ${excludePaths.join(', ')}\n`;
+  }
+  combinedContent += `**Fecha:** ${new Date().toLocaleDateString('es-ES')}\n\n---\n\n`;
+
+  for (const page of pages) {
+    const pageUrl = page.metadata?.sourceURL || 'URL desconocida';
+    const pageTitle = page.metadata?.title || 'Sin título';
+    combinedContent += `## ${pageTitle}\n`;
+    combinedContent += `**URL:** ${pageUrl}\n\n`;
+    combinedContent += page.markdown || '_Sin contenido_';
+    combinedContent += `\n\n---\n\n`;
+  }
+
+  const documentName = `Website Crawl - ${effectiveTargetName}`;
+  const documentTags = providedTags?.length
+    ? providedTags
+    : [...generateAutoTags(job.scraper_type, effectiveTargetName), 'crawl', `${pages.length} páginas`];
+
+  const documentBrief = await generateDocumentBrief(
+    combinedContent.slice(0, 3000),
+    job.scraper_type,
+    effectiveTargetName
+  );
+
+  const adminClient = createAdminClient();
+
+  const { data: doc, error: docError } = await adminClient
+    .from('knowledge_base_docs')
+    .insert({
+      project_id: job.project_id,
+      filename: documentName,
+      extracted_content: combinedContent,
+      description: documentBrief,
+      category: targetCategory || job.target_category || 'research',
+      tags: documentTags,
+      source_type: 'scraper',
+      source_job_id: job.id,
+      source_url: url,
+      source_metadata: {
+        scraper_type: job.scraper_type,
+        scraped_at: new Date().toISOString(),
+        target_name: effectiveTargetName,
+        mode: 'crawl',
+        pages_count: pages.length,
+        crawl_config: { includePaths, excludePaths, limit: input.limit, maxDepth: input.maxDepth },
+        pages_urls: pages.map(p => p.metadata?.sourceURL).filter(Boolean),
+      },
+    })
+    .select()
+    .single();
+
+  if (docError) {
+    console.error('[scraper/start] Failed to save crawl document:', docError);
+    throw new Error(`Failed to save document: ${docError.message}`);
+  }
+
+  await supabase
+    .from('scraper_jobs')
+    .update({
+      status: 'completed',
+      result_count: pages.length,
+      result_preview: pages.slice(0, 5).map(p => ({
+        title: p.metadata?.title || 'Sin título',
+        url: p.metadata?.sourceURL || url,
+      })),
+      completed_at: new Date().toISOString(),
+      provider_metadata: {
+        crawl_id: crawlId,
+        mode: 'crawl',
+        document_id: doc?.id,
+        pages_count: pages.length,
+      },
+    })
+    .eq('id', job.id);
+
+  return NextResponse.json({
+    success: true,
+    job_id: job.id,
+    completed: true,
+  });
+}
+
+// Map URLs (discover without scraping)
+async function executeFirecrawlMap(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  job: ScraperJob,
+  input: Record<string, unknown>,
+  url: string,
+  firecrawlApiKey: string,
+  targetName?: string,
+  targetCategory?: string,
+  providedTags?: string[]
+): Promise<NextResponse<StartScraperResponse>> {
+  const response = await fetch('https://api.firecrawl.dev/v1/map', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${firecrawlApiKey}`,
+    },
+    body: JSON.stringify({
+      url,
+      limit: Math.min(Number(input.limit) || 100, 500),
+    }),
+  });
+
+  const result = (await response.json()) as FirecrawlMapResponse;
+
+  if (!result.success || !result.links) {
+    throw new Error(result.error || 'Map failed');
+  }
+
+  const links = result.links;
+  const effectiveTargetName = targetName || new URL(url).hostname;
+
+  // Group links by path pattern
+  const linksBySection: Record<string, string[]> = {};
+  for (const link of links) {
+    try {
+      const linkUrl = new URL(link);
+      const pathParts = linkUrl.pathname.split('/').filter(Boolean);
+      const section = pathParts[0] || 'root';
+      if (!linksBySection[section]) linksBySection[section] = [];
+      linksBySection[section].push(link);
+    } catch {
+      if (!linksBySection['other']) linksBySection['other'] = [];
+      linksBySection['other'].push(link);
+    }
+  }
+
+  const mapData = {
+    url,
+    target: effectiveTargetName,
+    total_urls: links.length,
+    scraped_at: new Date().toISOString(),
+    sections: Object.entries(linksBySection).map(([section, urls]) => ({
+      section,
+      count: urls.length,
+      urls,
+    })),
+    all_urls: links,
+  };
+
+  const documentContent = JSON.stringify(mapData, null, 2);
+  const documentName = `URL Map - ${effectiveTargetName}`;
+  const documentTags = providedTags?.length
+    ? providedTags
+    : [...generateAutoTags(job.scraper_type, effectiveTargetName), 'sitemap', `${links.length} URLs`];
+
+  const documentBrief = `Mapa de ${links.length} URLs del sitio ${effectiveTargetName}. Secciones: ${Object.keys(linksBySection).join(', ')}.`;
+
+  const adminClient = createAdminClient();
+
+  const { data: doc, error: docError } = await adminClient
+    .from('knowledge_base_docs')
+    .insert({
+      project_id: job.project_id,
+      filename: documentName,
+      extracted_content: documentContent,
+      description: documentBrief,
+      category: targetCategory || job.target_category || 'research',
+      tags: documentTags,
+      source_type: 'scraper',
+      source_job_id: job.id,
+      source_url: url,
+      source_metadata: {
+        scraper_type: job.scraper_type,
+        scraped_at: new Date().toISOString(),
+        target_name: effectiveTargetName,
+        mode: 'map',
+        urls_count: links.length,
+        sections: Object.keys(linksBySection),
+      },
+    })
+    .select()
+    .single();
+
+  if (docError) {
+    console.error('[scraper/start] Failed to save map document:', docError);
+    throw new Error(`Failed to save document: ${docError.message}`);
+  }
+
+  await supabase
+    .from('scraper_jobs')
+    .update({
+      status: 'completed',
+      result_count: links.length,
+      result_preview: links.slice(0, 10).map(link => ({ title: link, url: link })),
+      completed_at: new Date().toISOString(),
+      provider_metadata: {
+        mode: 'map',
+        document_id: doc?.id,
+        urls_count: links.length,
+        sections: Object.keys(linksBySection),
+      },
+    })
+    .eq('id', job.id);
+
+  return NextResponse.json({
+    success: true,
+    job_id: job.id,
+    completed: true,
   });
 }
 
