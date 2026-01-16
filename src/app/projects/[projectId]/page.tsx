@@ -92,11 +92,13 @@ export default function ProjectPage({
     { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
   ]
 
-  // Niche Finder has a different tab structure
+  // Niche Finder has the same tabs as other projects, plus the niche-finder tab
   const nicheFinderTabs = [
     { id: 'niche-finder' as TabType, label: 'Buscador de Nichos', icon: Search, description: 'Configurar y ejecutar' },
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
     { id: 'variables' as TabType, label: 'Variables', icon: Sliders, description: 'Configuración' },
+    { id: 'flow' as TabType, label: 'Flujo', icon: Workflow, description: 'Pasos y prompts' },
+    { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
   ]
 
   // Add Export tab only for ECP projects

@@ -13,15 +13,9 @@ import {
   Settings,
   ChevronDown,
   ChevronUp,
-  Sparkles,
 } from 'lucide-react'
 import { useToast } from '@/components/ui'
 import NicheResultsDashboard from './NicheResultsDashboard'
-import {
-  STEP_1_CLEAN_FILTER_PROMPT,
-  STEP_2_SCORING_PROMPT,
-  STEP_3_CONSOLIDATE_PROMPT,
-} from '@/lib/templates/niche-finder-playbook'
 
 interface NicheFinderPlaybookProps {
   projectId: string
@@ -97,27 +91,6 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
 
   // Results
   const [showResults, setShowResults] = useState(false)
-
-  // Analysis Steps Configuration (LLM Steps 1-3)
-  const [showAnalysisSteps, setShowAnalysisSteps] = useState(false)
-  const [expandedAnalysisStep, setExpandedAnalysisStep] = useState<number | null>(null)
-  const [analysisSteps, setAnalysisSteps] = useState({
-    step1: {
-      name: 'Limpiar y Filtrar Nichos',
-      prompt: STEP_1_CLEAN_FILTER_PROMPT,
-      model: 'openai/gpt-4o-mini',
-    },
-    step2: {
-      name: 'Scoring (Deep Research)',
-      prompt: STEP_2_SCORING_PROMPT,
-      model: 'google/gemini-2.5-pro-preview',
-    },
-    step3: {
-      name: 'Tabla Final Consolidada',
-      prompt: STEP_3_CONSOLIDATE_PROMPT,
-      model: 'openai/gpt-4o-mini',
-    },
-  })
 
   // Calculate combinations
   const totalCombinations = lifeContexts.length * productWords.length
@@ -363,26 +336,10 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
 
       setExecutionPhase('analyzing_1')
 
-      // Run LLM analysis phases (Steps 1-3)
+      // Run LLM analysis phases (Steps 1-3) using default prompts
+      // Note: Custom prompts can be configured in the "Flujo" tab
       const analyzeResponse = await fetch(`/api/niche-finder/jobs/${startData.jobId}/analyze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          steps: {
-            step1: {
-              prompt: analysisSteps.step1.prompt,
-              model: analysisSteps.step1.model,
-            },
-            step2: {
-              prompt: analysisSteps.step2.prompt,
-              model: analysisSteps.step2.model,
-            },
-            step3: {
-              prompt: analysisSteps.step3.prompt,
-              model: analysisSteps.step3.model,
-            },
-          },
-        }),
       })
 
       const analyzeData = await analyzeResponse.json()
@@ -775,197 +732,6 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
                   <option value={20}>20 (más rápido)</option>
                 </select>
               </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Analysis Steps (LLM Steps 1-3) */}
-      <div className="bg-white border border-gray-200 rounded-xl">
-        <button
-          onClick={() => setShowAnalysisSteps(!showAnalysisSteps)}
-          className="w-full px-5 py-4 flex items-center justify-between text-left"
-        >
-          <div className="flex items-center gap-2">
-            <Sparkles size={18} className="text-amber-500" />
-            <span className="font-medium text-gray-900">Pasos de Análisis LLM</span>
-            <span className="text-xs text-gray-400 ml-2">(Steps 1-3)</span>
-          </div>
-          {showAnalysisSteps ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-        </button>
-
-        {showAnalysisSteps && (
-          <div className="px-5 pb-5 border-t border-gray-100 pt-4 space-y-4">
-            <p className="text-sm text-gray-500">
-              Configura los prompts de análisis que se ejecutarán después de la extracción de nichos.
-            </p>
-
-            {/* Step 1: Clean & Filter */}
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <button
-                onClick={() => setExpandedAnalysisStep(expandedAnalysisStep === 1 ? null : 1)}
-                className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-medium">
-                    1
-                  </span>
-                  <div className="text-left">
-                    <p className="font-medium text-gray-900">Limpiar y Filtrar Nichos</p>
-                    <p className="text-xs text-gray-500">Consolida y valida los nichos extraídos</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded">
-                    {analysisSteps.step1.model.split('/')[1]}
-                  </span>
-                  {expandedAnalysisStep === 1 ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </div>
-              </button>
-              {expandedAnalysisStep === 1 && (
-                <div className="p-4 space-y-3 bg-white">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Modelo</label>
-                    <select
-                      value={analysisSteps.step1.model}
-                      onChange={(e) => setAnalysisSteps({
-                        ...analysisSteps,
-                        step1: { ...analysisSteps.step1, model: e.target.value }
-                      })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                    >
-                      <option value="openai/gpt-4o-mini">GPT-4o-mini (rápido, económico)</option>
-                      <option value="openai/gpt-4o">GPT-4o (más preciso)</option>
-                      <option value="google/gemini-2.5-pro-preview">Gemini 2.5 Pro (Deep Research)</option>
-                      <option value="anthropic/claude-sonnet-4">Claude Sonnet 4</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Prompt</label>
-                    <textarea
-                      value={analysisSteps.step1.prompt}
-                      onChange={(e) => setAnalysisSteps({
-                        ...analysisSteps,
-                        step1: { ...analysisSteps.step1, prompt: e.target.value }
-                      })}
-                      rows={12}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Step 2: Scoring */}
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <button
-                onClick={() => setExpandedAnalysisStep(expandedAnalysisStep === 2 ? null : 2)}
-                className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-medium">
-                    2
-                  </span>
-                  <div className="text-left">
-                    <p className="font-medium text-gray-900">Scoring (Deep Research)</p>
-                    <p className="text-xs text-gray-500">Analiza Pain, Reachability y Market Size</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs px-2 py-1 bg-amber-50 text-amber-700 rounded">
-                    {analysisSteps.step2.model.split('/')[1]}
-                  </span>
-                  {expandedAnalysisStep === 2 ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </div>
-              </button>
-              {expandedAnalysisStep === 2 && (
-                <div className="p-4 space-y-3 bg-white">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Modelo</label>
-                    <select
-                      value={analysisSteps.step2.model}
-                      onChange={(e) => setAnalysisSteps({
-                        ...analysisSteps,
-                        step2: { ...analysisSteps.step2, model: e.target.value }
-                      })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                    >
-                      <option value="google/gemini-2.5-pro-preview">Gemini 2.5 Pro (Deep Research)</option>
-                      <option value="openai/gpt-4o">GPT-4o (más preciso)</option>
-                      <option value="anthropic/claude-sonnet-4">Claude Sonnet 4</option>
-                      <option value="openai/gpt-4o-mini">GPT-4o-mini (rápido, económico)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Prompt</label>
-                    <textarea
-                      value={analysisSteps.step2.prompt}
-                      onChange={(e) => setAnalysisSteps({
-                        ...analysisSteps,
-                        step2: { ...analysisSteps.step2, prompt: e.target.value }
-                      })}
-                      rows={12}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Step 3: Consolidate */}
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <button
-                onClick={() => setExpandedAnalysisStep(expandedAnalysisStep === 3 ? null : 3)}
-                className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-sm font-medium">
-                    3
-                  </span>
-                  <div className="text-left">
-                    <p className="font-medium text-gray-900">Tabla Final Consolidada</p>
-                    <p className="text-xs text-gray-500">Combina Steps 1 y 2 en tabla final</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded">
-                    {analysisSteps.step3.model.split('/')[1]}
-                  </span>
-                  {expandedAnalysisStep === 3 ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </div>
-              </button>
-              {expandedAnalysisStep === 3 && (
-                <div className="p-4 space-y-3 bg-white">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Modelo</label>
-                    <select
-                      value={analysisSteps.step3.model}
-                      onChange={(e) => setAnalysisSteps({
-                        ...analysisSteps,
-                        step3: { ...analysisSteps.step3, model: e.target.value }
-                      })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                    >
-                      <option value="openai/gpt-4o-mini">GPT-4o-mini (rápido, económico)</option>
-                      <option value="openai/gpt-4o">GPT-4o (más preciso)</option>
-                      <option value="google/gemini-2.5-pro-preview">Gemini 2.5 Pro</option>
-                      <option value="anthropic/claude-sonnet-4">Claude Sonnet 4</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Prompt</label>
-                    <textarea
-                      value={analysisSteps.step3.prompt}
-                      onChange={(e) => setAnalysisSteps({
-                        ...analysisSteps,
-                        step3: { ...analysisSteps.step3, prompt: e.target.value }
-                      })}
-                      rows={12}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono"
-                    />
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
