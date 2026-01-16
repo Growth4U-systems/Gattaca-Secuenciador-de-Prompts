@@ -11,6 +11,9 @@
 
 export type OutputFormat = 'text' | 'markdown' | 'json' | 'csv' | 'html' | 'xml'
 
+// Tipo de step: 'llm' para prompts con LLM, 'scraper' para el Step 0 de Niche Finder
+export type FlowStepType = 'llm' | 'scraper'
+
 // Proveedores LLM soportados
 export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'groq' | 'deep-research'
 
@@ -74,6 +77,13 @@ export interface FlowStep {
   description?: string
   order: number
 
+  // 🆕 Tipo de step: 'llm' (default) o 'scraper' (para Niche Finder Step 0)
+  type?: FlowStepType  // Default: 'llm'
+
+  // ============================================
+  // CONFIGURACIÓN PARA type: 'llm' (existente)
+  // ============================================
+
   // Prompt con variables: {{ecp_name}}, {{country}}, etc.
   prompt: string
 
@@ -101,6 +111,39 @@ export interface FlowStep {
   // Modo de recuperación de documentos
   retrieval_mode?: RetrievalMode  // Default: 'full'
   rag_config?: RAGConfig
+
+  // ============================================
+  // CONFIGURACIÓN PARA type: 'scraper' (nuevo)
+  // Sistema de combinaciones A × B para Niche Finder
+  // ============================================
+
+  // Configuración del scraper (solo si type === 'scraper')
+  // Ver ScraperStepConfig en scraper.types.ts
+  scraper_config?: {
+    // Columna A: Contextos de vida
+    life_contexts: string[]       // familia, hijos, universidad, casamiento...
+
+    // Columna B: Palabras del producto
+    product_words: string[]       // pagos, ahorro, gastos, cuenta...
+
+    // Indicadores de problema (opcional)
+    indicators: string[]          // me frustra, necesito ayuda...
+
+    // Fuentes donde buscar
+    sources: {
+      reddit: boolean             // Búsqueda general en Reddit
+      thematic_forums: boolean    // Foros temáticos según contexto
+      general_forums: string[]    // Dominios de foros generales
+    }
+
+    // Configuración de SERP y scraping
+    serp_pages: number            // Páginas de resultados (default: 5)
+    batch_size: number            // URLs en paralelo (default: 10)
+
+    // Configuración de extracción LLM
+    extraction_prompt: string     // Prompt para extraer nichos
+    extraction_model: string      // Modelo LLM (default: gpt-4o-mini)
+  }
 }
 
 export interface FlowConfig {
