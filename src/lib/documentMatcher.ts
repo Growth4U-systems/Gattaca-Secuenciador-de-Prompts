@@ -82,8 +82,9 @@ function levenshteinDistance(a: string, b: string): number {
 /**
  * Calculate similarity score between two strings (0-1)
  * Uses combination of:
+ * - Substring matching (high priority for partial matches)
+ * - Word overlap (Jaccard similarity)
  * - Levenshtein distance
- * - Word overlap
  */
 function calculateSimilarity(a: string, b: string): number {
   if (!a || !b) return 0
@@ -96,14 +97,41 @@ function calculateSimilarity(a: string, b: string): number {
   if (!normA || !normB) return 0
   if (normA === normB) return 1
 
+  // IMPORTANT: Check for substring matches first
+  // This handles cases like "Trustpilot" matching "Trustpilot Reviews - Revolut"
+  const shorter = normA.length <= normB.length ? normA : normB
+  const longer = normA.length > normB.length ? normA : normB
+
+  // If shorter string is contained in longer, give high score
+  if (longer.includes(shorter)) {
+    // Score based on how much of the longer string is covered
+    const coverageRatio = shorter.length / longer.length
+    // Minimum 0.7 for substring match, up to 1.0 for exact match
+    return Math.max(0.7, coverageRatio)
+  }
+
+  // Check if all words from shorter are in longer
+  const wordsA = new Set(normA.split(' '))
+  const wordsB = new Set(normB.split(' '))
+  const shorterWords = normA.length <= normB.length ? wordsA : wordsB
+  const longerWords = normA.length > normB.length ? wordsA : wordsB
+
+  const allWordsMatch = [...shorterWords].every(word =>
+    [...longerWords].some(lw => lw.includes(word) || word.includes(lw))
+  )
+
+  if (allWordsMatch && shorterWords.size > 0) {
+    // All words from search term are present in document name
+    const wordCoverageRatio = shorterWords.size / longerWords.size
+    return Math.max(0.65, wordCoverageRatio)
+  }
+
   // Calculate Levenshtein similarity
   const maxLen = Math.max(normA.length, normB.length)
   const levDist = levenshteinDistance(normA, normB)
   const levSimilarity = 1 - (levDist / maxLen)
 
   // Calculate word overlap (Jaccard similarity)
-  const wordsA = new Set(normA.split(' '))
-  const wordsB = new Set(normB.split(' '))
   const intersection = new Set([...wordsA].filter(x => wordsB.has(x)))
   const union = new Set([...wordsA, ...wordsB])
   const jaccardSimilarity = intersection.size / union.size

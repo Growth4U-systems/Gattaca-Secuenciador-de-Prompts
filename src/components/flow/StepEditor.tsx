@@ -278,15 +278,22 @@ export default function StepEditor({
     }))
   }
 
+  // State for match feedback
+  const [matchFeedback, setMatchFeedback] = useState<{ id: string; message: string; type: 'success' | 'error' } | null>(null)
+
   // Re-run matching for a required document
   const handleRetryMatch = (reqDocId: string) => {
     const reqDoc = editedStep.required_documents?.find(d => d.id === reqDocId)
     if (!reqDoc) return
 
+    // Clear previous feedback
+    setMatchFeedback(null)
+
     const match = findMatchingDocument(reqDoc.name, documents.map(d => ({
       id: d.id,
       filename: d.filename,
       description: d.description || '',
+      tags: d.tags || [],
     })))
 
     if (match) {
@@ -300,7 +307,21 @@ export default function StepEditor({
           } : d
         ),
       }))
+      setMatchFeedback({
+        id: reqDocId,
+        message: `Encontrado: "${match.doc.filename}" (${Math.round(match.confidence * 100)}% coincidencia)`,
+        type: 'success'
+      })
+    } else {
+      setMatchFeedback({
+        id: reqDocId,
+        message: `No se encontró coincidencia para "${reqDoc.name}". Asigna manualmente desde "Documentos Base".`,
+        type: 'error'
+      })
     }
+
+    // Clear feedback after 5 seconds
+    setTimeout(() => setMatchFeedback(null), 5000)
   }
 
   // Filter variables for autocomplete
@@ -672,16 +693,27 @@ export default function StepEditor({
                               )}
                             </div>
                           ) : (
-                            <div className="flex items-center gap-2 text-sm text-gray-500">
-                              <AlertTriangle size={14} className="text-amber-500" />
-                              <span>Sin asignar</span>
-                              <button
-                                type="button"
-                                onClick={() => handleRetryMatch(reqDoc.id)}
-                                className="text-xs text-amber-600 hover:text-amber-700 hover:underline"
-                              >
-                                Buscar coincidencias
-                              </button>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <AlertTriangle size={14} className="text-amber-500" />
+                                <span>Sin asignar</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRetryMatch(reqDoc.id)}
+                                  className="text-xs text-amber-600 hover:text-amber-700 hover:underline"
+                                >
+                                  Buscar coincidencias
+                                </button>
+                              </div>
+                              {matchFeedback?.id === reqDoc.id && (
+                                <div className={`text-xs px-2 py-1 rounded ${
+                                  matchFeedback.type === 'success'
+                                    ? 'bg-green-50 text-green-700 border border-green-200'
+                                    : 'bg-red-50 text-red-700 border border-red-200'
+                                }`}>
+                                  {matchFeedback.message}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
