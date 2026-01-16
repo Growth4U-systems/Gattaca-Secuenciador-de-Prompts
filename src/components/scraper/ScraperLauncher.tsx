@@ -1,20 +1,57 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Search, Loader2, Check, AlertCircle, Globe, MessageSquare, Star, Briefcase, Play, Tag, ArrowLeft, HelpCircle, Info } from 'lucide-react'
+import { X, Search, Loader2, Check, AlertCircle, Globe, MessageSquare, Star, Briefcase, Play, Tag, ArrowLeft, HelpCircle, Info, Youtube, Facebook, MapPin, Smartphone, Clock, Lock } from 'lucide-react'
 import { ScraperType, ScraperTemplate, ScraperOutputFormat, ScraperOutputConfig } from '@/types/scraper.types'
 import { SCRAPER_TEMPLATES } from '@/lib/scraperTemplates'
 import { DocCategory } from '@/types/database.types'
 import { SCRAPER_FIELD_SCHEMAS, FieldSchema, validateField, validateAllFields } from '@/lib/scraperFieldSchemas'
 
-// Top 5 scrapers for Phase 1
-const ENABLED_SCRAPERS: ScraperType[] = [
-  'website',
-  'trustpilot_reviews',
-  'instagram_posts_comments',
-  'tiktok_posts',
-  'linkedin_company_posts',
+// Scraper status: 'enabled' = working, 'pending' = not tested yet
+type ScraperStatus = 'enabled' | 'pending'
+
+interface ScraperConfig {
+  type: ScraperType
+  status: ScraperStatus
+  category: 'social' | 'reviews' | 'web' | 'other'
+}
+
+// All scrapers with their status
+const ALL_SCRAPERS: ScraperConfig[] = [
+  // Social Media
+  { type: 'instagram_posts_comments', status: 'enabled', category: 'social' },
+  { type: 'tiktok_posts', status: 'pending', category: 'social' },
+  { type: 'tiktok_comments', status: 'pending', category: 'social' },
+  { type: 'linkedin_company_posts', status: 'pending', category: 'social' },
+  { type: 'linkedin_comments', status: 'pending', category: 'social' },
+  { type: 'linkedin_company_insights', status: 'pending', category: 'social' },
+  { type: 'facebook_posts', status: 'pending', category: 'social' },
+  { type: 'facebook_comments', status: 'pending', category: 'social' },
+  { type: 'youtube_channel_videos', status: 'pending', category: 'social' },
+  { type: 'youtube_comments', status: 'pending', category: 'social' },
+  { type: 'youtube_transcripts', status: 'pending', category: 'social' },
+
+  // Reviews
+  { type: 'trustpilot_reviews', status: 'enabled', category: 'reviews' },
+  { type: 'g2_reviews', status: 'pending', category: 'reviews' },
+  { type: 'capterra_reviews', status: 'pending', category: 'reviews' },
+  { type: 'appstore_reviews', status: 'pending', category: 'reviews' },
+  { type: 'playstore_reviews', status: 'pending', category: 'reviews' },
+  { type: 'google_maps_reviews', status: 'pending', category: 'reviews' },
+
+  // Web
+  { type: 'website', status: 'enabled', category: 'web' },
+  { type: 'news_bing', status: 'pending', category: 'web' },
+  { type: 'seo_keywords', status: 'pending', category: 'other' },
 ]
+
+// Category labels
+const CATEGORY_LABELS: Record<string, string> = {
+  social: 'Redes Sociales',
+  reviews: 'Reviews',
+  web: 'Web & Noticias',
+  other: 'Otros',
+}
 
 interface ScraperLauncherProps {
   projectId: string
@@ -25,19 +62,52 @@ interface ScraperLauncherProps {
 type StepType = 'select' | 'configure' | 'running' | 'completed' | 'error'
 
 const SCRAPER_ICONS: Record<string, React.ReactNode> = {
-  website: <Globe size={24} />,
-  trustpilot_reviews: <Star size={24} />,
-  instagram_posts_comments: <MessageSquare size={24} />,
-  tiktok_posts: <Play size={24} />,
-  linkedin_company_posts: <Briefcase size={24} />,
+  website: <Globe size={20} />,
+  trustpilot_reviews: <Star size={20} />,
+  instagram_posts_comments: <MessageSquare size={20} />,
+  tiktok_posts: <Play size={20} />,
+  tiktok_comments: <MessageSquare size={20} />,
+  linkedin_company_posts: <Briefcase size={20} />,
+  linkedin_comments: <MessageSquare size={20} />,
+  linkedin_company_insights: <Briefcase size={20} />,
+  facebook_posts: <Facebook size={20} />,
+  facebook_comments: <MessageSquare size={20} />,
+  youtube_channel_videos: <Youtube size={20} />,
+  youtube_comments: <MessageSquare size={20} />,
+  youtube_transcripts: <Youtube size={20} />,
+  g2_reviews: <Star size={20} />,
+  capterra_reviews: <Star size={20} />,
+  appstore_reviews: <Smartphone size={20} />,
+  playstore_reviews: <Smartphone size={20} />,
+  google_maps_reviews: <MapPin size={20} />,
+  news_bing: <Globe size={20} />,
+  seo_keywords: <Search size={20} />,
 }
 
 const SCRAPER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  website: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
-  trustpilot_reviews: { bg: 'bg-green-50', text: 'text-green-600', border: 'border-green-200' },
+  // Social
   instagram_posts_comments: { bg: 'bg-pink-50', text: 'text-pink-600', border: 'border-pink-200' },
   tiktok_posts: { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' },
+  tiktok_comments: { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' },
   linkedin_company_posts: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
+  linkedin_comments: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
+  linkedin_company_insights: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
+  facebook_posts: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
+  facebook_comments: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
+  youtube_channel_videos: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },
+  youtube_comments: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },
+  youtube_transcripts: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },
+  // Reviews
+  trustpilot_reviews: { bg: 'bg-green-50', text: 'text-green-600', border: 'border-green-200' },
+  g2_reviews: { bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200' },
+  capterra_reviews: { bg: 'bg-teal-50', text: 'text-teal-600', border: 'border-teal-200' },
+  appstore_reviews: { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' },
+  playstore_reviews: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' },
+  google_maps_reviews: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
+  // Web
+  website: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200' },
+  news_bing: { bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-200' },
+  seo_keywords: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
 }
 
 export default function ScraperLauncher({ projectId, onComplete, onClose }: ScraperLauncherProps) {
@@ -77,7 +147,22 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
         trustpilot_reviews: 'Trustpilot',
         instagram_posts_comments: 'Instagram',
         tiktok_posts: 'TikTok',
+        tiktok_comments: 'TikTok',
         linkedin_company_posts: 'LinkedIn',
+        linkedin_comments: 'LinkedIn',
+        linkedin_company_insights: 'LinkedIn',
+        facebook_posts: 'Facebook',
+        facebook_comments: 'Facebook',
+        youtube_channel_videos: 'YouTube',
+        youtube_comments: 'YouTube',
+        youtube_transcripts: 'YouTube',
+        g2_reviews: 'G2',
+        capterra_reviews: 'Capterra',
+        appstore_reviews: 'AppStore',
+        playstore_reviews: 'PlayStore',
+        google_maps_reviews: 'GoogleMaps',
+        news_bing: 'News',
+        seo_keywords: 'SEO',
       }
 
       const sourceName = sourceNames[selectedScraper] || selectedScraper
@@ -646,31 +731,71 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
         <div className="flex-1 overflow-y-auto p-6">
           {/* Step 1: Select Scraper */}
           {currentStep === 'select' && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600 mb-4">
+            <div className="space-y-6">
+              <p className="text-sm text-gray-600">
                 Extrae información de redes sociales, reviews y páginas web para usarla en tus análisis.
               </p>
-              <div className="grid grid-cols-1 gap-3">
-                {ENABLED_SCRAPERS.map((type) => {
-                  const scraper = SCRAPER_TEMPLATES[type]
-                  const colors = SCRAPER_COLORS[type]
-                  return (
-                    <button
-                      key={type}
-                      onClick={() => handleSelectScraper(type)}
-                      className={`flex items-center gap-4 p-4 rounded-xl border-2 ${colors.border} ${colors.bg} hover:shadow-md transition-all text-left group`}
-                    >
-                      <div className={`p-3 rounded-lg ${colors.bg} ${colors.text} group-hover:scale-110 transition-transform`}>
-                        {SCRAPER_ICONS[type]}
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-medium text-gray-900">{scraper.name}</h3>
-                        <p className="text-sm text-gray-500">{scraper.description}</p>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
+
+              {/* Group scrapers by category */}
+              {(['social', 'reviews', 'web', 'other'] as const).map(category => {
+                const categoryScrapers = ALL_SCRAPERS.filter(s => s.category === category)
+                if (categoryScrapers.length === 0) return null
+
+                return (
+                  <div key={category}>
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                      {CATEGORY_LABELS[category]}
+                    </h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {categoryScrapers.map(({ type, status }) => {
+                        const scraper = SCRAPER_TEMPLATES[type]
+                        const colors = SCRAPER_COLORS[type] || { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' }
+                        const isEnabled = status === 'enabled'
+
+                        return (
+                          <button
+                            key={type}
+                            onClick={() => isEnabled && handleSelectScraper(type)}
+                            disabled={!isEnabled}
+                            className={`relative flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
+                              isEnabled
+                                ? `${colors.border} ${colors.bg} hover:shadow-md cursor-pointer group`
+                                : 'border-gray-200 bg-gray-50 cursor-not-allowed'
+                            }`}
+                          >
+                            {/* Pending overlay */}
+                            {!isEnabled && (
+                              <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] rounded-xl flex items-center justify-center z-10">
+                                <span className="flex items-center gap-1 text-xs text-gray-500 bg-white/80 px-2 py-1 rounded-full border border-gray-200">
+                                  <Clock size={12} />
+                                  Pendiente
+                                </span>
+                              </div>
+                            )}
+
+                            <div className={`p-2 rounded-lg ${isEnabled ? colors.bg : 'bg-gray-100'} ${isEnabled ? colors.text : 'text-gray-400'} ${isEnabled ? 'group-hover:scale-110' : ''} transition-transform`}>
+                              {SCRAPER_ICONS[type] || <Globe size={20} />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h4 className={`font-medium text-sm truncate ${isEnabled ? 'text-gray-900' : 'text-gray-500'}`}>
+                                  {scraper?.name || type}
+                                </h4>
+                                {isEnabled && (
+                                  <span className="flex-shrink-0 w-2 h-2 bg-green-500 rounded-full" title="Activo" />
+                                )}
+                              </div>
+                              <p className={`text-xs truncate ${isEnabled ? 'text-gray-500' : 'text-gray-400'}`}>
+                                {scraper?.description?.slice(0, 40) || ''}...
+                              </p>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
 
