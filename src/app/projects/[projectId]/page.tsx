@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2, Building2, Table2, Globe } from 'lucide-react'
+import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2, Building2, Table2, Globe, Search } from 'lucide-react'
 import { useToast, useModal } from '@/components/ui'
 import { useProject } from '@/hooks/useProjects'
 import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
@@ -19,8 +19,9 @@ import ResearchPromptsEditor from '@/components/project/ResearchPromptsEditor'
 import ShareProjectModal from '@/components/project/ShareProjectModal'
 import ExportDataTab from '@/components/project/ExportDataTab'
 import ApiKeysConfig from '@/components/settings/ApiKeysConfig'
+import NicheFinderPlaybook from '@/components/niche-finder/NicheFinderPlaybook'
 
-type TabType = 'documents' | 'flow' | 'config' | 'campaigns' | 'context' | 'variables' | 'export'
+type TabType = 'documents' | 'flow' | 'config' | 'campaigns' | 'context' | 'variables' | 'export' | 'niche-finder'
 
 // Loading Skeleton
 function LoadingSkeleton() {
@@ -66,7 +67,7 @@ export default function ProjectPage({
   const toast = useToast()
   const modal = useModal()
 
-  const [activeTab, setActiveTab] = useState<TabType>('documents')
+  const [activeTab, setActiveTab] = useState<TabType | null>(null)
   const { project, userRole, loading: projectLoading, error: projectError } = useProject(params.projectId)
   const { documents, loading: docsLoading, reload: reloadDocs } = useDocuments(params.projectId)
   const [editingProject, setEditingProject] = useState(false)
@@ -76,6 +77,13 @@ export default function ProjectPage({
   const [showMenu, setShowMenu] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
 
+  // Set initial tab based on project type
+  useEffect(() => {
+    if (project && activeTab === null) {
+      setActiveTab(project.playbook_type === 'niche_finder' ? 'niche-finder' : 'documents')
+    }
+  }, [project, activeTab])
+
   // Base tabs available for all projects
   const baseTabs = [
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
@@ -84,12 +92,21 @@ export default function ProjectPage({
     { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
   ]
 
-  // Add Export tab only for ECP projects
-  const tabs = project?.playbook_type === 'ecp'
-    ? [...baseTabs, { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' }]
-    : baseTabs
+  // Niche Finder has a different tab structure
+  const nicheFinderTabs = [
+    { id: 'niche-finder' as TabType, label: 'Buscador de Nichos', icon: Search, description: 'Configurar y ejecutar' },
+    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
+    { id: 'variables' as TabType, label: 'Variables', icon: Sliders, description: 'Configuración' },
+  ]
 
-  if (projectLoading) {
+  // Add Export tab only for ECP projects
+  const tabs = project?.playbook_type === 'niche_finder'
+    ? nicheFinderTabs
+    : project?.playbook_type === 'ecp'
+      ? [...baseTabs, { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' }]
+      : baseTabs
+
+  if (projectLoading || activeTab === null) {
     return <LoadingSkeleton />
   }
 
@@ -435,6 +452,9 @@ export default function ProjectPage({
             )}
             {activeTab === 'export' && (
               <ExportDataTab projectId={params.projectId} />
+            )}
+            {activeTab === 'niche-finder' && (
+              <NicheFinderPlaybook projectId={params.projectId} />
             )}
           </div>
         </div>

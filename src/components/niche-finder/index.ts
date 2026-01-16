@@ -1,3 +1,4 @@
+export { default as NicheFinderPlaybook } from './NicheFinderPlaybook'
 export { default as NicheResultsDashboard } from './NicheResultsDashboard'
 export { default as NicheTable } from './NicheTable'
 export { default as NicheDetail } from './NicheDetail'
