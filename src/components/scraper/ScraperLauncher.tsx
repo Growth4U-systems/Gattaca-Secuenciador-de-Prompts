@@ -23,8 +23,8 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   { type: 'tiktok_posts', status: 'enabled', category: 'social' },
   { type: 'tiktok_comments', status: 'enabled', category: 'social' },
   { type: 'linkedin_company_posts', status: 'enabled', category: 'social' },
-  { type: 'linkedin_comments', status: 'pending', category: 'social' },
-  { type: 'linkedin_company_insights', status: 'pending', category: 'social' },
+  { type: 'linkedin_comments', status: 'enabled', category: 'social' },
+  // linkedin_company_insights: disabled - requires paid Apify subscription
   { type: 'facebook_posts', status: 'pending', category: 'social' },
   { type: 'facebook_comments', status: 'pending', category: 'social' },
   { type: 'youtube_channel_videos', status: 'enabled', category: 'social' },
@@ -42,7 +42,7 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   // Web & News
   { type: 'website', status: 'enabled', category: 'web' },
   { type: 'google_news', status: 'enabled', category: 'web' },
-  { type: 'news_bing', status: 'pending', category: 'web' },
+  { type: 'news_bing', status: 'enabled', category: 'web' },
   { type: 'seo_keywords', status: 'pending', category: 'other' },
 ]
 
@@ -82,7 +82,7 @@ const SCRAPER_ICONS: Record<string, React.ReactNode> = {
   playstore_reviews: <Smartphone size={20} />,
   google_maps_reviews: <MapPin size={20} />,
   google_news: <Newspaper size={20} />,
-  news_bing: <Globe size={20} />,
+  news_bing: <Newspaper size={20} />,
   seo_keywords: <Search size={20} />,
 }
 

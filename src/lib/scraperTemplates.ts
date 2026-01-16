@@ -432,21 +432,23 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
 
   news_bing: {
     type: 'news_bing',
-    name: 'News (Bing)',
-    description: 'Search and scrape news articles from Bing News',
+    name: 'Bing News (con contenido)',
+    description: 'Busca noticias en Bing News con extracción completa del contenido de cada artículo',
     provider: 'custom',
-    actorId: 'news-bing',
-    category: 'custom',
+    actorId: 'scrape-bing-news',
+    category: 'web',
     inputSchema: {
       required: ['queries'],
-      optional: ['country', 'maxPages', 'maxArticles'],
+      optional: ['country', 'dateRange', 'maxPages', 'maxArticles', 'extractContent'],
       defaults: {
         country: 'es-ES',
+        dateRange: 'anytime',
         maxPages: 10,
         maxArticles: 50,
+        extractContent: true,
       },
     },
-    outputFields: ['title', 'url', 'content', 'date', 'source'],
+    outputFields: ['title', 'url', 'source', 'snippet', 'publishedAt', 'content', 'imageUrl', 'query', 'country'],
   },
 };
 

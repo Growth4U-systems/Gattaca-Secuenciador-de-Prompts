@@ -820,6 +820,7 @@ El actor requiere que el idioma (`hl`) y país (`gl`) estén **DENTRO de la URL*
 
 ## Changelog
 
+- **2026-01-16:** Testeados LinkedIn Comments (éxito) y LinkedIn Company Insights (requiere pago). Habilitado LinkedIn Comments.
 - **2025-01-16:** Agregada guía de desarrollo con regla obligatoria de testing antes de habilitar scrapers.
 - **2025-01-16:** Documentación inicial creada con schemas verificados de todos los actores.
 
@@ -834,3 +835,5 @@ El actor requiere que el idioma (`hl`) y país (`gl`) estén **DENTRO de la URL*
 | 2025-01-16 | App Store Reviews | `id932493382` | ✅ Éxito | 5 reviews, incluye título, texto, score, fecha, versión |
 | 2025-01-16 | Play Store Reviews | `com.revolut.revolut&hl=es&gl=ES` | ✅ Éxito | 5 reviews, incluye texto, score, respuesta de empresa |
 | 2026-01-16 | LinkedIn Company Posts | `company_name: revolut` | ✅ Éxito | 5 posts, incluye texto, stats (reactions, comments), media, autor |
+| 2026-01-16 | LinkedIn Comments | `postIds: ['7417222982525374464']` | ✅ Éxito | 5 comments con texto, autor (nombre, headline, foto), stats (reactions), replies anidados |
+| 2026-01-16 | LinkedIn Company Insights | `companyUrls: [revolut]` | ❌ Error 403 | Actor requiere suscripción paga de Apify - deshabilitado |
