@@ -22,7 +22,7 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   { type: 'instagram_posts_comments', status: 'enabled', category: 'social' },
   { type: 'tiktok_posts', status: 'enabled', category: 'social' },
   { type: 'tiktok_comments', status: 'enabled', category: 'social' },
-  { type: 'linkedin_company_posts', status: 'pending', category: 'social' },
+  { type: 'linkedin_company_posts', status: 'enabled', category: 'social' },
   { type: 'linkedin_comments', status: 'pending', category: 'social' },
   { type: 'linkedin_company_insights', status: 'pending', category: 'social' },
   { type: 'facebook_posts', status: 'pending', category: 'social' },
