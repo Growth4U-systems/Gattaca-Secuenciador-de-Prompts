@@ -83,16 +83,112 @@ const STAR_RATING_OPTIONS: SelectOption[] = [
   { value: '5', label: '5 estrellas', description: 'Reviews muy positivas' },
 ];
 
-const DATE_FILTER_OPTIONS: SelectOption[] = [
-  { value: 'today', label: 'Hoy', description: '\u00daltimas 24 horas' },
-  { value: 'week', label: 'Esta semana', description: '\u00daltimos 7 d\u00edas' },
-  { value: 'month', label: 'Este mes', description: '\u00daltimos 30 d\u00edas' },
-  { value: 'year', label: 'Este a\u00f1o', description: '\u00daltimos 12 meses' },
+// ============================================
+// TRUSTPILOT-SPECIFIC OPTIONS
+// ============================================
+const TRUSTPILOT_DATE_OPTIONS: SelectOption[] = [
+  { value: 'last30days', label: 'Últimos 30 días', description: 'Reviews del último mes' },
+  { value: 'last3months', label: 'Últimos 3 meses', description: 'Reviews del último trimestre' },
+  { value: 'last6months', label: 'Últimos 6 meses', description: 'Reviews del último semestre' },
+  { value: 'last12months', label: 'Último año', description: 'Reviews del último año' },
 ];
 
-const SORT_ORDER_OPTIONS: SelectOption[] = [
-  { value: 'most recent', label: 'M\u00e1s recientes', description: 'Ordenar por fecha descendente' },
-  { value: 'RELEVANCE', label: 'Relevancia', description: 'Ordenar por relevancia' },
+// ============================================
+// LINKEDIN-SPECIFIC OPTIONS
+// ============================================
+const LINKEDIN_SORT_OPTIONS: SelectOption[] = [
+  { value: 'recent', label: 'Más recientes', description: 'Posts más nuevos primero' },
+  { value: 'top', label: 'Más populares', description: 'Posts con más interacción' },
+];
+
+const LINKEDIN_COMMENTS_SORT_OPTIONS: SelectOption[] = [
+  { value: 'most recent', label: 'Más recientes', description: 'Comentarios más nuevos primero' },
+  { value: 'most relevant', label: 'Más relevantes', description: 'Comentarios con más interacción' },
+];
+
+// ============================================
+// YOUTUBE-SPECIFIC OPTIONS
+// ============================================
+const YOUTUBE_COMMENTS_SORT_OPTIONS: SelectOption[] = [
+  { value: 'top', label: 'Más populares', description: 'Comentarios con más likes' },
+  { value: 'latest', label: 'Más recientes', description: 'Comentarios más nuevos primero' },
+];
+
+// ============================================
+// GOOGLE MAPS-SPECIFIC OPTIONS
+// ============================================
+const GOOGLE_MAPS_SORT_OPTIONS: SelectOption[] = [
+  { value: 'newest', label: 'Más recientes', description: 'Reviews más nuevas primero' },
+  { value: 'mostRelevant', label: 'Más relevantes', description: 'Reviews más útiles' },
+  { value: 'highestRanking', label: 'Mejor puntuación', description: 'Reviews de 5 estrellas primero' },
+  { value: 'lowestRanking', label: 'Peor puntuación', description: 'Reviews de 1 estrella primero' },
+];
+
+// ============================================
+// PLAYSTORE-SPECIFIC OPTIONS
+// ============================================
+const PLAYSTORE_SORT_OPTIONS: SelectOption[] = [
+  { value: 'NEWEST', label: 'Más recientes', description: 'Reviews más nuevas primero' },
+  { value: 'RATING', label: 'Por puntuación', description: 'Ordenar por rating' },
+  { value: 'HELPFULNESS', label: 'Más útiles', description: 'Reviews marcadas como útiles' },
+];
+
+// País en MAYÚSCULAS para Play Store
+const PLAYSTORE_COUNTRY_OPTIONS: SelectOption[] = [
+  { value: 'ES', label: 'España' },
+  { value: 'US', label: 'Estados Unidos' },
+  { value: 'GB', label: 'Reino Unido' },
+  { value: 'MX', label: 'México' },
+  { value: 'AR', label: 'Argentina' },
+  { value: 'BR', label: 'Brasil' },
+  { value: 'DE', label: 'Alemania' },
+  { value: 'FR', label: 'Francia' },
+];
+
+// País en minúsculas para App Store
+const APPSTORE_COUNTRY_OPTIONS: SelectOption[] = [
+  { value: 'es', label: 'España' },
+  { value: 'us', label: 'Estados Unidos' },
+  { value: 'gb', label: 'Reino Unido' },
+  { value: 'mx', label: 'México' },
+  { value: 'ar', label: 'Argentina' },
+  { value: 'br', label: 'Brasil' },
+  { value: 'de', label: 'Alemania' },
+  { value: 'fr', label: 'Francia' },
+];
+
+// ============================================
+// TIKTOK-SPECIFIC OPTIONS
+// ============================================
+const TIKTOK_PROXY_COUNTRY_OPTIONS: SelectOption[] = [
+  { value: 'None', label: 'Sin proxy', description: 'Usar IP directa' },
+  { value: 'ES', label: 'España' },
+  { value: 'US', label: 'Estados Unidos' },
+  { value: 'GB', label: 'Reino Unido' },
+  { value: 'MX', label: 'México' },
+  { value: 'AR', label: 'Argentina' },
+  { value: 'CO', label: 'Colombia' },
+  { value: 'BR', label: 'Brasil' },
+  { value: 'DE', label: 'Alemania' },
+  { value: 'FR', label: 'Francia' },
+];
+
+const TIKTOK_SORTING_OPTIONS: SelectOption[] = [
+  { value: 'latest', label: 'Más recientes', description: 'Videos más nuevos primero' },
+  { value: 'popular', label: 'Más populares', description: 'Videos con más vistas' },
+  { value: 'oldest', label: 'Más antiguos', description: 'Videos más viejos primero' },
+];
+
+// ============================================
+// INSTAGRAM-SPECIFIC OPTIONS
+// ============================================
+const INSTAGRAM_RESULTS_TYPE_OPTIONS: SelectOption[] = [
+  { value: 'posts', label: 'Posts', description: 'Imágenes y carruseles' },
+  { value: 'comments', label: 'Comentarios', description: 'Comentarios de posts' },
+  { value: 'details', label: 'Detalles del perfil', description: 'Información del perfil' },
+  { value: 'mentions', label: 'Menciones', description: 'Posts donde se menciona' },
+  { value: 'reels', label: 'Reels', description: 'Videos cortos' },
+  { value: 'stories', label: 'Stories', description: 'Historias activas' },
 ];
 
 // ============================================
@@ -218,7 +314,7 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         type: 'select',
         label: 'Filtrar por fecha',
         description: 'Periodo de tiempo de las reviews',
-        options: DATE_FILTER_OPTIONS,
+        options: TRUSTPILOT_DATE_OPTIONS,
       },
     },
   },
@@ -229,46 +325,42 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   instagram_posts_comments: {
     type: 'instagram_posts_comments',
     fields: {
-      directUrls: {
-        key: 'directUrls',
-        type: 'url-array',
-        label: 'URLs de perfiles de Instagram',
-        description: 'URLs de los perfiles de Instagram que quieres analizar',
-        placeholder: 'https://www.instagram.com/usuario/',
-        helpText: 'Una URL por l\u00ednea. Usa la URL completa del perfil.',
+      username: {
+        key: 'username',
+        type: 'text-array',
+        label: 'Usernames de Instagram',
+        description: 'Nombres de usuario de Instagram (sin @)',
+        placeholder: 'revolut\nn26\nwiseaccount',
+        helpText: 'Un username por línea, sin @ ni URL.',
         required: true,
         validation: {
-          pattern: /^https:\/\/(www\.)?instagram\.com\/[a-zA-Z0-9_.]+\/?$/,
-          patternMessage: 'Formato: https://www.instagram.com/usuario/',
+          pattern: /^[a-zA-Z0-9_.]+$/,
+          patternMessage: 'Solo letras, números, puntos y guiones bajos',
         },
         examples: [
-          'https://www.instagram.com/revolut/',
-          'https://www.instagram.com/n26/',
-          'https://www.instagram.com/wikiexpert/',
+          'revolut',
+          'n26',
+          'wiseaccount',
         ],
       },
       resultsLimit: {
         key: 'resultsLimit',
         type: 'number',
-        label: 'L\u00edmite de resultados',
-        description: 'N\u00famero m\u00e1ximo de posts a extraer por perfil',
+        label: 'Límite de resultados',
+        description: 'Número máximo de posts a extraer por perfil',
         helpText: 'Entre 10 y 200',
-        defaultValue: 50,
+        defaultValue: 200,
         validation: {
           min: 10,
-          max: 200,
+          max: 500,
         },
       },
       resultsType: {
         key: 'resultsType',
         type: 'select',
         label: 'Tipo de contenido',
-        description: 'Qu\u00e9 tipo de publicaciones extraer',
-        options: [
-          { value: 'posts', label: 'Posts', description: 'Im\u00e1genes y carruseles' },
-          { value: 'reels', label: 'Reels', description: 'Videos cortos' },
-          { value: 'stories', label: 'Stories', description: 'Historias activas' },
-        ],
+        description: 'Qué tipo de publicaciones extraer',
+        options: INSTAGRAM_RESULTS_TYPE_OPTIONS,
         defaultValue: 'posts',
       },
     },
@@ -286,7 +378,7 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         label: 'Perfiles de TikTok',
         description: 'Nombres de usuario de TikTok (con o sin @)',
         placeholder: '@usuario\nrevolutapp\nn26bank',
-        helpText: 'Un perfil por l\u00ednea. Puedes usar @usuario o solo el nombre.',
+        helpText: 'Un perfil por línea. Puedes usar @usuario o solo el nombre.',
         required: true,
         examples: [
           '@revolut',
@@ -298,28 +390,29 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         key: 'resultsPerPage',
         type: 'number',
         label: 'Videos por perfil',
-        description: 'N\u00famero de videos a extraer por cada perfil',
-        helpText: 'Entre 10 y 100',
+        description: 'Número de videos a extraer por cada perfil',
+        helpText: 'Entre 10 y 1000',
         defaultValue: 50,
         validation: {
-          min: 10,
-          max: 100,
+          min: 1,
+          max: 1000000,
         },
+      },
+      profileSorting: {
+        key: 'profileSorting',
+        type: 'select',
+        label: 'Ordenar videos',
+        description: 'Cómo ordenar los videos del perfil',
+        options: TIKTOK_SORTING_OPTIONS,
+        defaultValue: 'latest',
       },
       proxyCountryCode: {
         key: 'proxyCountryCode',
         type: 'select',
-        label: 'Pa\u00eds del proxy',
-        description: 'Desde qu\u00e9 pa\u00eds se har\u00e1 la consulta',
-        helpText: 'Afecta qu\u00e9 contenido se ve (algunos videos est\u00e1n geo-restringidos)',
-        options: [
-          { value: 'ES', label: 'Espa\u00f1a' },
-          { value: 'US', label: 'Estados Unidos' },
-          { value: 'GB', label: 'Reino Unido' },
-          { value: 'MX', label: 'M\u00e9xico' },
-          { value: 'AR', label: 'Argentina' },
-          { value: 'CO', label: 'Colombia' },
-        ],
+        label: 'País del proxy',
+        description: 'Desde qué país se hará la consulta',
+        helpText: 'Afecta qué contenido se ve (algunos videos están geo-restringidos)',
+        options: TIKTOK_PROXY_COUNTRY_OPTIONS,
         defaultValue: 'ES',
       },
     },
@@ -362,11 +455,8 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         key: 'sort',
         type: 'select',
         label: 'Ordenar por',
-        description: 'C\u00f3mo ordenar los resultados',
-        options: [
-          { value: 'recent', label: 'M\u00e1s recientes', description: 'Posts m\u00e1s nuevos primero' },
-          { value: 'top', label: 'M\u00e1s populares', description: 'Posts con m\u00e1s interacci\u00f3n' },
-        ],
+        description: 'Cómo ordenar los resultados',
+        options: LINKEDIN_SORT_OPTIONS,
         defaultValue: 'recent',
       },
     },
@@ -442,8 +532,8 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         key: 'sortOrder',
         type: 'select',
         label: 'Orden de comentarios',
-        description: 'C\u00f3mo ordenar los comentarios',
-        options: SORT_ORDER_OPTIONS,
+        description: 'Cómo ordenar los comentarios',
+        options: LINKEDIN_COMMENTS_SORT_OPTIONS,
         defaultValue: 'most recent',
       },
     },
@@ -593,13 +683,21 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
       maxComments: {
         key: 'maxComments',
         type: 'number',
-        label: 'M\u00e1ximo de comentarios',
-        description: 'N\u00famero m\u00e1ximo de comentarios por video',
+        label: 'Máximo de comentarios',
+        description: 'Número máximo de comentarios por video',
         defaultValue: 100,
         validation: {
           min: 10,
           max: 1000,
         },
+      },
+      sort: {
+        key: 'sort',
+        type: 'select',
+        label: 'Ordenar por',
+        description: 'Cómo ordenar los comentarios',
+        options: YOUTUBE_COMMENTS_SORT_OPTIONS,
+        defaultValue: 'top',
       },
     },
   },
@@ -655,11 +753,12 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
       max_reviews: {
         key: 'max_reviews',
         type: 'number',
-        label: 'M\u00e1ximo de reviews',
-        description: 'N\u00famero m\u00e1ximo de reviews a extraer',
+        label: 'Máximo de reviews',
+        description: 'Número máximo de reviews a extraer (mínimo 200)',
+        helpText: 'El actor de G2 requiere un mínimo de 200 reviews',
         defaultValue: 200,
         validation: {
-          min: 10,
+          min: 200,
           max: 1000,
         },
       },
@@ -672,23 +771,26 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   capterra_reviews: {
     type: 'capterra_reviews',
     fields: {
-      productUrls: {
-        key: 'productUrls',
-        type: 'url-array',
-        label: 'URLs de productos en Capterra',
-        description: 'URLs completas de las p\u00e1ginas de reviews en Capterra',
-        placeholder: 'https://www.capterra.com/p/123456/ProductName/reviews/',
-        helpText: 'Una URL por l\u00ednea',
+      company_name: {
+        key: 'company_name',
+        type: 'text',
+        label: 'Nombre del producto en Capterra',
+        description: 'El nombre del producto tal como aparece en Capterra',
+        placeholder: 'slack',
+        helpText: 'Es la parte de la URL: capterra.com/p/123456/NOMBRE/',
         required: true,
         examples: [
-          'https://www.capterra.com/p/143776/Slack/reviews/',
+          'slack',
+          'notion',
+          'asana',
+          'monday-com',
         ],
       },
       maxReviews: {
         key: 'maxReviews',
         type: 'number',
-        label: 'M\u00e1ximo de reviews',
-        description: 'N\u00famero m\u00e1ximo de reviews a extraer',
+        label: 'Máximo de reviews',
+        description: 'Número máximo de reviews a extraer',
         defaultValue: 100,
         validation: {
           min: 10,
@@ -735,15 +837,9 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
       country: {
         key: 'country',
         type: 'select',
-        label: 'Pa\u00eds de la tienda',
-        description: 'De qu\u00e9 tienda extraer las reviews',
-        options: [
-          { value: 'es', label: 'Espa\u00f1a' },
-          { value: 'us', label: 'Estados Unidos' },
-          { value: 'gb', label: 'Reino Unido' },
-          { value: 'mx', label: 'M\u00e9xico' },
-          { value: 'ar', label: 'Argentina' },
-        ],
+        label: 'País de la tienda',
+        description: 'De qué tienda extraer las reviews',
+        options: APPSTORE_COUNTRY_OPTIONS,
         defaultValue: 'us',
       },
     },
@@ -794,16 +890,18 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
       country: {
         key: 'country',
         type: 'select',
-        label: 'Pa\u00eds',
-        description: 'Pa\u00eds de origen de las reviews',
-        options: [
-          { value: 'es', label: 'Espa\u00f1a' },
-          { value: 'us', label: 'Estados Unidos' },
-          { value: 'gb', label: 'Reino Unido' },
-          { value: 'mx', label: 'M\u00e9xico' },
-          { value: 'ar', label: 'Argentina' },
-        ],
-        defaultValue: 'es',
+        label: 'País',
+        description: 'País de origen de las reviews',
+        options: PLAYSTORE_COUNTRY_OPTIONS,
+        defaultValue: 'ES',
+      },
+      sort: {
+        key: 'sort',
+        type: 'select',
+        label: 'Ordenar por',
+        description: 'Cómo ordenar las reviews',
+        options: PLAYSTORE_SORT_OPTIONS,
+        defaultValue: 'NEWEST',
       },
     },
   },
@@ -829,13 +927,21 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
       maxReviews: {
         key: 'maxReviews',
         type: 'number',
-        label: 'M\u00e1ximo de reviews',
-        description: 'N\u00famero m\u00e1ximo de reviews a extraer',
+        label: 'Máximo de reviews',
+        description: 'Número máximo de reviews a extraer',
         defaultValue: 100,
         validation: {
           min: 10,
           max: 500,
         },
+      },
+      reviewsSort: {
+        key: 'reviewsSort',
+        type: 'select',
+        label: 'Ordenar por',
+        description: 'Cómo ordenar las reviews',
+        options: GOOGLE_MAPS_SORT_OPTIONS,
+        defaultValue: 'newest',
       },
       language: {
         key: 'language',

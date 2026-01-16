@@ -51,10 +51,10 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.INSTAGRAM_POSTS_COMMENTS,
     category: 'social',
     inputSchema: {
-      required: ['directUrls'],
+      required: ['username'],
       optional: ['resultsLimit', 'resultsType'],
       defaults: {
-        resultsLimit: 50,
+        resultsLimit: 200,
         resultsType: 'posts',
       },
     },
@@ -70,10 +70,11 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     category: 'social',
     inputSchema: {
       required: ['profiles'],
-      optional: ['resultsPerPage', 'proxyCountryCode'],
+      optional: ['resultsPerPage', 'proxyCountryCode', 'profileSorting'],
       defaults: {
         resultsPerPage: 50,
         proxyCountryCode: 'ES',
+        profileSorting: 'latest',
       },
     },
     outputFields: ['id', 'text', 'createTime', 'stats', 'author'],
@@ -208,10 +209,11 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.YOUTUBE_COMMENTS,
     category: 'youtube',
     inputSchema: {
-      required: ['videoUrls'],
-      optional: ['maxComments'],
+      required: ['startUrls'],
+      optional: ['maxComments', 'sort'],
       defaults: {
         maxComments: 100,
+        sort: 'top',
       },
     },
     outputFields: ['text', 'author', 'likesCount', 'publishedAt'],
@@ -263,7 +265,7 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.CAPTERRA_REVIEWS,
     category: 'reviews',
     inputSchema: {
-      required: ['productUrls'],
+      required: ['company_name'],
       optional: ['maxReviews'],
       defaults: {
         maxReviews: 100,
@@ -317,11 +319,12 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     category: 'reviews',
     inputSchema: {
       required: ['startUrls'],
-      optional: ['maxItems', 'language', 'country'],
+      optional: ['maxItems', 'language', 'country', 'sort'],
       defaults: {
         maxItems: 100,
         language: 'es',
-        country: 'es',
+        country: 'ES',
+        sort: 'NEWEST',
       },
     },
     outputFields: ['text', 'rating', 'author', 'date', 'thumbsUp'],
@@ -336,10 +339,11 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     category: 'reviews',
     inputSchema: {
       required: ['placeUrls'],
-      optional: ['maxReviews', 'language'],
+      optional: ['maxReviews', 'language', 'reviewsSort'],
       defaults: {
         maxReviews: 100,
         language: 'es',
+        reviewsSort: 'newest',
       },
     },
     outputFields: ['text', 'rating', 'author', 'date', 'reviewerPhotoUrl'],
@@ -447,8 +451,8 @@ export function buildScraperInput(
 
   // Ensure array fields are properly typed
   // Some fields need to be arrays even if user passes a string
-  const arrayFields = ['directUrls', 'profiles', 'postURLs', 'postIds', 'startUrls',
-    'youtube_channels', 'languages', 'stars', 'videoUrls', 'channelUrls', 'companyUrls'];
+  const arrayFields = ['username', 'profiles', 'postURLs', 'postIds', 'startUrls',
+    'youtube_channels', 'languages', 'stars', 'videoUrls', 'channelUrls', 'companyUrls', 'queries'];
 
   for (const field of arrayFields) {
     if (merged[field] !== undefined) {
@@ -468,7 +472,7 @@ export function buildScraperInput(
 
   // Ensure number fields are numbers
   const numberFields = ['resultsLimit', 'limit', 'count', 'max_reviews', 'maxItems',
-    'resultsPerPage', 'commentsPerPost'];
+    'resultsPerPage', 'commentsPerPost', 'maxReviews', 'maxComments', 'maxPages', 'maxArticles'];
 
   for (const field of numberFields) {
     if (merged[field] !== undefined && typeof merged[field] === 'string') {
