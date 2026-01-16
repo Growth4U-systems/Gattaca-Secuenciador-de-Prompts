@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server-admin';
 import { ApifyWebhookPayload, ApifyDatasetItem, ScraperJob } from '@/types/scraper.types';
 import { getScraperTemplate } from '@/lib/scraperTemplates';
+import { getApiKeyForService } from '@/lib/getUserApiKey';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes to process large datasets
-
-const APIFY_TOKEN = process.env.APIFY_TOKEN;
 
 // ============================================
 // MAIN HANDLER - WEBHOOK RECEIVER
@@ -46,10 +45,24 @@ export async function POST(request: NextRequest) {
     const payload = (await request.json()) as ApifyWebhookPayload;
     console.log('[webhook] Received event:', payload.eventType, 'for job:', jobId);
 
+    // Get the user_id from the project to fetch their API keys
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .select('user_id')
+      .eq('id', job.project_id)
+      .single();
+
+    if (projectError || !project?.user_id) {
+      console.error('[webhook] Could not get project owner:', projectError);
+      return NextResponse.json({ error: 'Could not determine project owner' }, { status: 500 });
+    }
+
+    const userId = project.user_id;
+
     // Handle based on event type
     switch (payload.eventType) {
       case 'ACTOR.RUN.SUCCEEDED':
-        await handleRunSucceeded(supabase, job as ScraperJob, payload);
+        await handleRunSucceeded(supabase, job as ScraperJob, payload, userId);
         break;
 
       case 'ACTOR.RUN.FAILED':
@@ -78,7 +91,8 @@ export async function POST(request: NextRequest) {
 async function handleRunSucceeded(
   supabase: ReturnType<typeof createClient>,
   job: ScraperJob,
-  payload: ApifyWebhookPayload
+  payload: ApifyWebhookPayload,
+  userId: string
 ): Promise<void> {
   // Update status to processing
   await supabase.from('scraper_jobs').update({ status: 'processing' }).eq('id', job.id);
@@ -99,7 +113,7 @@ async function handleRunSucceeded(
   }
 
   // Fetch and save results
-  await fetchAndSaveResults(supabase, job, datasetId);
+  await fetchAndSaveResults(supabase, job, datasetId, userId);
 }
 
 // ============================================
@@ -162,10 +176,14 @@ const SOURCE_NAMES: Record<string, string> = {
 async function fetchAndSaveResults(
   supabase: ReturnType<typeof createClient>,
   job: ScraperJob,
-  datasetId: string
+  datasetId: string,
+  userId: string
 ): Promise<void> {
-  if (!APIFY_TOKEN) {
-    throw new Error('APIFY_TOKEN not configured');
+  // Get Apify token from user's settings or fallback to env
+  const apifyToken = await getApiKeyForService('apify', userId, supabase);
+
+  if (!apifyToken) {
+    throw new Error('Apify API key not configured. Please add your API key in Settings > API Keys.');
   }
 
   // Fetch all items from dataset (paginated)
@@ -175,7 +193,7 @@ async function fetchAndSaveResults(
 
   while (true) {
     const response = await fetch(
-      `https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}&limit=${limit}&offset=${offset}`
+      `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apifyToken}&limit=${limit}&offset=${offset}`
     );
 
     if (!response.ok) {
