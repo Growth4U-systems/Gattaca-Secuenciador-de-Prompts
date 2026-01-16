@@ -108,13 +108,12 @@ async function createDeepResearchInteraction(
   context: string,
   userPrompt: string
 ): Promise<AsyncDeepResearchResponse> {
-  // Deep Research works best with a clear, direct research query
-  // The step prompt already contains all the structure needed
-  // Only add context documents if they exist, keep it simple
+  // Deep Research: pass user prompt directly
+  // Research methodology should be configured in the step's prompt, not hardcoded here
 
   let fullPrompt = userPrompt
 
-  // Add context documents if provided (but keep them separate and clean)
+  // Add context documents if provided
   if (context && context.trim().length > 0) {
     fullPrompt = `${userPrompt}
 
@@ -605,13 +604,12 @@ async function callDeepResearch(
   const POLLING_INTERVAL_MS = 20_000  // 20 segundos entre cada poll
   const MAX_TIMEOUT_MS = 12 * 60 * 1000  // 12 minutos máximo (dentro del límite de Vercel Pro)
 
-  // Deep Research works best with a clear, direct research query
-  // The step prompt already contains all the structure needed
-  // Only add context documents if they exist, keep it simple
+  // Deep Research: pass user prompt directly
+  // Research methodology should be configured in the step's prompt, not hardcoded here
 
   let fullPrompt = userPrompt
 
-  // Add context documents if provided (but keep them separate and clean)
+  // Add context documents if provided
   if (context && context.trim().length > 0) {
     fullPrompt = `${userPrompt}
 
