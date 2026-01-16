@@ -21,7 +21,10 @@ export async function POST(request: NextRequest) {
   const perplexityApiKey = process.env.PERPLEXITY_API_KEY
   const openrouterApiKey = process.env.OPENROUTER_API_KEY
 
+  console.log('Deep search API called, Perplexity key exists:', !!perplexityApiKey, 'OpenRouter key exists:', !!openrouterApiKey)
+
   if (!perplexityApiKey && !openrouterApiKey) {
+    console.error('No API keys configured for deep search')
     return NextResponse.json(
       { success: false, error: 'No API key configured for deep search' },
       { status: 500 }
@@ -78,6 +81,7 @@ Responde SOLO con el JSON, sin texto adicional.`
     // Try Perplexity first (better for web search)
     if (perplexityApiKey) {
       try {
+        console.log('Trying Perplexity API...')
         const perplexityResponse = await fetch('https://api.perplexity.ai/chat/completions', {
           method: 'POST',
           headers: {
@@ -99,14 +103,21 @@ Responde SOLO con el JSON, sin texto adicional.`
           }),
         })
 
+        console.log('Perplexity response status:', perplexityResponse.status)
+
         if (perplexityResponse.ok) {
           const data = await perplexityResponse.json()
           const content = data.choices?.[0]?.message?.content || '[]'
+          console.log('Perplexity content length:', content.length)
           forums = parseForumsFromResponse(content, existing_forums)
 
           if (forums.length > 0) {
+            console.log('Perplexity returned', forums.length, 'forums')
             return NextResponse.json({ success: true, forums, source: 'perplexity' })
           }
+        } else {
+          const errorBody = await perplexityResponse.text()
+          console.warn('Perplexity error:', perplexityResponse.status, errorBody.slice(0, 200))
         }
       } catch (e) {
         console.warn('Perplexity search failed, trying OpenRouter:', e)
@@ -115,6 +126,7 @@ Responde SOLO con el JSON, sin texto adicional.`
 
     // Fallback to OpenRouter with a capable model
     if (openrouterApiKey && forums.length === 0) {
+      console.log('Trying OpenRouter fallback...')
       const openrouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -135,13 +147,19 @@ Responde SOLO con el JSON, sin texto adicional.`
         }),
       })
 
+      console.log('OpenRouter response status:', openrouterResponse.status)
+
       if (!openrouterResponse.ok) {
+        const errorBody = await openrouterResponse.text()
+        console.error('OpenRouter error:', openrouterResponse.status, errorBody.slice(0, 200))
         throw new Error(`OpenRouter error: ${openrouterResponse.status}`)
       }
 
       const data = await openrouterResponse.json()
       const content = data.choices?.[0]?.message?.content || '[]'
+      console.log('OpenRouter content length:', content.length)
       forums = parseForumsFromResponse(content, existing_forums)
+      console.log('OpenRouter returned', forums.length, 'forums')
     }
 
     return NextResponse.json({

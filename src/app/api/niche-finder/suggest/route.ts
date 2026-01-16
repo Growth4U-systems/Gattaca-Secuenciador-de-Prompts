@@ -25,7 +25,10 @@ export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
+  console.log('Suggest API called, OpenRouter key exists:', !!openrouterApiKey)
+
   if (!openrouterApiKey) {
+    console.error('OPENROUTER_API_KEY not configured')
     return NextResponse.json({ success: false, error: 'OpenRouter API key not configured' }, { status: 500 })
   }
 
@@ -104,6 +107,7 @@ IMPORTANT:
 
 Respond ONLY with the JSON, no additional text.`
 
+    console.log('Calling OpenRouter API...')
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -118,8 +122,12 @@ Respond ONLY with the JSON, no additional text.`
       }),
     })
 
+    console.log('OpenRouter response status:', response.status)
+
     if (!response.ok) {
-      throw new Error(`OpenRouter error: ${response.status}`)
+      const errorBody = await response.text()
+      console.error('OpenRouter error:', response.status, errorBody)
+      throw new Error(`OpenRouter error: ${response.status} - ${errorBody.slice(0, 200)}`)
     }
 
     const data = await response.json()
