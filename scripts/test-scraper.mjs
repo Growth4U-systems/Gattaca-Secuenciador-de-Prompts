@@ -68,6 +68,14 @@ const TEST_INPUTS = {
     limit: 10,
     sort: 'recent',
   },
+  linkedin_comments: {
+    postIds: ['7417222982525374464'],  // Example post from Revolut
+    limit: 10,
+    sortOrder: 'most recent',
+  },
+  linkedin_company_insights: {
+    companyUrls: ['https://www.linkedin.com/company/revolut'],
+  },
   youtube_channel_videos: {
     startUrls: ['https://www.youtube.com/@Revolut'],
     maxResults: 5,
