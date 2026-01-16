@@ -606,27 +606,26 @@ GET /actor-runs/{runId}/dataset/items
 
 | Campo | Tipo | Requerido | Descripción | Valores Permitidos |
 |-------|------|-----------|-------------|-------------------|
-| `startUrls` | string[] | ✅ SÍ | URLs de apps | Ej: `["https://play.google.com/store/apps/details?id=com.app"]` |
+| `startUrls` | string[] | ✅ SÍ | URLs de apps **con hl y gl** | Ej: `["https://play.google.com/store/apps/details?id=com.app&hl=es&gl=ES"]` |
 | `maxItems` | number | No | Máximo de items | Default: `100` |
-| `country` | enum | No | País | **UPPERCASE**: `"US"`, `"ES"`, `"GB"`, `"DE"`, `"FR"`, `"IT"`, `"PT"`, `"BR"`, `"MX"`, `"AR"` |
-| `language` | enum | No | Idioma | **lowercase con variantes**: `"en"`, `"es"`, `"es-ES"`, `"es-419"`, `"pt-BR"`, `"de"`, `"fr"`, `"it"` |
-| `sort` | enum | No | Ordenamiento | **UPPERCASE**: `"NEWEST"`, `"RATING"`, `"HELPFULNESS"` |
 
-⚠️ **IMPORTANTE:**
-- `country` en MAYÚSCULAS: `"ES"`, `"US"`
-- `language` en minúsculas con variantes: `"es"`, `"es-ES"`
-- `sort` en MAYÚSCULAS: `"NEWEST"`, `"RATING"`
+⚠️ **IMPORTANTE - Formato de URL:**
+El actor requiere que el idioma (`hl`) y país (`gl`) estén **DENTRO de la URL**, no como campos separados:
+- `hl` (idioma): minúsculas: `es`, `en`, `de`, `fr`, `it`, `pt`
+- `gl` (país): MAYÚSCULAS: `ES`, `US`, `GB`, `DE`, `FR`, `IT`
+
+**URL incorrecta:** `https://play.google.com/store/apps/details?id=com.revolut.revolut`
+**URL correcta:** `https://play.google.com/store/apps/details?id=com.revolut.revolut&hl=es&gl=ES`
 
 ### Ejemplo de Input
 ```json
 {
-  "startUrls": ["https://play.google.com/store/apps/details?id=com.revolut.revolut"],
-  "maxItems": 100,
-  "country": "ES",
-  "language": "es",
-  "sort": "NEWEST"
+  "startUrls": ["https://play.google.com/store/apps/details?id=com.revolut.revolut&hl=es&gl=ES"],
+  "maxItems": 100
 }
 ```
+
+> **Nota técnica:** El backend (`scraperTemplates.ts`) automáticamente añade `&hl=` y `&gl=` a las URLs si el usuario no los incluye, usando los valores seleccionados en la UI.
 
 ### Output Fields
 - `text` - Contenido de la review
@@ -832,5 +831,5 @@ GET /actor-runs/{runId}/dataset/items
 |-------|---------|---------------|-----------|-------|
 | 2025-01-15 | TikTok Posts | `@revolut` | ✅ Éxito | 50 posts obtenidos |
 | 2025-01-15 | Trustpilot Reviews | `revolut.com` | ✅ Éxito | 100 reviews obtenidas |
-| *Pendiente* | App Store Reviews | `id932493382` | ⏳ | Habilitado sin test - REQUIERE VERIFICACIÓN |
-| *Pendiente* | Play Store Reviews | `com.revolut.revolut` | ⏳ | Habilitado sin test - REQUIERE VERIFICACIÓN |
+| 2025-01-16 | App Store Reviews | `id932493382` | ✅ Éxito | 5 reviews, incluye título, texto, score, fecha, versión |
+| 2025-01-16 | Play Store Reviews | `com.revolut.revolut&hl=es&gl=ES` | ✅ Éxito | 5 reviews, incluye texto, score, respuesta de empresa |
