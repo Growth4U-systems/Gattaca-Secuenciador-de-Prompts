@@ -833,3 +833,4 @@ El actor requiere que el idioma (`hl`) y país (`gl`) estén **DENTRO de la URL*
 | 2025-01-15 | Trustpilot Reviews | `revolut.com` | ✅ Éxito | 100 reviews obtenidas |
 | 2025-01-16 | App Store Reviews | `id932493382` | ✅ Éxito | 5 reviews, incluye título, texto, score, fecha, versión |
 | 2025-01-16 | Play Store Reviews | `com.revolut.revolut&hl=es&gl=ES` | ✅ Éxito | 5 reviews, incluye texto, score, respuesta de empresa |
+| 2026-01-16 | LinkedIn Company Posts | `company_name: revolut` | ✅ Éxito | 5 posts, incluye texto, stats (reactions, comments), media, autor |
