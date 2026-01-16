@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase-server'
 import { getUserApiKey } from '@/lib/getUserApiKey'
+import { decryptToken } from '@/lib/encryption'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
     const { data: { session } } = await supabase.auth.getSession()
 
     if (session?.user?.id) {
-      // Get both keys in parallel
+      // 1. Get both keys from user_api_keys table (manual entry via Settings > APIs)
       const [perplexityKey, openrouterKey] = await Promise.all([
         getUserApiKey({
           userId: session.user.id,
@@ -44,6 +45,50 @@ export async function POST(request: NextRequest) {
       ])
       perplexityApiKey = perplexityKey
       openrouterApiKey = openrouterKey
+      console.log('[deep-search] user_api_keys - perplexity:', !!perplexityKey, 'openrouter:', !!openrouterKey)
+
+      // 2. If no OpenRouter key from user_api_keys, check OAuth tokens
+      if (!openrouterApiKey) {
+        console.log('[deep-search] Checking user_openrouter_tokens (OAuth)...')
+        const { data: tokenRecord } = await supabase
+          .from('user_openrouter_tokens')
+          .select('encrypted_api_key')
+          .eq('user_id', session.user.id)
+          .single()
+
+        if (tokenRecord?.encrypted_api_key && tokenRecord.encrypted_api_key !== 'PENDING') {
+          try {
+            openrouterApiKey = decryptToken(tokenRecord.encrypted_api_key)
+            console.log('[deep-search] Found OAuth token in user_openrouter_tokens')
+          } catch (decryptError) {
+            console.warn('[deep-search] Failed to decrypt OAuth token:', decryptError)
+          }
+        }
+      }
+
+      // 3. If still no OpenRouter key, check agency key
+      if (!openrouterApiKey) {
+        console.log('[deep-search] Checking agency key...')
+        const { data: membership } = await supabase
+          .from('agency_members')
+          .select('agency_id, agencies(id, openrouter_api_key)')
+          .eq('user_id', session.user.id)
+          .single()
+
+        const agencyData = membership?.agencies as unknown as {
+          id: string
+          openrouter_api_key: string | null
+        } | null
+
+        if (agencyData?.openrouter_api_key) {
+          try {
+            openrouterApiKey = decryptToken(agencyData.openrouter_api_key)
+            console.log('[deep-search] Found agency OpenRouter key')
+          } catch (decryptError) {
+            console.warn('[deep-search] Failed to decrypt agency key:', decryptError)
+          }
+        }
+      }
     }
   } catch (e) {
     console.warn('Could not get user session for API key lookup:', e)
