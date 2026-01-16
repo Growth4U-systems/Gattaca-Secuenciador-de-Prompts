@@ -88,6 +88,37 @@ const SCRAPER_ICONS: Record<string, React.ReactNode> = {
   seo_keywords: <Search size={20} />,
 }
 
+// Detailed descriptions for each scraper (shown on hover and in configure step)
+const SCRAPER_DESCRIPTIONS: Record<string, string> = {
+  // Social Media
+  instagram_posts_comments: 'Extrae posts y comentarios de perfiles de Instagram. Obtiene imágenes, likes, texto y engagement.',
+  tiktok_posts: 'Obtiene videos de perfiles de TikTok con métricas de views, likes, shares y descripción.',
+  tiktok_comments: 'Extrae comentarios de videos específicos de TikTok con autor, likes y respuestas.',
+  linkedin_company_posts: 'Scrape publicaciones de páginas de empresa en LinkedIn con contenido, reacciones y comentarios.',
+  linkedin_comments: 'Extrae comentarios de posts específicos de LinkedIn con autor y engagement.',
+  linkedin_company_insights: 'Obtiene insights y métricas de páginas de empresa en LinkedIn.',
+  linkedin_company_profile: 'Perfil completo de empresa: empleados, followers, headquarters, especialidades. $8/1000 resultados.',
+  facebook_posts: 'Extrae publicaciones de páginas de Facebook con texto, imágenes y reacciones.',
+  facebook_comments: 'Obtiene comentarios de posts de Facebook con autor y respuestas.',
+  reddit_posts: 'Busca posts y comentarios en subreddits o búsquedas. Pay-per-use: $0.002/item (1000 gratis/mes).',
+  // YouTube
+  youtube_channel_videos: 'Lista de videos de canales de YouTube con título, descripción, views y likes.',
+  youtube_comments: 'Extrae comentarios de videos de YouTube ordenados por relevancia o fecha.',
+  youtube_transcripts: 'Obtiene transcripciones/subtítulos de videos de YouTube con timestamps.',
+  // Reviews
+  trustpilot_reviews: 'Reviews de empresas en Trustpilot con rating, título, texto completo y fecha.',
+  g2_reviews: 'Reviews de software B2B en G2 con pros, contras y ratings detallados. Mínimo 200 reviews.',
+  capterra_reviews: 'Reviews de software en Capterra con calificaciones por categoría y recomendaciones.',
+  appstore_reviews: 'Reviews de apps en Apple App Store con rating, versión de la app y país.',
+  playstore_reviews: 'Reviews de apps en Google Play Store con rating, versión y tipo de dispositivo.',
+  google_maps_reviews: 'Reviews de negocios locales en Google Maps con rating, texto y fotos del reviewer.',
+  // Web & News
+  website: 'Extrae contenido de páginas web. Modo scrape (1 página) o crawl (múltiples páginas del sitio).',
+  google_news: 'Busca noticias recientes en Google News por keywords, empresa o tema específico.',
+  news_bing: 'Busca noticias en Bing News con filtros avanzados de fecha, idioma y relevancia.',
+  seo_keywords: 'Análisis de keywords SEO con volumen de búsqueda, dificultad y competencia.',
+}
+
 const SCRAPER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   // Social
   instagram_posts_comments: { bg: 'bg-pink-50', text: 'text-pink-600', border: 'border-pink-200' },
@@ -888,8 +919,11 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
                                   <span className="flex-shrink-0 w-2 h-2 bg-green-500 rounded-full" title="Activo" />
                                 )}
                               </div>
-                              <p className={`text-xs truncate ${isEnabled ? 'text-gray-500' : 'text-gray-400'}`}>
-                                {scraper?.description?.slice(0, 40) || ''}...
+                              <p
+                                className={`text-xs line-clamp-2 ${isEnabled ? 'text-gray-500' : 'text-gray-400'}`}
+                                title={SCRAPER_DESCRIPTIONS[type] || scraper?.description || ''}
+                              >
+                                {SCRAPER_DESCRIPTIONS[type] || scraper?.description || ''}
                               </p>
                             </div>
                           </button>
@@ -923,6 +957,11 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
               {/* Scraper-specific inputs */}
               <div className="space-y-4">
                 <h4 className="text-sm font-medium text-gray-900">Configuración de {template.name}</h4>
+                {selectedScraper && SCRAPER_DESCRIPTIONS[selectedScraper] && (
+                  <p className="text-xs text-gray-500 -mt-2 pb-2 border-b border-gray-100">
+                    {SCRAPER_DESCRIPTIONS[selectedScraper]}
+                  </p>
+                )}
 
                 {/* Required fields */}
                 {template.inputSchema.required.map((key) => renderInputField(key, true))}
