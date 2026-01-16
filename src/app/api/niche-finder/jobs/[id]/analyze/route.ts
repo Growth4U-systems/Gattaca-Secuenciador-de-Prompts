@@ -97,7 +97,9 @@ function calculateCost(model: string, tokensInput: number, tokensOutput: number)
   // Prices per 1M tokens (approximate)
   const pricing: Record<string, { input: number; output: number }> = {
     'openai/gpt-4o-mini': { input: 0.15, output: 0.6 },
+    'openai/gpt-4o': { input: 2.5, output: 10 },
     'google/gemini-2.5-pro-preview': { input: 1.25, output: 5 },
+    'anthropic/claude-sonnet-4': { input: 3, output: 15 },
   }
   const price = pricing[model] || { input: 0.5, output: 1.5 }
   return (tokensInput * price.input + tokensOutput * price.output) / 1_000_000
@@ -110,6 +112,20 @@ function replaceVariables(prompt: string, variables: Record<string, string>): st
     result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value || '')
   }
   return result
+}
+
+// Custom step configuration from request body
+interface CustomStepConfig {
+  prompt?: string
+  model?: string
+}
+
+interface RequestBody {
+  steps?: {
+    step1?: CustomStepConfig
+    step2?: CustomStepConfig
+    step3?: CustomStepConfig
+  }
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
@@ -127,6 +143,15 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
   const { id: jobId } = await params
+
+  // Parse request body for custom step configurations
+  let customSteps: RequestBody['steps'] = {}
+  try {
+    const body: RequestBody = await request.json()
+    customSteps = body.steps || {}
+  } catch {
+    // No body or invalid JSON - use defaults
+  }
 
   try {
     // Get job with project info
@@ -203,6 +228,11 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     // Execute each analysis step
     for (const step of ANALYSIS_STEPS) {
+      // Get custom configuration for this step (if provided)
+      const customConfig = customSteps?.[`step${step.number}` as keyof typeof customSteps]
+      const stepPrompt = customConfig?.prompt || step.prompt
+      const stepModel = customConfig?.model || step.model
+
       // Update job status for current step
       await supabase
         .from('niche_finder_jobs')
@@ -220,7 +250,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           step_number: step.number,
           step_name: step.name,
           input_content: currentInput.substring(0, 50000), // Limit stored input
-          model: step.model,
+          model: stepModel,
           status: 'running',
           started_at: new Date().toISOString(),
         })
@@ -232,8 +262,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       }
 
       try {
-        // Build prompt with variables
-        const finalPrompt = replaceVariables(step.prompt, variables)
+        // Build prompt with variables (use custom prompt if provided)
+        const finalPrompt = replaceVariables(stepPrompt, variables)
 
         // For Step 2, include Step 1 output
         // For Step 3, include Step 1 and Step 2 outputs
@@ -244,7 +274,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
         // Call OpenRouter
         const result = await callOpenRouter(
-          step.model,
+          stepModel,
           finalPrompt,
           inputForStep,
           step.temperature,
@@ -252,7 +282,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           openrouterApiKey
         )
 
-        const cost = calculateCost(step.model, result.tokens_input, result.tokens_output)
+        const cost = calculateCost(stepModel, result.tokens_input, result.tokens_output)
 
         // Update step output record
         if (stepRecord) {
@@ -277,7 +307,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           units: result.tokens_input + result.tokens_output,
           cost_usd: cost,
           metadata: {
-            model: step.model,
+            model: stepModel,
             tokens_input: result.tokens_input,
             tokens_output: result.tokens_output,
             step_name: step.name,
