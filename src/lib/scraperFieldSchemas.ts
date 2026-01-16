@@ -756,30 +756,78 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   youtube_channel_videos: {
     type: 'youtube_channel_videos',
     fields: {
-      youtube_channels: {
-        key: 'youtube_channels',
-        type: 'text-array',
-        label: 'Canales de YouTube',
-        description: 'Handles de canales de YouTube (formato @usuario)',
-        placeholder: '@MrBeast\n@PewDiePie\n@Revolut',
-        helpText: 'Un canal por l\u00ednea, usa el formato @NombreCanal',
+      startUrls: {
+        key: 'startUrls',
+        type: 'url-array',
+        label: 'URLs de canales de YouTube',
+        description: 'URLs de los canales de los que quieres extraer videos',
+        placeholder: 'https://www.youtube.com/@Revolut\nhttps://www.youtube.com/@N26',
+        helpText: 'Una URL por línea. Formato: https://www.youtube.com/@NombreCanal',
         required: true,
         validation: {
-          pattern: /^@[a-zA-Z0-9_-]+$/,
-          patternMessage: 'Formato: @NombreCanal',
+          pattern: /^https:\/\/(www\.)?youtube\.com\/(@[a-zA-Z0-9_-]+|channel\/[a-zA-Z0-9_-]+|c\/[a-zA-Z0-9_-]+)/,
+          patternMessage: 'Formato: https://www.youtube.com/@NombreCanal',
         },
         examples: [
-          '@Revolut',
-          '@N26',
-          '@MrBeast',
+          'https://www.youtube.com/@Revolut',
+          'https://www.youtube.com/@N26',
+          'https://www.youtube.com/@MrBeast',
         ],
       },
-      End_date: {
-        key: 'End_date',
-        type: 'date',
-        label: 'Fecha l\u00edmite',
-        description: 'Solo extraer videos publicados hasta esta fecha',
-        helpText: 'Deja vac\u00edo para todos los videos',
+      maxResults: {
+        key: 'maxResults',
+        type: 'number',
+        label: 'Videos a extraer',
+        description: 'Número de videos regulares por canal',
+        helpText: 'Deja en 0 para solo extraer metadatos del canal',
+        defaultValue: 50,
+        validation: {
+          min: 0,
+          max: 1000,
+        },
+      },
+      maxResultsShorts: {
+        key: 'maxResultsShorts',
+        type: 'number',
+        label: 'Shorts a extraer',
+        description: 'Número de shorts por canal (0 = no extraer)',
+        helpText: 'Shorts son videos cortos de menos de 60 segundos',
+        defaultValue: 0,
+        validation: {
+          min: 0,
+          max: 1000,
+        },
+      },
+      maxResultStreams: {
+        key: 'maxResultStreams',
+        type: 'number',
+        label: 'Streams a extraer',
+        description: 'Número de livestreams por canal (0 = no extraer)',
+        defaultValue: 0,
+        validation: {
+          min: 0,
+          max: 1000,
+        },
+      },
+      oldestPostDate: {
+        key: 'oldestPostDate',
+        type: 'text',
+        label: 'Fecha límite',
+        description: 'Solo extraer videos más recientes que esta fecha',
+        placeholder: '2024-01-01 o "30 days"',
+        helpText: 'Formato: YYYY-MM-DD o "X days" (ej: "30 days")',
+      },
+      sortVideosBy: {
+        key: 'sortVideosBy',
+        type: 'select',
+        label: 'Ordenar videos',
+        description: 'Cómo ordenar los videos',
+        options: [
+          { value: 'NEWEST', label: 'Más recientes' },
+          { value: 'POPULAR', label: 'Más populares' },
+          { value: 'OLDEST', label: 'Más antiguos' },
+        ],
+        defaultValue: 'NEWEST',
       },
     },
   },
@@ -790,37 +838,44 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   youtube_comments: {
     type: 'youtube_comments',
     fields: {
-      videoUrls: {
-        key: 'videoUrls',
+      startUrls: {
+        key: 'startUrls',
         type: 'url-array',
         label: 'URLs de videos de YouTube',
         description: 'URLs de los videos de los que quieres extraer comentarios',
         placeholder: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        helpText: 'Una URL por l\u00ednea',
+        helpText: 'Una URL por línea',
         required: true,
         validation: {
           pattern: /^https:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[a-zA-Z0-9_-]+/,
           patternMessage: 'Formato: https://www.youtube.com/watch?v=ID',
         },
+        examples: [
+          'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        ],
       },
       maxComments: {
         key: 'maxComments',
         type: 'number',
         label: 'Máximo de comentarios',
         description: 'Número máximo de comentarios por video',
+        helpText: 'Recomendado: 100-500. Más comentarios = más tiempo y coste.',
         defaultValue: 100,
         validation: {
-          min: 10,
-          max: 1000,
+          min: 1,
+          max: 5000,
         },
       },
-      sort: {
-        key: 'sort',
+      commentsSortBy: {
+        key: 'commentsSortBy',
         type: 'select',
         label: 'Ordenar por',
         description: 'Cómo ordenar los comentarios',
-        options: YOUTUBE_COMMENTS_SORT_OPTIONS,
-        defaultValue: 'top',
+        options: [
+          { value: '0', label: 'Más relevantes (Top)' },
+          { value: '1', label: 'Más recientes (Newest)' },
+        ],
+        defaultValue: '0',
       },
     },
   },
@@ -831,23 +886,29 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   youtube_transcripts: {
     type: 'youtube_transcripts',
     fields: {
-      videoUrls: {
-        key: 'videoUrls',
+      startUrls: {
+        key: 'startUrls',
         type: 'url-array',
         label: 'URLs de videos de YouTube',
         description: 'URLs de los videos de los que quieres extraer transcripciones',
         placeholder: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        helpText: 'Una URL por l\u00ednea. El video debe tener subt\u00edtulos disponibles.',
+        helpText: 'Una URL por línea. El video debe tener subtítulos disponibles.',
         required: true,
+        validation: {
+          pattern: /^https:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[a-zA-Z0-9_-]+/,
+          patternMessage: 'Formato: https://www.youtube.com/watch?v=ID',
+        },
+        examples: [
+          'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        ],
       },
-      language: {
-        key: 'language',
-        type: 'select',
-        label: 'Idioma preferido',
-        description: 'Idioma de la transcripci\u00f3n',
-        helpText: 'Si no est\u00e1 disponible, se usar\u00e1 otro idioma',
-        options: LANGUAGE_OPTIONS,
-        defaultValue: 'es',
+      timestamps: {
+        key: 'timestamps',
+        type: 'boolean',
+        label: 'Incluir timestamps',
+        description: 'Incluir marcas de tiempo en la transcripción',
+        helpText: 'Si está activo, cada línea incluirá el tiempo en que aparece',
+        defaultValue: true,
       },
     },
   },
