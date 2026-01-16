@@ -33,6 +33,7 @@ const APIFY_ACTORS = {
   appstore_reviews: '4qRgh5vXXsv0bKa1l',
   playstore_reviews: 'Bs72sDKr8fGe3d5Ti',
   google_maps_reviews: 'thEbk6nzmhRsChwBS',
+  reddit_posts: 'trudax~reddit-scraper',
 };
 
 // Inputs de test predefinidos para cada scraper (usando Revolut como ejemplo)
@@ -109,6 +110,13 @@ const TEST_INPUTS = {
     maxReviews: 10,
     reviewsSort: 'newest',
     language: 'es',
+  },
+  reddit_posts: {
+    searches: ['r/personalfinance'],
+    maxItems: 10,
+    maxComments: 5,
+    sort: 'new',
+    time: 'all',
   },
 };
 

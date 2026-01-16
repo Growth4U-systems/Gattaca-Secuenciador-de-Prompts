@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createClient as createServerClient } from '@/lib/supabase-server'
+import { getUserApiKey } from '@/lib/getUserApiKey'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 // Extended request type that supports both component format and direct params
 interface SuggestRequest {
@@ -21,15 +24,36 @@ interface SuggestRequest {
 }
 
 export async function POST(request: NextRequest) {
-  const openrouterApiKey = process.env.OPENROUTER_API_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  // Get user session to look up their API key
+  let openrouterApiKey: string | null = null
+  try {
+    const supabase = await createServerClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (session?.user?.id) {
+      openrouterApiKey = await getUserApiKey({
+        userId: session.user.id,
+        serviceName: 'openrouter',
+        supabase,
+      })
+    }
+  } catch (e) {
+    console.warn('Could not get user session for API key lookup:', e)
+  }
+
+  // Fallback to environment variable if no user key found
+  if (!openrouterApiKey) {
+    openrouterApiKey = process.env.OPENROUTER_API_KEY || null
+  }
 
   console.log('Suggest API called, OpenRouter key exists:', !!openrouterApiKey)
 
   if (!openrouterApiKey) {
     console.error('OPENROUTER_API_KEY not configured')
-    return NextResponse.json({ success: false, error: 'OpenRouter API key not configured' }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'OpenRouter API key not configured. Please add your API key in Settings > APIs.' }, { status: 500 })
   }
 
   try {

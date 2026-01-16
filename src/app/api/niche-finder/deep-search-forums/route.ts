@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient as createServerClient } from '@/lib/supabase-server'
+import { getUserApiKey } from '@/lib/getUserApiKey'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 interface DeepSearchRequest {
   life_contexts: string[]
@@ -17,16 +20,49 @@ interface ForumSuggestion {
 }
 
 export async function POST(request: NextRequest) {
-  // Try Perplexity first, fallback to OpenRouter with web search capable model
-  const perplexityApiKey = process.env.PERPLEXITY_API_KEY
-  const openrouterApiKey = process.env.OPENROUTER_API_KEY
+  // Try to get API keys from user settings first, then fallback to environment variables
+  let perplexityApiKey: string | null = null
+  let openrouterApiKey: string | null = null
+
+  try {
+    const supabase = await createServerClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (session?.user?.id) {
+      // Get both keys in parallel
+      const [perplexityKey, openrouterKey] = await Promise.all([
+        getUserApiKey({
+          userId: session.user.id,
+          serviceName: 'perplexity',
+          supabase,
+        }),
+        getUserApiKey({
+          userId: session.user.id,
+          serviceName: 'openrouter',
+          supabase,
+        }),
+      ])
+      perplexityApiKey = perplexityKey
+      openrouterApiKey = openrouterKey
+    }
+  } catch (e) {
+    console.warn('Could not get user session for API key lookup:', e)
+  }
+
+  // Fallback to environment variables
+  if (!perplexityApiKey) {
+    perplexityApiKey = process.env.PERPLEXITY_API_KEY || null
+  }
+  if (!openrouterApiKey) {
+    openrouterApiKey = process.env.OPENROUTER_API_KEY || null
+  }
 
   console.log('Deep search API called, Perplexity key exists:', !!perplexityApiKey, 'OpenRouter key exists:', !!openrouterApiKey)
 
   if (!perplexityApiKey && !openrouterApiKey) {
     console.error('No API keys configured for deep search')
     return NextResponse.json(
-      { success: false, error: 'No API key configured for deep search' },
+      { success: false, error: 'No API key configured for deep search. Please add your Perplexity or OpenRouter API key in Settings > APIs.' },
       { status: 500 }
     )
   }

@@ -30,7 +30,7 @@ function decrypt(encryptedData: string): string {
   return decrypted;
 }
 
-type ServiceName = 'apify' | 'firecrawl';
+type ServiceName = 'apify' | 'firecrawl' | 'openrouter' | 'perplexity';
 
 // Use a simple any type for the supabase client to avoid type recursion issues
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -77,6 +77,8 @@ export async function getUserApiKey({
   const envVarMap: Record<ServiceName, string> = {
     apify: 'APIFY_TOKEN',
     firecrawl: 'FIRECRAWL_API_KEY',
+    openrouter: 'OPENROUTER_API_KEY',
+    perplexity: 'PERPLEXITY_API_KEY',
   };
 
   const envVar = envVarMap[serviceName];
@@ -112,6 +114,8 @@ export async function getApiKeyForService(
   const envVarMap: Record<ServiceName, string> = {
     apify: 'APIFY_TOKEN',
     firecrawl: 'FIRECRAWL_API_KEY',
+    openrouter: 'OPENROUTER_API_KEY',
+    perplexity: 'PERPLEXITY_API_KEY',
   };
 
   return process.env[envVarMap[serviceName]] || null;
