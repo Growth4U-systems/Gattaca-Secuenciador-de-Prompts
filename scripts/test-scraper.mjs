@@ -43,11 +43,9 @@ const TEST_INPUTS = {
     country: 'es',
   },
   playstore_reviews: {
-    startUrls: ['https://play.google.com/store/apps/details?id=com.revolut.revolut'],
+    // Note: hl and gl params must be in URL, not as separate fields
+    startUrls: ['https://play.google.com/store/apps/details?id=com.revolut.revolut&hl=es&gl=ES'],
     maxItems: 10,
-    country: 'ES',
-    language: 'es',
-    sort: 'NEWEST',
   },
   trustpilot_reviews: {
     companyDomain: 'revolut.com',
@@ -71,8 +69,20 @@ const TEST_INPUTS = {
     sort: 'recent',
   },
   youtube_channel_videos: {
-    youtube_channels: ['https://www.youtube.com/@Revolut'],
-    End_date: '',
+    startUrls: ['https://www.youtube.com/@Revolut'],
+    maxResults: 5,
+    maxResultsShorts: 0,
+    maxResultStreams: 0,
+    sortVideosBy: 'NEWEST',
+  },
+  youtube_comments: {
+    startUrls: ['https://www.youtube.com/watch?v=dQw4w9WgXcQ'],  // Rick Roll for testing
+    maxComments: 10,
+    commentsSortBy: '0',  // Top comments
+  },
+  youtube_transcripts: {
+    startUrls: ['https://www.youtube.com/watch?v=dQw4w9WgXcQ'],  // Rick Roll for testing
+    timestamps: true,
   },
   facebook_posts: {
     startUrls: ['https://www.facebook.com/Revolut'],

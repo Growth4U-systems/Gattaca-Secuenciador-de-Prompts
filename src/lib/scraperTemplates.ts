@@ -492,6 +492,26 @@ export function buildScraperInput(
     }
   }
 
+  // Special handling for Play Store: add language and country params to URLs
+  if (type === 'playstore_reviews' && merged.startUrls && Array.isArray(merged.startUrls)) {
+    const language = (merged.language as string) || 'es';
+    const country = (merged.country as string) || 'ES';
+
+    merged.startUrls = (merged.startUrls as string[]).map(url => {
+      // If URL already has hl/gl params, don't add them
+      if (url.includes('hl=') || url.includes('gl=')) {
+        return url;
+      }
+      // Add language and country to URL
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}hl=${language}&gl=${country}`;
+    });
+
+    // Remove separate language/country fields since they're now in URLs
+    delete merged.language;
+    delete merged.country;
+  }
+
   return merged;
 }
 
