@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database, Building2, Plus, X, Search, Zap, Target } from 'lucide-react'
+import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database, Building2, Plus, X, Search, Zap, Target, Globe, Filter, Brain, BarChart3, Table } from 'lucide-react'
 import Link from 'next/link'
 import { createProject } from '@/hooks/useProjects'
 import { useToast } from '@/components/ui'
@@ -139,7 +139,11 @@ export default function NewProjectPage() {
   const nicheFinderSteps = [
     { icon: Settings, title: 'Configurar búsqueda', description: 'Define contextos de vida y palabras de producto' },
     { icon: Search, title: 'Buscar en SERP', description: 'Encuentra URLs relevantes en Reddit y foros' },
-    { icon: FileText, title: 'Extraer nichos', description: 'Analiza contenido con IA para identificar nichos' },
+    { icon: Globe, title: 'Scrapear contenido', description: 'Extrae el contenido de las URLs encontradas' },
+    { icon: FileText, title: 'Extraer nichos', description: 'Identifica nichos con IA desde el contenido' },
+    { icon: Filter, title: 'Limpiar y filtrar', description: 'Consolida y valida los nichos encontrados' },
+    { icon: Brain, title: 'Scoring (Deep Research)', description: 'Analiza pain, reachability y market size' },
+    { icon: Table, title: 'Consolidar tabla', description: 'Genera la tabla final con todos los datos' },
     { icon: Rocket, title: 'Exportar resultados', description: 'Descarga CSV o exporta a Google Sheets' },
   ]
 
