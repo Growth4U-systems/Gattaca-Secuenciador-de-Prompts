@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { serperSearch, calculateSerperCost, SERPER_COST_PER_SEARCH } from '@/lib/serper'
+import { serperSearch, SERPER_COST_PER_SEARCH } from '@/lib/serper'
 import { generateSearchQueries } from '@/lib/scraper/query-builder'
+import { isLikelyBlog, scoreUrlQuality } from '@/lib/scraper/url-filter'
 import type { ScraperStepConfig } from '@/types/scraper.types'
 
 export const dynamic = 'force-dynamic'
@@ -82,9 +83,22 @@ export async function POST(request: NextRequest, { params }: Params) {
           totalSearches++
           totalCost += SERPER_COST_PER_SEARCH
 
-          // Process results
+          // Process results - filter out blogs and low-quality URLs
           for (const result of response.organic) {
             if (!seenUrls.has(result.link)) {
+              // Skip blogs and articles - we want forums with discussions
+              if (isLikelyBlog(result.link)) {
+                console.log(`Filtered blog/article: ${result.link}`)
+                continue
+              }
+
+              // Check URL quality score (minimum 40)
+              const qualityScore = scoreUrlQuality(result.link)
+              if (qualityScore < 40) {
+                console.log(`Filtered low-quality URL (score ${qualityScore}): ${result.link}`)
+                continue
+              }
+
               seenUrls.add(result.link)
               urlsToInsert.push({
                 job_id: jobId,
