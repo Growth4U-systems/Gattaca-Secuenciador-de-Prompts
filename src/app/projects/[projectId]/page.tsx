@@ -710,7 +710,7 @@ function DocumentsTab({
                   <X size={20} />
                 </button>
               </div>
-              <div className="p-6 overflow-hidden flex-1 bg-gray-50 flex flex-col">
+              <div className="p-6 min-h-0 flex-1 bg-gray-50 flex flex-col overflow-hidden">
                 {isJSON ? (
                   <JSONViewer content={content} filename={viewingDoc.filename} />
                 ) : isCSV ? (
