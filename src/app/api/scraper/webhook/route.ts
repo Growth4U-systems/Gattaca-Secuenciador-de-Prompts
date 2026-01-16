@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server-admin';
-import { ApifyWebhookPayload, ApifyDatasetItem, ScraperJob } from '@/types/scraper.types';
+import { ApifyWebhookPayload, ApifyDatasetItem, ScraperJob, ScraperOutputConfig } from '@/types/scraper.types';
 import { getApiKeyForService } from '@/lib/getUserApiKey';
+import { formatScraperOutput } from '@/lib/scraperOutputFormatter';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes to process large datasets
@@ -231,11 +232,17 @@ async function fetchAndSaveResults(
   }
 
   // ============================================
-  // CREATE ONE CONSOLIDATED DOCUMENT WITH RAW DATA
+  // CREATE ONE CONSOLIDATED DOCUMENT
   // ============================================
 
-  // Store the raw Apify output as JSON - no transformation
-  const consolidatedContent = JSON.stringify(allItems, null, 2);
+  // Get output config from job metadata (default to JSON)
+  const providerMeta = job.provider_metadata as Record<string, unknown> | null;
+  const outputConfig: ScraperOutputConfig = (providerMeta?.output_config as ScraperOutputConfig) || {
+    format: 'json',
+  };
+
+  // Format content based on user selection
+  const consolidatedContent = formatScraperOutput(allItems, outputConfig);
 
   // Get target name from job or generate from first item
   const targetName = job.target_name ||
@@ -248,8 +255,7 @@ async function fetchAndSaveResults(
   const documentName = `${sourceName} - ${targetName}`;
 
   // Generate tags from job metadata or auto-generate
-  const providerMetadata = job.provider_metadata as Record<string, unknown> | null;
-  const pendingTags = (providerMetadata?.pending_tags as string[]) || [];
+  const pendingTags = (providerMeta?.pending_tags as string[]) || [];
   const tags = pendingTags.length > 0 ? pendingTags : generateAutoTags(job.scraper_type, targetName);
 
   // Generate description/brief
@@ -271,6 +277,7 @@ async function fetchAndSaveResults(
       scraped_at: new Date().toISOString(),
       total_items: allItems.length,
       target_name: targetName,
+      output_format: outputConfig.format,
       // Store raw data as preview (first 10 items)
       raw_preview: allItems.slice(0, 10),
     },

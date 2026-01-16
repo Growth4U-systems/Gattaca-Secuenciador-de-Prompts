@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { ScraperPollResponse, ApifyRunStatus, ApifyDatasetItem, ScraperJob } from '@/types/scraper.types';
+import { ScraperPollResponse, ApifyRunStatus, ApifyDatasetItem, ScraperJob, ScraperOutputConfig } from '@/types/scraper.types';
 import { getUserApiKey } from '@/lib/getUserApiKey';
+import { formatScraperOutput } from '@/lib/scraperOutputFormatter';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -229,11 +230,17 @@ async function fetchAndSaveApifyResults(
   }
 
   // ============================================
-  // CREATE ONE CONSOLIDATED DOCUMENT WITH RAW DATA
+  // CREATE ONE CONSOLIDATED DOCUMENT
   // ============================================
 
-  // Store the raw Apify output as JSON - no transformation
-  const consolidatedContent = JSON.stringify(items, null, 2);
+  // Get output config from job metadata (default to JSON)
+  const providerMeta = job.provider_metadata as Record<string, unknown> | null;
+  const outputConfig: ScraperOutputConfig = (providerMeta?.output_config as ScraperOutputConfig) || {
+    format: 'json',
+  };
+
+  // Format content based on user selection
+  const consolidatedContent = formatScraperOutput(items, outputConfig);
 
   // Get target name from job or generate from first item
   const targetName = job.target_name ||
@@ -246,8 +253,7 @@ async function fetchAndSaveApifyResults(
   const documentName = `${sourceName} - ${targetName}`;
 
   // Generate tags from job metadata or auto-generate
-  const providerMetadata = job.provider_metadata as Record<string, unknown> | null;
-  const pendingTags = (providerMetadata?.pending_tags as string[]) || [];
+  const pendingTags = (providerMeta?.pending_tags as string[]) || [];
   const tags = pendingTags.length > 0 ? pendingTags : generateAutoTags(job.scraper_type, targetName);
 
   // Generate description/brief
@@ -269,6 +275,7 @@ async function fetchAndSaveApifyResults(
       scraped_at: new Date().toISOString(),
       total_items: items.length,
       target_name: targetName,
+      output_format: outputConfig.format,
       raw_preview: items.slice(0, 10),
     },
   });

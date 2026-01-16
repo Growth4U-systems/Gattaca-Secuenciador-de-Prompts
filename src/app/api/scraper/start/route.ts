@@ -131,7 +131,7 @@ Contenido (primeros 2000 caracteres): ${content.slice(0, 2000)}`
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as StartScraperRequest;
-    const { project_id, scraper_type, input_config, batch, target_name, target_category, tags } = body;
+    const { project_id, scraper_type, input_config, batch, target_name, target_category, tags, output_config } = body;
 
     if (!project_id) {
       return NextResponse.json({ success: false, error: 'Missing project_id' }, { status: 400 });
@@ -169,6 +169,7 @@ export async function POST(request: NextRequest) {
         target_name,
         target_category,
         tags,
+        output_config,
         userId
       );
     } else {
@@ -198,6 +199,7 @@ async function handleSingleScraper(
   targetName?: string,
   targetCategory?: string,
   tags?: string[],
+  outputConfig?: StartScraperRequest['output_config'],
   userId?: string
 ): Promise<NextResponse<StartScraperResponse>> {
   const template = getScraperTemplate(scraperType as Parameters<typeof getScraperTemplate>[0]);
@@ -208,7 +210,7 @@ async function handleSingleScraper(
   const webhookSecret = randomUUID();
   const finalInput = buildScraperInput(template.type, inputConfig);
 
-  // Create job record with target info
+  // Create job record with target info and output config
   const { data: job, error: jobError } = await supabase
     .from('scraper_jobs')
     .insert({
@@ -222,6 +224,7 @@ async function handleSingleScraper(
       target_category: targetCategory || 'research',
       webhook_secret: webhookSecret,
       status: 'pending',
+      provider_metadata: outputConfig ? { output_config: outputConfig } : undefined,
     })
     .select()
     .single();
@@ -567,11 +570,14 @@ async function launchApifyActor(
   const result = (await response.json()) as ApifyRunResponse;
 
   // Update job with actor_run_id and store tags for webhook processing
+  // Preserve any existing provider_metadata (like output_config)
+  const existingMetadata = (job.provider_metadata as Record<string, unknown>) || {};
   await supabase
     .from('scraper_jobs')
     .update({
       actor_run_id: result.data.id,
       provider_metadata: {
+        ...existingMetadata,
         actId: result.data.actId,
         defaultDatasetId: result.data.defaultDatasetId,
         defaultKeyValueStoreId: result.data.defaultKeyValueStoreId,
