@@ -265,8 +265,8 @@ async function fetchAndSaveResults(
   // Insert ONE consolidated document
   const { error: docError } = await supabase.from('knowledge_base_docs').insert({
     project_id: job.project_id,
-    name: documentName,
-    content: consolidatedContent,
+    filename: documentName,  // Column is 'filename' not 'name'
+    extracted_content: consolidatedContent,  // Column is 'extracted_content' not 'content'
     description: description,
     category: job.target_category || 'research',
     tags: tags,
