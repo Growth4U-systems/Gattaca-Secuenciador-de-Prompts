@@ -662,9 +662,18 @@ function DocumentsTab({
         const trimmedContent = content.trim()
         const firstLine = content.split('\n')[0] || ''
 
-        // Check if JSON (array or object)
-        const isJSON = (trimmedContent.startsWith('[') && trimmedContent.endsWith(']')) ||
-                       (trimmedContent.startsWith('{') && trimmedContent.endsWith('}'))
+        // Check if JSON - try to parse it to be sure
+        let isJSON = false
+        if ((trimmedContent.startsWith('[') || trimmedContent.startsWith('{'))) {
+          try {
+            JSON.parse(trimmedContent)
+            isJSON = true
+          } catch {
+            // Not valid JSON, check if it looks like JSON array/object anyway
+            isJSON = (trimmedContent.startsWith('[') && trimmedContent.includes(']')) ||
+                     (trimmedContent.startsWith('{') && trimmedContent.includes('}'))
+          }
+        }
 
         // Check if CSV (has commas in first line and multiple columns)
         const isCSV = !isJSON && firstLine.includes(',') && firstLine.split(',').length >= 3
