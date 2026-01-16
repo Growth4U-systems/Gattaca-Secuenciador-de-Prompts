@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database, Building2, Plus, X } from 'lucide-react'
+import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database, Building2, Plus, X, Search, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { createProject } from '@/hooks/useProjects'
 import { useToast } from '@/components/ui'
@@ -22,6 +22,7 @@ export default function NewProjectPage() {
     name: '',
     description: '',
     client_id: '',
+    playbook_type: 'ecp' as 'ecp' | 'niche_finder',
   })
   const [showNewClientForm, setShowNewClientForm] = useState(false)
   const [newClientName, setNewClientName] = useState('')
@@ -105,6 +106,7 @@ export default function NewProjectPage() {
         name: formData.name,
         description: formData.description || undefined,
         client_id: formData.client_id,
+        playbook_type: formData.playbook_type,
       })
 
       console.log('Project created:', newProject)
@@ -120,12 +122,21 @@ export default function NewProjectPage() {
     }
   }
 
-  const steps = [
+  const ecpSteps = [
     { icon: Settings, title: 'Configurar variables', description: 'Define las variables que usarás en tus prompts' },
     { icon: FileText, title: 'Subir documentos', description: 'Añade información de producto, competidores, research' },
     { icon: Database, title: 'Crear flujo', description: 'Configura los pasos y prompts de tu estrategia' },
     { icon: Rocket, title: 'Lanzar campañas', description: 'Genera contenido para diferentes nichos' },
   ]
+
+  const nicheFinderSteps = [
+    { icon: Settings, title: 'Configurar búsqueda', description: 'Define contextos de vida y palabras de producto' },
+    { icon: Search, title: 'Buscar en SERP', description: 'Encuentra URLs relevantes en Reddit y foros' },
+    { icon: FileText, title: 'Extraer nichos', description: 'Analiza contenido con IA para identificar nichos' },
+    { icon: Rocket, title: 'Exportar resultados', description: 'Descarga CSV o exporta a Google Sheets' },
+  ]
+
+  const steps = formData.playbook_type === 'niche_finder' ? nicheFinderSteps : ecpSteps
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
@@ -273,6 +284,87 @@ export default function NewProjectPage() {
                   )}
                 </div>
 
+                {/* Playbook Type Selector */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    Tipo de Proyecto
+                    <span className="text-red-500 ml-1">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* ECP Option */}
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, playbook_type: 'ecp' })}
+                      className={`relative p-4 rounded-xl border-2 text-left transition-all ${
+                        formData.playbook_type === 'ecp'
+                          ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`p-2 rounded-lg ${
+                          formData.playbook_type === 'ecp' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          <Zap size={20} />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className={`font-semibold ${
+                            formData.playbook_type === 'ecp' ? 'text-blue-900' : 'text-gray-900'
+                          }`}>
+                            ECP Generator
+                          </h4>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Campañas con flujos de prompts personalizados
+                          </p>
+                        </div>
+                      </div>
+                      {formData.playbook_type === 'ecp' && (
+                        <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                    </button>
+
+                    {/* Niche Finder Option */}
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, playbook_type: 'niche_finder' })}
+                      className={`relative p-4 rounded-xl border-2 text-left transition-all ${
+                        formData.playbook_type === 'niche_finder'
+                          ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`p-2 rounded-lg ${
+                          formData.playbook_type === 'niche_finder' ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          <Search size={20} />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className={`font-semibold ${
+                            formData.playbook_type === 'niche_finder' ? 'text-purple-900' : 'text-gray-900'
+                          }`}>
+                            Buscador de Nichos
+                          </h4>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Encuentra nichos en Reddit y foros
+                          </p>
+                        </div>
+                      </div>
+                      {formData.playbook_type === 'niche_finder' && (
+                        <div className="absolute top-2 right-2 w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label
                     htmlFor="name"
@@ -372,7 +464,9 @@ export default function NewProjectPage() {
 
               <div className="mt-6 pt-4 border-t border-blue-200/50">
                 <p className="text-xs text-blue-700">
-                  <strong>Tip:</strong> Un buen nombre de proyecto incluye el producto y el período de la campaña.
+                  <strong>Tip:</strong> {formData.playbook_type === 'niche_finder'
+                    ? 'El buscador de nichos combina contextos de vida × palabras de producto para encontrar oportunidades.'
+                    : 'Un buen nombre de proyecto incluye el producto y el período de la campaña.'}
                 </p>
               </div>
             </div>
