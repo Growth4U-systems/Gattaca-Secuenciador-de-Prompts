@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { X, Search, Loader2, Check, AlertCircle, Globe, MessageSquare, Star, Briefcase, Play, Tag, ArrowLeft, HelpCircle, Info, Youtube, Facebook, MapPin, Smartphone, Clock, Eye, ChevronDown, ChevronRight, CheckSquare, Square } from 'lucide-react'
+import { X, Search, Loader2, Check, AlertCircle, Globe, MessageSquare, Star, Briefcase, Play, Tag, ArrowLeft, HelpCircle, Info, Youtube, Facebook, MapPin, Smartphone, Clock, Eye, ChevronDown, ChevronRight, CheckSquare, Square, Newspaper } from 'lucide-react'
 import { ScraperType, ScraperTemplate, ScraperOutputFormat, ScraperOutputConfig } from '@/types/scraper.types'
 import { SCRAPER_TEMPLATES } from '@/lib/scraperTemplates'
 import { DocCategory } from '@/types/database.types'
@@ -39,8 +39,9 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   { type: 'playstore_reviews', status: 'enabled', category: 'reviews' },
   { type: 'google_maps_reviews', status: 'pending', category: 'reviews' },
 
-  // Web
+  // Web & News
   { type: 'website', status: 'enabled', category: 'web' },
+  { type: 'google_news', status: 'enabled', category: 'web' },
   { type: 'news_bing', status: 'pending', category: 'web' },
   { type: 'seo_keywords', status: 'pending', category: 'other' },
 ]
@@ -80,6 +81,7 @@ const SCRAPER_ICONS: Record<string, React.ReactNode> = {
   appstore_reviews: <Smartphone size={20} />,
   playstore_reviews: <Smartphone size={20} />,
   google_maps_reviews: <MapPin size={20} />,
+  google_news: <Newspaper size={20} />,
   news_bing: <Globe size={20} />,
   seo_keywords: <Search size={20} />,
 }
@@ -104,8 +106,9 @@ const SCRAPER_COLORS: Record<string, { bg: string; text: string; border: string 
   appstore_reviews: { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' },
   playstore_reviews: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' },
   google_maps_reviews: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
-  // Web
+  // Web & News
   website: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200' },
+  google_news: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
   news_bing: { bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-200' },
   seo_keywords: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
 }
