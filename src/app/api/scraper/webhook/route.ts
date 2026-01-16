@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server-admin';
 import { ApifyWebhookPayload, ApifyDatasetItem, ScraperJob } from '@/types/scraper.types';
-import { getScraperTemplate } from '@/lib/scraperTemplates';
 import { getApiKeyForService } from '@/lib/getUserApiKey';
 
 export const runtime = 'nodejs';
@@ -231,18 +230,12 @@ async function fetchAndSaveResults(
     return;
   }
 
-  // Get template for field extraction
-  const template = getScraperTemplate(job.scraper_type as Parameters<typeof getScraperTemplate>[0]);
-
   // ============================================
-  // CREATE ONE CONSOLIDATED DOCUMENT
+  // CREATE ONE CONSOLIDATED DOCUMENT WITH RAW DATA
   // ============================================
 
-  // Generate consolidated content from all items
-  const consolidatedContent = allItems.map((item, index) => {
-    const textContent = extractTextContent(item, template?.outputFields || []);
-    return `## Item ${index + 1}\n\n${textContent}`;
-  }).join('\n\n---\n\n');
+  // Store the raw Apify output as JSON - no transformation
+  const consolidatedContent = JSON.stringify(allItems, null, 2);
 
   // Get target name from job or generate from first item
   const targetName = job.target_name ||
@@ -320,71 +313,6 @@ function generateAutoTags(scraperType: string, targetName: string): string[] {
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
-
-function extractTextContent(item: ApifyDatasetItem, outputFields: string[]): string {
-  const parts: string[] = [];
-  const textFields = [
-    'text',
-    'content',
-    'caption',
-    'description',
-    'title',
-    'body',
-    'transcript',
-    'review',
-    'comment',
-    ...outputFields,
-  ];
-
-  for (const field of textFields) {
-    const value = item[field];
-    if (value && typeof value === 'string' && value.trim()) {
-      parts.push(`**${field}**: ${value}`);
-    }
-  }
-
-  // Add rating if present
-  if (item.rating !== undefined) {
-    parts.push(`**rating**: ${item.rating}`);
-  }
-
-  // Add date if present
-  const dateFields = ['date', 'timestamp', 'createdAt', 'publishedAt', 'postedAt'];
-  for (const field of dateFields) {
-    if (item[field]) {
-      parts.push(`**${field}**: ${item[field]}`);
-      break;
-    }
-  }
-
-  // Add author if present
-  if (item.author) {
-    const author = typeof item.author === 'object' ? JSON.stringify(item.author) : item.author;
-    parts.push(`**author**: ${author}`);
-  }
-
-  if (parts.length === 0) {
-    return JSON.stringify(item, null, 2);
-  }
-
-  return parts.join('\n\n');
-}
-
-function generateDocumentName(scraperType: string, item: ApifyDatasetItem, index: number): string {
-  // Try to create meaningful name
-  if (item.title && typeof item.title === 'string') {
-    return item.title.substring(0, 100);
-  }
-  if (item.shortCode) {
-    return `Post ${item.shortCode}`;
-  }
-  if (item.id) {
-    return `${scraperType.replace(/_/g, ' ')} - ${item.id}`;
-  }
-
-  const scraperName = scraperType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  return `${scraperName} - Item ${index + 1}`;
-}
 
 function extractUrl(item: ApifyDatasetItem): string | undefined {
   const urlFields = ['url', 'link', 'href', 'postUrl', 'profileUrl', 'pageUrl'];
