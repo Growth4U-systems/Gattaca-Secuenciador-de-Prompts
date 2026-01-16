@@ -64,37 +64,39 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
   tiktok_posts: {
     type: 'tiktok_posts',
     name: 'TikTok Posts',
-    description: 'Scrape posts from TikTok profiles',
+    description: 'Scrape posts from TikTok profiles, hashtags or search queries',
     provider: 'apify',
     actorId: APIFY_ACTORS.TIKTOK_POSTS,
     category: 'social',
     inputSchema: {
       required: ['profiles'],
-      optional: ['resultsPerPage', 'proxyCountryCode', 'profileSorting'],
+      optional: ['resultsPerPage', 'proxyCountryCode', 'profileSorting', 'hashtags', 'searchQueries', 'commentsPerPost'],
       defaults: {
         resultsPerPage: 50,
         proxyCountryCode: 'ES',
         profileSorting: 'latest',
+        commentsPerPost: 0,
       },
     },
-    outputFields: ['id', 'text', 'createTime', 'stats', 'author'],
+    outputFields: ['id', 'text', 'createTime', 'diggCount', 'shareCount', 'playCount', 'commentCount', 'author', 'webVideoUrl', 'comments'],
   },
 
   tiktok_comments: {
     type: 'tiktok_comments',
     name: 'TikTok Comments',
-    description: 'Scrape comments from TikTok posts',
+    description: 'Scrape comments from TikTok videos or profiles',
     provider: 'apify',
     actorId: APIFY_ACTORS.TIKTOK_COMMENTS,
     category: 'social',
     inputSchema: {
       required: ['postURLs'],
-      optional: ['commentsPerPost'],
+      optional: ['commentsPerPost', 'maxRepliesPerComment'],
       defaults: {
         commentsPerPost: 100,
+        maxRepliesPerComment: 0,
       },
     },
-    outputFields: ['text', 'createTime', 'likesCount', 'user'],
+    outputFields: ['text', 'createTime', 'diggCount', 'replyCommentTotal', 'user', 'videoWebUrl'],
   },
 
   linkedin_company_posts: {
@@ -455,7 +457,8 @@ export function buildScraperInput(
   // Ensure array fields are properly typed
   // Some fields need to be arrays even if user passes a string
   const arrayFields = ['username', 'profiles', 'postURLs', 'postIds', 'startUrls',
-    'youtube_channels', 'languages', 'stars', 'videoUrls', 'channelUrls', 'companyUrls', 'queries'];
+    'youtube_channels', 'languages', 'stars', 'videoUrls', 'channelUrls', 'companyUrls', 'queries',
+    'hashtags', 'searchQueries', 'placeUrls'];
 
   for (const field of arrayFields) {
     if (merged[field] !== undefined) {
@@ -475,7 +478,8 @@ export function buildScraperInput(
 
   // Ensure number fields are numbers
   const numberFields = ['resultsLimit', 'limit', 'count', 'max_reviews', 'maxItems',
-    'resultsPerPage', 'commentsPerPost', 'maxReviews', 'maxComments', 'maxPages', 'maxArticles'];
+    'resultsPerPage', 'commentsPerPost', 'maxReviews', 'maxComments', 'maxPages', 'maxArticles',
+    'maxRepliesPerComment'];
 
   for (const field of numberFields) {
     if (merged[field] !== undefined && typeof merged[field] === 'string') {
