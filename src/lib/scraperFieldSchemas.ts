@@ -753,9 +753,9 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         key: 'urls',
         type: 'url-array',
         label: 'URLs de empresas en LinkedIn',
-        description: 'URLs completas de las páginas de empresa en LinkedIn. Requiere cookies de LinkedIn Premium.',
+        description: 'URLs completas de las páginas de empresa en LinkedIn',
         placeholder: 'https://www.linkedin.com/company/revolut/',
-        helpText: 'Una URL por línea. Este scraper requiere una cuenta LinkedIn Premium.',
+        helpText: 'Una URL por línea',
         required: true,
         validation: {
           pattern: /^https:\/\/(www\.)?linkedin\.com\/company\/[^/]+\/?$/,
@@ -764,6 +764,18 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         examples: [
           'https://www.linkedin.com/company/revolut/',
           'https://www.linkedin.com/company/n26/',
+        ],
+      },
+      list_cookies: {
+        key: 'list_cookies',
+        type: 'text',
+        label: 'Cookies de LinkedIn Premium',
+        description: 'Cookies de tu sesión de LinkedIn Premium en formato JSON',
+        placeholder: '[{"name": "li_at", "value": "...", "domain": ".linkedin.com"}]',
+        helpText: 'Exporta tus cookies de LinkedIn usando una extensión como "EditThisCookie" o "Cookie-Editor". Necesitas LinkedIn Premium.',
+        required: true,
+        examples: [
+          '[{"name": "li_at", "value": "AQE...", "domain": ".linkedin.com", "path": "/"}]',
         ],
       },
     },

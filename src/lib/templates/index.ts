@@ -7,6 +7,7 @@ import type { PlaybookTemplate } from './types'
 import { getECPPositioningTemplate } from './ecp-positioning-playbook'
 import { getNicheFinderPlaybookTemplate } from './niche-finder-playbook'
 import { getCompetitorAnalysisTemplate } from './competitor-analysis-playbook'
+import { getSignalBasedOutreachTemplate } from './signal-based-outreach-playbook'
 
 // Re-export types
 export * from './types'
@@ -15,6 +16,7 @@ export * from './types'
 export { getECPPositioningTemplate } from './ecp-positioning-playbook'
 export { getNicheFinderPlaybookTemplate } from './niche-finder-playbook'
 export { getCompetitorAnalysisTemplate } from './competitor-analysis-playbook'
+export { getSignalBasedOutreachTemplate } from './signal-based-outreach-playbook'
 
 // Re-export scraper utilities from niche finder
 export {
@@ -27,7 +29,7 @@ export {
 /**
  * Playbook type literals
  */
-export type PlaybookType = 'ecp' | 'niche_finder' | 'competitor_analysis'
+export type PlaybookType = 'ecp' | 'niche_finder' | 'competitor_analysis' | 'signal_based_outreach'
 
 /**
  * Get a playbook template by type
@@ -42,6 +44,8 @@ export function getPlaybookTemplate(type: PlaybookType | string): PlaybookTempla
       return getNicheFinderPlaybookTemplate()
     case 'competitor_analysis':
       return getCompetitorAnalysisTemplate()
+    case 'signal_based_outreach':
+      return getSignalBasedOutreachTemplate()
     default:
       console.warn(`Unknown playbook type: ${type}`)
       return null
@@ -57,6 +61,7 @@ export function getAllPlaybookTemplates(): PlaybookTemplate[] {
     getECPPositioningTemplate(),
     getNicheFinderPlaybookTemplate(),
     getCompetitorAnalysisTemplate(),
+    getSignalBasedOutreachTemplate(),
   ]
 }
 
@@ -86,7 +91,7 @@ export function getPlaybookTemplatesMeta(): Array<{
  * Check if a playbook type has a template
  */
 export function hasPlaybookTemplate(type: string): boolean {
-  return ['ecp', 'niche_finder', 'competitor_analysis'].includes(type)
+  return ['ecp', 'niche_finder', 'competitor_analysis', 'signal_based_outreach'].includes(type)
 }
 
 /**
