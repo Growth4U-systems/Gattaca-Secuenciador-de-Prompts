@@ -240,28 +240,119 @@ if (template) {
 
 ## Cómo Agregar un Nuevo Playbook
 
+### Resumen de Archivos a Modificar
+
+| Archivo | Qué agregar |
+|---------|-------------|
+| `src/lib/templates/[nombre]-playbook.ts` | Template con prompts y flow_config |
+| `src/lib/templates/index.ts` | Import y registro en getPlaybookTemplate() |
+| `src/types/database.types.ts` | Tipo en PlaybookType |
+| `src/lib/playbook-metadata.ts` | Metadata para UI (icon, description, steps) |
+| `supabase/migrations/` | 2 migraciones: enum + insert |
+| `docs/playbook-templates.md` | Documentación del template |
+
+---
+
 ### Paso 1: Crear el Template TypeScript
 
 1. Crear archivo en `src/lib/templates/[nombre]-playbook.ts`
 2. Implementar la interface `PlaybookTemplate`
 3. Exportar una función `get[Nombre]Template(): PlaybookTemplate`
 
-### Paso 2: Registrar en index.ts
+**Estructura mínima del template:**
 
 ```typescript
-// En src/lib/templates/index.ts
+import type { PlaybookTemplate } from './types'
+
+export function getNuevoPlaybookTemplate(): PlaybookTemplate {
+  return {
+    template_id: 'nuevo_playbook_v1',
+    name: 'Nombre del Playbook',
+    description: 'Descripción breve',
+    playbook_type: 'nuevo_playbook',
+
+    flow_config: {
+      version: '1.0',
+      description: 'Descripción del flujo',
+      steps: [
+        {
+          id: 'step-uuid-1',
+          name: 'Paso 1',
+          order: 0,
+          type: 'llm',
+          model: 'openai/gpt-4o-mini',
+          temperature: 0.7,
+          max_tokens: 4000,
+          output_format: 'markdown',
+          description: 'Descripción del paso',
+          prompt: `Tu prompt aquí con {{variables}}`,
+          auto_receive_from: [], // IDs de pasos anteriores
+          base_doc_ids: ['product', 'research'], // Categorías de docs
+        },
+        // ... más pasos
+      ],
+    },
+
+    variable_definitions: [
+      {
+        name: 'variable_name',
+        default_value: '',
+        required: true,
+        description: 'Descripción para el usuario',
+      },
+    ],
+
+    required_documents: {
+      product: ['Descripción del producto'],
+      competitor: [],
+      research: ['Datos de mercado'],
+    },
+
+    campaign_docs_guide: `
+## Documentos Recomendados
+
+### Producto
+- Descripción del producto
+
+### Research
+- Datos de mercado
+`,
+  }
+}
+```
+
+---
+
+### Paso 2: Registrar en index.ts
+
+En `src/lib/templates/index.ts`:
+
+```typescript
+// 1. Agregar import
 import { getNuevoPlaybookTemplate } from './nuevo-playbook'
 
-// Agregar al switch de getPlaybookTemplate()
+// 2. Agregar al switch de getPlaybookTemplate()
 case 'nuevo_playbook':
   return getNuevoPlaybookTemplate()
 
-// Agregar a getAllPlaybookTemplates()
-getNuevoPlaybookTemplate(),
+// 3. Agregar a getAllPlaybookTemplates()
+export function getAllPlaybookTemplates(): PlaybookTemplate[] {
+  return [
+    getECPPositioningTemplate(),
+    getNicheFinderPlaybookTemplate(),
+    getCompetitorAnalysisTemplate(),
+    getSignalBasedOutreachTemplate(),
+    getNuevoPlaybookTemplate(), // ← Agregar aquí
+  ]
+}
 
-// Agregar al array de hasPlaybookTemplate()
-['ecp', 'niche_finder', 'competitor_analysis', 'signal_based_outreach', 'nuevo_playbook']
+// 4. Agregar al array de hasPlaybookTemplate()
+export function hasPlaybookTemplate(type: string): boolean {
+  return ['ecp', 'niche_finder', 'competitor_analysis', 'signal_based_outreach', 'nuevo_playbook'].includes(type)
+}
 ```
+
+---
 
 ### Paso 3: Actualizar Tipos
 
@@ -270,7 +361,81 @@ En `src/types/database.types.ts`:
 export type PlaybookType = 'ecp' | 'niche_finder' | 'competitor_analysis' | 'signal_based_outreach' | 'nuevo_playbook' | 'custom'
 ```
 
-### Paso 4: Migraciones de Base de Datos (IMPORTANTE)
+---
+
+### Paso 4: Agregar Metadata para UI
+
+En `src/lib/playbook-metadata.ts`, agregar al objeto `playbookMetadata`:
+
+```typescript
+export const playbookMetadata: Record<string, PlaybookMeta> = {
+  // ... otros playbooks ...
+
+  nuevo_playbook: {
+    // Información básica (requerida)
+    purpose: 'Qué hace este playbook',
+    whenToUse: [
+      'Situación 1 donde usarlo',
+      'Situación 2 donde usarlo',
+    ],
+    outcome: 'Qué resultado produce',
+    relatedPlaybooks: ['ecp', 'niche_finder'],
+    targetAudience: 'Para quién es',
+    steps: {
+      paso_1: 'Descripción breve del paso 1',
+      paso_2: 'Descripción breve del paso 2',
+    },
+
+    // Información extendida (opcional pero recomendada)
+    icon: '🚀', // Emoji para el playbook
+    description: 'Descripción larga del playbook...',
+    objectives: [
+      'Objetivo 1',
+      'Objetivo 2',
+    ],
+    requirements: [
+      'Requisito 1',
+      'Requisito 2',
+    ],
+    duration: '15-30 minutos',
+    detailedSteps: {
+      paso_1: {
+        brief: 'Descripción corta',
+        detailed: 'Descripción larga del paso',
+        tips: ['Tip 1', 'Tip 2'],
+      },
+    },
+    examples: [
+      {
+        title: 'Caso de uso',
+        description: 'Descripción del ejemplo',
+      },
+    ],
+    faqs: [
+      {
+        question: 'Pregunta frecuente?',
+        answer: 'Respuesta',
+      },
+    ],
+  },
+}
+
+// También actualizar getPlaybookName()
+export const getPlaybookName = (type: string): string => {
+  const names: Record<string, string> = {
+    niche_finder: 'Niche Finder',
+    ecp: 'ECP Positioning',
+    competitor_analysis: 'Competitor Analysis',
+    signal_based_outreach: 'Signal-Based Outreach',
+    nuevo_playbook: 'Nuevo Playbook', // ← Agregar
+  }
+  return names[type] || type
+}
+```
+
+---
+
+### Paso 5: Migraciones de Base de Datos (IMPORTANTE)
 
 Para que el playbook aparezca en la UI, se necesitan **DOS migraciones separadas**:
 
@@ -317,9 +482,11 @@ BEGIN
 END $$;
 ```
 
-**NOTA**: Si las dos operaciones están en el mismo archivo, Postgres dará error `unsafe use of new value`. El enum value necesita ser commiteado antes de usarse.
+**⚠️ NOTA IMPORTANTE**: Si las dos operaciones están en el mismo archivo, Postgres dará error `unsafe use of new value`. El enum value necesita ser commiteado antes de usarse en un INSERT.
 
-### Paso 5: Aplicar Migraciones
+---
+
+### Paso 6: Aplicar Migraciones
 
 ```bash
 npx supabase db push
@@ -331,22 +498,48 @@ npx supabase migration repair --status reverted YYYYMMDDHHMMSS
 npx supabase db push
 ```
 
-### Paso 6: Agregar a la UI (opcional)
+---
 
-Si quieres que aparezca en `PlaybooksDashboard.tsx` (hardcoded):
+### Paso 7: Documentar el Playbook
+
+1. Actualizar la tabla de verificación en este documento
+2. Agregar una sección con detalles del template
+3. Si es complejo, crear un instructivo separado en `docs/[nombre]-playbook.md`
+
+---
+
+### Paso 8 (Opcional): Agregar a PlaybooksDashboard
+
+Si quieres que aparezca también en la vista estática `PlaybooksDashboard.tsx`:
 
 ```typescript
-// En PLAYBOOK_TEMPLATES array
+// En src/components/playbooks/PlaybooksDashboard.tsx
+// Agregar al array PLAYBOOK_TEMPLATES
+
 {
   id: 'nuevo_playbook',
   name: 'Nuevo Playbook',
   description: 'Descripcion corta',
-  icon: IconComponent,
+  icon: IconComponent, // Importar de lucide-react
   color: 'blue', // blue, purple, green, orange
   status: 'available',
   badge: 'Beta', // opcional
 },
 ```
+
+---
+
+### Checklist Final
+
+- [ ] Template creado en `src/lib/templates/`
+- [ ] Registrado en `index.ts` (import, switch, array)
+- [ ] Tipo agregado a `database.types.ts`
+- [ ] Metadata en `playbook-metadata.ts`
+- [ ] Migración 1: ALTER TYPE + constraint
+- [ ] Migración 2: INSERT playbook
+- [ ] Migraciones aplicadas con `npx supabase db push`
+- [ ] Documentación actualizada
+- [ ] (Opcional) Agregado a PlaybooksDashboard
 
 ---
 
