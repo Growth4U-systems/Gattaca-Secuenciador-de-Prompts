@@ -14,7 +14,9 @@ import {
   Target,
   X,
   Trash2,
+  Pencil,
 } from 'lucide-react'
+import type { Client } from '@/hooks/useClients'
 import { useClients } from '@/hooks/useClients'
 import { useProjects } from '@/hooks/useProjects'
 
@@ -50,7 +52,7 @@ function ClientCardSkeleton() {
 }
 
 export default function HomePage() {
-  const { clients, loading: loadingClients, error: errorClients, createClient, deleteClient } = useClients()
+  const { clients, loading: loadingClients, error: errorClients, createClient, updateClient, deleteClient } = useClients()
   const { projects, loading: loadingProjects } = useProjects()
   const [searchQuery, setSearchQuery] = useState('')
   const [showNewClientModal, setShowNewClientModal] = useState(false)
@@ -58,6 +60,9 @@ export default function HomePage() {
   const [creatingClient, setCreatingClient] = useState(false)
   const [deletingClientId, setDeletingClientId] = useState<string | null>(null)
   const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [clientToEdit, setClientToEdit] = useState<Client | null>(null)
+  const [editForm, setEditForm] = useState({ name: '', industry: '', description: '' })
+  const [updatingClient, setUpdatingClient] = useState(false)
 
   const loading = loadingClients || loadingProjects
   const error = errorClients
@@ -105,6 +110,32 @@ export default function HomePage() {
       console.error('Error deleting client:', err)
     } finally {
       setDeletingClientId(null)
+    }
+  }
+
+  const handleEditClient = (client: Client) => {
+    setClientToEdit(client)
+    setEditForm({
+      name: client.name,
+      industry: client.industry || '',
+      description: client.description || '',
+    })
+  }
+
+  const handleUpdateClient = async () => {
+    if (!clientToEdit || !editForm.name.trim()) return
+    setUpdatingClient(true)
+    try {
+      await updateClient(clientToEdit.id, {
+        name: editForm.name.trim(),
+        industry: editForm.industry.trim() || null,
+        description: editForm.description.trim() || null,
+      })
+      setClientToEdit(null)
+    } catch (err) {
+      console.error('Error updating client:', err)
+    } finally {
+      setUpdatingClient(false)
     }
   }
 
@@ -288,21 +319,8 @@ export default function HomePage() {
               return (
                 <div
                   key={client.id}
-                  className="group bg-white rounded-2xl border border-gray-100 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50 transition-all duration-300 p-6 relative"
+                  className="group bg-white rounded-2xl border border-gray-100 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50 transition-all duration-300 p-6"
                 >
-                  {/* Delete button */}
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      setClientToDelete({ id: client.id, name: client.name })
-                    }}
-                    className="absolute top-3 right-3 p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                    title="Eliminar cliente"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-
                   <Link href={`/clients/${client.id}`} className="block">
                     <div className="flex items-start gap-4">
                       <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl group-hover:from-blue-100 group-hover:to-indigo-200 transition-colors">
@@ -315,7 +333,7 @@ export default function HomePage() {
                           </h3>
                           <ChevronRight
                             size={18}
-                            className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all"
+                            className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all flex-shrink-0"
                           />
                         </div>
                         <p className="text-sm text-gray-500 mt-0.5">
@@ -351,6 +369,32 @@ export default function HomePage() {
                       </div>
                     )}
                   </Link>
+
+                  {/* Action buttons - footer */}
+                  <div className="mt-4 pt-3 border-t border-gray-100 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleEditClient(client)
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    >
+                      <Pencil size={14} />
+                      Editar
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setClientToDelete({ id: client.id, name: client.name })
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={14} />
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
               )
             })}
@@ -459,6 +503,84 @@ export default function HomePage() {
                     </>
                   ) : (
                     'Eliminar'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Client Modal */}
+      {clientToEdit && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900">Editar Cliente</h2>
+              <button
+                onClick={() => setClientToEdit(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nombre del cliente *
+                </label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  placeholder="Ej: Acme Corp"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Industria
+                </label>
+                <input
+                  type="text"
+                  value={editForm.industry}
+                  onChange={(e) => setEditForm({ ...editForm, industry: e.target.value })}
+                  placeholder="Ej: Tecnología, Retail, Finanzas..."
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Descripción
+                </label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  placeholder="Breve descripción del cliente..."
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                />
+              </div>
+              <div className="pt-2 flex gap-3 justify-end">
+                <button
+                  onClick={() => setClientToEdit(null)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleUpdateClient}
+                  disabled={!editForm.name.trim() || updatingClient}
+                  className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {updatingClient ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    'Guardar Cambios'
                   )}
                 </button>
               </div>

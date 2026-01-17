@@ -9,7 +9,7 @@ import CSVTableViewer from './CSVTableViewer'
 import JSONViewer from './JSONViewer'
 
 type DocumentTier = 'T1' | 'T2' | 'T3'
-type DocumentSourceType = 'manual' | 'scraper' | 'playbook' | 'api' | 'import'
+type DocumentSourceType = 'import' | 'scraper' | 'playbook' | 'api'
 
 interface Document {
   id: string
@@ -53,12 +53,14 @@ const CATEGORY_STYLES: Record<string, { bg: string; text: string; icon: string }
   output: { bg: 'bg-orange-50', text: 'text-orange-700', icon: '📝' },
 }
 
-const SOURCE_TYPE_STYLES: Record<DocumentSourceType, { bg: string; text: string; icon: string; label: string }> = {
-  manual: { bg: 'bg-gray-50', text: 'text-gray-600', icon: '📤', label: 'Subido' },
+const SOURCE_TYPE_STYLES: Record<string, { bg: string; text: string; icon: string; label: string }> = {
+  import: { bg: 'bg-gray-50', text: 'text-gray-600', icon: '📥', label: 'Importado' },
   scraper: { bg: 'bg-green-50', text: 'text-green-600', icon: '🔍', label: 'Scraper' },
   playbook: { bg: 'bg-blue-50', text: 'text-blue-600', icon: '🎯', label: 'Playbook' },
   api: { bg: 'bg-purple-50', text: 'text-purple-600', icon: '🔗', label: 'API' },
-  import: { bg: 'bg-amber-50', text: 'text-amber-600', icon: '📥', label: 'Importado' },
+  // Legacy values mapped to import
+  manual: { bg: 'bg-gray-50', text: 'text-gray-600', icon: '📥', label: 'Importado' },
+  upload: { bg: 'bg-gray-50', text: 'text-gray-600', icon: '📥', label: 'Importado' },
 }
 
 const TIER_STYLES: Record<DocumentTier, { bg: string; text: string; label: string; description: string }> = {
@@ -770,17 +772,17 @@ export default function DocumentList({
                     <span
                       className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${
                         doc.source_type
-                          ? (SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.bg || 'bg-gray-50')
+                          ? (SOURCE_TYPE_STYLES[doc.source_type]?.bg || 'bg-gray-50')
                           : 'bg-gray-50'
                       } ${
                         doc.source_type
-                          ? (SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.text || 'text-gray-600')
+                          ? (SOURCE_TYPE_STYLES[doc.source_type]?.text || 'text-gray-600')
                           : 'text-gray-600'
                       }`}
-                      title={`Origen: ${doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.label || doc.source_type) : 'Subido'}`}
+                      title={`Origen: ${doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.label || doc.source_type) : 'Importado'}`}
                     >
-                      <span>{doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.icon || '📄') : '📤'}</span>
-                      {doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.label || doc.source_type) : 'Subido'}
+                      <span>{doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.icon || '📥') : '📥'}</span>
+                      {doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.label || doc.source_type) : 'Importado'}
                     </span>
                     {getCategoryBadge(doc.category)}
                     {doc.token_count && (
