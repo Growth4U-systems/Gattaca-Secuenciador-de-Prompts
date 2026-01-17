@@ -516,9 +516,10 @@ function DocumentsTab({
   const [viewMode, setViewMode] = useState<'list' | 'folders'>('list')
   const [showNewFolderInput, setShowNewFolderInput] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
+  const [manualFolders, setManualFolders] = useState<string[]>([])
 
-  // Get existing folders from documents
-  const existingFolders = getFolders(documents)
+  // Get existing folders from documents + manually created empty folders
+  const existingFolders = [...new Set([...getFolders(documents), ...manualFolders])].sort()
 
   // Load campaigns for assignment
   useEffect(() => {
@@ -568,8 +569,11 @@ function DocumentsTab({
 
   const handleCreateFolder = () => {
     if (!newFolderName.trim()) return
+    const folderName = newFolderName.trim()
+    // Add to manual folders list so it appears in the UI
+    setManualFolders(prev => [...new Set([...prev, folderName])])
     setShowNewFolderInput(false)
-    toast.success('Carpeta lista', `La carpeta "${newFolderName}" está disponible. Mueve documentos a ella.`)
+    toast.success('Carpeta creada', `La carpeta "${folderName}" está lista.`)
     setNewFolderName('')
   }
 
@@ -741,6 +745,7 @@ function DocumentsTab({
           onDocumentClick={setViewingDoc}
           showCreateFolder={false}
           emptyMessage="No hay documentos en este proyecto"
+          emptyFolders={manualFolders}
         />
       ) : (
         <DocumentList
