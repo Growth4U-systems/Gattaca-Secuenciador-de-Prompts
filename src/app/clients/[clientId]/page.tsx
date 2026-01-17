@@ -18,7 +18,7 @@ import {
   Rocket,
 } from 'lucide-react'
 import { useClient } from '@/hooks/useClients'
-import { useAllClientDocuments, type Document, updateDocumentTier, type DocumentTier } from '@/hooks/useDocuments'
+import { useAllClientDocuments, type Document } from '@/hooks/useDocuments'
 import DocumentList from '@/components/documents/DocumentList'
 import { useToast } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
@@ -83,16 +83,6 @@ export default function ClientPage({
 
     loadProjects()
   }, [params.clientId])
-
-  const handleTierChange = async (docId: string, tier: DocumentTier) => {
-    try {
-      await updateDocumentTier(docId, tier)
-      toast.success('Tier actualizado', `Documento movido a ${tier}`)
-      reloadDocs()
-    } catch (err) {
-      toast.error('Error', 'No se pudo actualizar el tier')
-    }
-  }
 
   const tabs = [
     { id: 'overview' as const, label: 'Resumen', icon: Building2 },
@@ -237,7 +227,6 @@ export default function ClientPage({
               <ContextLakeTab
                 documents={documents}
                 loading={docsLoading}
-                onTierChange={handleTierChange}
                 onReload={reloadDocs}
                 projectsMap={projectsMap}
               />
@@ -268,17 +257,15 @@ function OverviewTab({
   projects: Project[]
   documents: Document[]
 }) {
-  // Stats
-  const tierStats = {
-    T1: documents.filter(d => d.tier === 'T1').length,
-    T2: documents.filter(d => d.tier === 'T2').length,
-    T3: documents.filter(d => d.tier === 'T3').length,
-  }
-
+  // Stats by source type (cast to string for legacy values from DB)
   const sourceStats = {
-    manual: documents.filter(d => d.source_type === 'manual').length,
+    import: documents.filter(d => {
+      const sourceType = d.source_type as string
+      return sourceType === 'import' || sourceType === 'manual' || sourceType === 'upload'
+    }).length,
     scraper: documents.filter(d => d.source_type === 'scraper').length,
     playbook: documents.filter(d => d.source_type === 'playbook').length,
+    api: documents.filter(d => d.source_type === 'api').length,
   }
 
   return (
@@ -302,7 +289,7 @@ function OverviewTab({
           </div>
           <h3 className="font-medium text-purple-900">Context Lake</h3>
           <p className="text-sm text-purple-600 mt-1">
-            T1: {tierStats.T1} | T2: {tierStats.T2} | T3: {tierStats.T3}
+            Documentos del cliente
           </p>
         </div>
 
@@ -312,7 +299,7 @@ function OverviewTab({
             <Database className="w-8 h-8 text-green-600" />
             <div className="text-right">
               <span className="text-sm text-green-600">
-                📤 {sourceStats.manual} | 🔍 {sourceStats.scraper} | 🎯 {sourceStats.playbook}
+                📥 {sourceStats.import} | 🔍 {sourceStats.scraper} | 🎯 {sourceStats.playbook} | 🔗 {sourceStats.api}
               </span>
             </div>
           </div>
@@ -355,13 +342,11 @@ function OverviewTab({
 function ContextLakeTab({
   documents,
   loading,
-  onTierChange,
   onReload,
   projectsMap,
 }: {
   documents: Document[]
   loading: boolean
-  onTierChange: (docId: string, tier: DocumentTier) => Promise<void>
   onReload: () => void
   projectsMap: Record<string, string>
 }) {
@@ -447,22 +432,6 @@ function ContextLakeTab({
         </div>
       </div>
 
-      {/* Tier Legend */}
-      <div className="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-xl">
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 text-xs font-medium rounded bg-emerald-50 text-emerald-700">T1</span>
-          <span className="text-sm text-gray-600">Siempre incluido en prompts</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 text-xs font-medium rounded bg-yellow-50 text-yellow-700">T2</span>
-          <span className="text-sm text-gray-600">Incluido si es relevante</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-500">T3</span>
-          <span className="text-sm text-gray-600">Archivo / Opcional</span>
-        </div>
-      </div>
-
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
@@ -472,7 +441,6 @@ function ContextLakeTab({
           documents={filteredDocuments as any[]}
           onDelete={handleDelete}
           onView={() => {}}
-          onTierChange={onTierChange}
           showContextLakeFilters={true}
         />
       )}

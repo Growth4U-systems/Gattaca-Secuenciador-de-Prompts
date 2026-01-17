@@ -920,13 +920,14 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
                         const scraper = SCRAPER_TEMPLATES[type]
                         const colors = SCRAPER_COLORS[type] || { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' }
                         const isEnabled = status === 'enabled'
+                        const typeStats = scraperStats[type]
 
                         return (
                           <button
                             key={type}
                             onClick={() => isEnabled && handleSelectScraper(type)}
                             disabled={!isEnabled}
-                            className={`relative flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
+                            className={`relative flex flex-col p-3 rounded-xl border-2 text-left transition-all ${
                               isEnabled
                                 ? `${colors.border} ${colors.bg} hover:shadow-md cursor-pointer group`
                                 : 'border-gray-200 bg-gray-50 cursor-not-allowed'
@@ -942,25 +943,62 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
                               </div>
                             )}
 
-                            <div className={`p-2 rounded-lg ${isEnabled ? colors.bg : 'bg-gray-100'} ${isEnabled ? colors.text : 'text-gray-400'} ${isEnabled ? 'group-hover:scale-110' : ''} transition-transform`}>
-                              {SCRAPER_ICONS[type] || <Globe size={20} />}
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-lg ${isEnabled ? colors.bg : 'bg-gray-100'} ${isEnabled ? colors.text : 'text-gray-400'} ${isEnabled ? 'group-hover:scale-110' : ''} transition-transform`}>
+                                {SCRAPER_ICONS[type] || <Globe size={20} />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <h4 className={`font-medium text-sm truncate ${isEnabled ? 'text-gray-900' : 'text-gray-500'}`}>
+                                    {scraper?.name || type}
+                                  </h4>
+                                  {isEnabled && (
+                                    <span className="flex-shrink-0 w-2 h-2 bg-green-500 rounded-full" title="Activo" />
+                                  )}
+                                </div>
+                                <p
+                                  className={`text-xs line-clamp-1 ${isEnabled ? 'text-gray-500' : 'text-gray-400'}`}
+                                  title={SCRAPER_DESCRIPTIONS[type] || scraper?.description || ''}
+                                >
+                                  {SCRAPER_DESCRIPTIONS[type] || scraper?.description || ''}
+                                </p>
+                              </div>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <h4 className={`font-medium text-sm truncate ${isEnabled ? 'text-gray-900' : 'text-gray-500'}`}>
-                                  {scraper?.name || type}
-                                </h4>
-                                {isEnabled && (
-                                  <span className="flex-shrink-0 w-2 h-2 bg-green-500 rounded-full" title="Activo" />
+
+                            {/* Execution Stats */}
+                            {isEnabled && !loadingStats && (
+                              <div className="mt-2 pt-2 border-t border-gray-200/50 flex items-center gap-1.5 text-[10px]">
+                                {typeStats ? (
+                                  <>
+                                    <span
+                                      className={`w-1.5 h-1.5 rounded-full ${
+                                        typeStats.last_status === 'completed'
+                                          ? 'bg-green-500'
+                                          : typeStats.last_status === 'failed'
+                                          ? 'bg-red-500'
+                                          : 'bg-yellow-500'
+                                      }`}
+                                    />
+                                    <span className="text-gray-600 font-medium">
+                                      {typeStats.execution_count} run{typeStats.execution_count !== 1 ? 's' : ''}
+                                    </span>
+                                    <span className="text-gray-400">·</span>
+                                    <span className={`${typeStats.last_status === 'failed' ? 'text-red-600' : 'text-gray-500'}`}>
+                                      {typeStats.last_status === 'failed'
+                                        ? 'Last failed'
+                                        : typeStats.last_run_at
+                                        ? formatRelativeTime(typeStats.last_run_at)
+                                        : ''}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                                    <span className="text-gray-400">Never run</span>
+                                  </>
                                 )}
                               </div>
-                              <p
-                                className={`text-xs line-clamp-2 ${isEnabled ? 'text-gray-500' : 'text-gray-400'}`}
-                                title={SCRAPER_DESCRIPTIONS[type] || scraper?.description || ''}
-                              >
-                                {SCRAPER_DESCRIPTIONS[type] || scraper?.description || ''}
-                              </p>
-                            </div>
+                            )}
                           </button>
                         )
                       })}

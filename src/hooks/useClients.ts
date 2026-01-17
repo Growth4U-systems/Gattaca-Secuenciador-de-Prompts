@@ -128,12 +128,29 @@ export function useClients(agencyId?: string) {
     await loadClients()
   }, [loadClients])
 
+  // Update client function
+  const updateClientFn = useCallback(async (
+    clientId: string,
+    updates: ClientUpdate
+  ): Promise<Client> => {
+    const { data, error } = await supabase
+      .from('clients')
+      .update(updates)
+      .eq('id', clientId)
+      .select()
+      .single()
+    if (error) throw error
+    await loadClients()
+    return data
+  }, [loadClients])
+
   return {
     clients,
     loading,
     error,
     refetch: loadClients,
     createClient: createClientFn,
+    updateClient: updateClientFn,
     deleteClient: deleteClientFn,
   }
 }
