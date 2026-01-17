@@ -9,6 +9,7 @@ type SubTab = 'variables' | 'flow'
 
 interface SetupTabProps {
   projectId: string
+  clientId: string
   initialVariables: any[]
   documents: any[]
   onVariablesUpdate?: () => void
@@ -17,6 +18,7 @@ interface SetupTabProps {
 
 export default function SetupTab({
   projectId,
+  clientId,
   initialVariables,
   documents,
   onVariablesUpdate,
@@ -78,7 +80,7 @@ export default function SetupTab({
       )}
 
       {activeSubTab === 'flow' && (
-        <FlowSetup projectId={projectId} documents={documents} />
+        <FlowSetup projectId={projectId} clientId={clientId} documents={documents} />
       )}
     </div>
   )

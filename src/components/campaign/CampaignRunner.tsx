@@ -93,6 +93,10 @@ interface Project {
   id: string
   name: string
   client_id?: string
+  client?: {
+    id: string
+    name: string
+  }
   variable_definitions: Array<{
     name: string
     default_value: string
@@ -2241,6 +2245,8 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
         return (
           <CampaignFlowEditor
             campaignId={editingFlowCampaignId}
+            projectId={projectId}
+            clientId={project?.client?.id || ''}
             initialFlowConfig={editingCampaign?.flow_config || project?.flow_config || null}
             documents={filteredDocuments}
             projectVariables={project?.variable_definitions || []}

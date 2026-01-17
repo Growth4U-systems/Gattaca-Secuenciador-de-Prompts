@@ -9,10 +9,11 @@ import { useToast, useModal } from '@/components/ui'
 
 interface FlowSetupProps {
   projectId: string
+  clientId: string
   documents: any[]
 }
 
-export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
+export default function FlowSetup({ projectId, clientId, documents }: FlowSetupProps) {
   const toast = useToast()
   const modal = useModal()
 
@@ -471,6 +472,8 @@ export default function FlowSetup({ projectId, documents }: FlowSetupProps) {
       {editingStep && (
         <StepEditor
           step={editingStep}
+          projectId={projectId}
+          clientId={clientId}
           documents={documents}
           allSteps={flowConfig.steps}
           projectVariables={projectVariables}

@@ -8,9 +8,12 @@ import { usePromptValidator } from '@/hooks/usePromptValidator'
 import { findMatchingDocument, getConfidenceLabel } from '@/lib/documentMatcher'
 import PromptValidationPanel, { ValidationBadge } from './PromptValidationPanel'
 import { OpenRouterModelSelector } from '@/components/openrouter'
+import DocumentSelector from '@/components/documents/DocumentSelector'
 
 interface StepEditorProps {
   step: FlowStep
+  projectId: string
+  clientId: string
   documents: any[]
   allSteps: FlowStep[]
   projectVariables: Array<{ name: string; default_value?: string; description?: string }>
@@ -62,6 +65,8 @@ const LLM_MODELS: { value: string; label: string; provider: string; context: str
 
 export default function StepEditor({
   step,
+  projectId,
+  clientId,
   documents,
   allSteps,
   projectVariables,
@@ -87,6 +92,9 @@ export default function StepEditor({
   // Required documents state
   const [requiredDocsInput, setRequiredDocsInput] = useState('')
   const [showRequiredDocsInput, setShowRequiredDocsInput] = useState(false)
+
+  // Document selector modal
+  const [showDocumentSelector, setShowDocumentSelector] = useState(false)
 
   // Get declared variables (for validation) - only from project and campaign config
   const declaredVariables = useMemo(() => {
@@ -762,10 +770,20 @@ export default function StepEditor({
 
           {/* Base Documents Section */}
           <div className="bg-gradient-to-br from-blue-50 to-white border border-blue-200 rounded-xl p-5">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <FileText size={18} className="text-blue-500" />
-              Documentos Base
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <FileText size={18} className="text-blue-500" />
+                Documentos Base
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowDocumentSelector(true)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                <Database size={14} />
+                Explorar Carpetas
+              </button>
+            </div>
 
             {/* Search Input */}
             <div className="relative mb-4">
@@ -1552,6 +1570,28 @@ export default function StepEditor({
           </p>
         </div>
       </div>
+
+      {/* Document Selector Modal */}
+      {showDocumentSelector && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-2xl h-[80vh] m-4">
+            <DocumentSelector
+              projectId={projectId}
+              clientId={clientId}
+              selectedDocIds={editedStep.base_doc_ids}
+              onSelectionChange={(docIds) => {
+                setEditedStep(prev => ({
+                  ...prev,
+                  base_doc_ids: docIds
+                }))
+              }}
+              onClose={() => setShowDocumentSelector(false)}
+              title="Seleccionar Documentos Base"
+              allowContextLake={true}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

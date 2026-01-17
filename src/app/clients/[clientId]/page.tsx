@@ -606,7 +606,7 @@ function ContextLakeTab({
                   }
                 }}
                 placeholder="Nombre de la carpeta..."
-                className="flex-1 px-2 py-1 text-sm border-0 focus:ring-0"
+                className="flex-1 px-2 py-1 text-sm text-gray-900 placeholder-gray-400 border-0 focus:ring-0 focus:outline-none"
                 autoFocus
               />
               <button

@@ -446,6 +446,7 @@ export default function ProjectPage({
               <div className="space-y-8">
                 <SetupTab
                   projectId={params.projectId}
+                  clientId={project.client?.id || ''}
                   initialVariables={project.variable_definitions || []}
                   documents={documents}
                   onVariablesUpdate={() => {
@@ -689,7 +690,7 @@ function DocumentsTab({
                   }
                 }}
                 placeholder="Nombre de la carpeta..."
-                className="flex-1 px-2 py-1 text-sm border-0 focus:ring-0"
+                className="flex-1 px-2 py-1 text-sm text-gray-900 placeholder-gray-400 border-0 focus:ring-0 focus:outline-none"
                 autoFocus
               />
               <button

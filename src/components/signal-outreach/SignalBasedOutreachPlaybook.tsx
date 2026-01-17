@@ -373,7 +373,7 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
               type="text"
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900 placeholder:text-gray-400"
               placeholder="Ej: Growth4U"
             />
           </div>
@@ -386,7 +386,7 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
               type="text"
               value={industry}
               onChange={(e) => setIndustry(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900 placeholder:text-gray-400"
               placeholder="Ej: SaaS, Marketing, Fintech"
             />
           </div>
@@ -399,7 +399,7 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
               value={valueProposition}
               onChange={(e) => setValueProposition(e.target.value)}
               rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900 placeholder:text-gray-400"
               placeholder="Que problema resuelve tu producto y para quien"
             />
           </div>
@@ -412,7 +412,7 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
               value={icpDescription}
               onChange={(e) => setIcpDescription(e.target.value)}
               rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900 placeholder:text-gray-400"
               placeholder="Cargo, industria, tamano de empresa, pain points..."
             />
           </div>
@@ -425,7 +425,7 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
               type="text"
               value={country}
               onChange={(e) => setCountry(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900 placeholder:text-gray-400"
               placeholder="Ej: Espana, Mexico, LATAM"
             />
           </div>
@@ -438,7 +438,7 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
               type="number"
               value={targetLeadsCount}
               onChange={(e) => setTargetLeadsCount(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900 placeholder:text-gray-400"
               placeholder="500"
             />
           </div>
@@ -451,7 +451,7 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
               value={knownCreators}
               onChange={(e) => setKnownCreators(e.target.value)}
               rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900 placeholder:text-gray-400"
               placeholder="URLs de LinkedIn de creadores que ya conoces (uno por linea)"
             />
           </div>
