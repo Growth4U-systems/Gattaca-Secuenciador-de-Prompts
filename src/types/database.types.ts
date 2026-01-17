@@ -22,7 +22,7 @@ export type CampaignStatus =
   | 'completed'
   | 'error'
 
-export type PlaybookType = 'ecp' | 'video_viral_ia' | 'custom'
+export type PlaybookType = 'ecp' | 'niche_finder' | 'competitor_analysis' | 'signal_based_outreach' | 'video_viral_ia' | 'custom'
 
 export interface Database {
   public: {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { BookOpen, Play, Search, FileText, Target, TrendingUp, Sparkles } from 'lucide-react'
+import { BookOpen, Play, Search, FileText, Target, TrendingUp, Sparkles, Users } from 'lucide-react'
 
 interface PlaybooksDashboardProps {
   agencyId: string
@@ -34,6 +34,15 @@ const PLAYBOOK_TEMPLATES = [
     icon: TrendingUp,
     color: 'green',
     status: 'available',
+  },
+  {
+    id: 'signal_based_outreach',
+    name: 'Signal-Based Outreach',
+    description: 'LinkedIn outreach usando señales de intencion + lead magnet',
+    icon: Users,
+    color: 'orange',
+    status: 'available',
+    badge: 'Beta',
   },
 ]
 
@@ -107,18 +116,27 @@ export default function PlaybooksDashboard({
                 <div className={`p-2.5 rounded-lg ${
                   playbook.color === 'blue' ? 'bg-blue-100' :
                   playbook.color === 'purple' ? 'bg-purple-100' :
+                  playbook.color === 'orange' ? 'bg-orange-100' :
                   'bg-green-100'
                 }`}>
                   <Icon className={`w-5 h-5 ${
                     playbook.color === 'blue' ? 'text-blue-600' :
                     playbook.color === 'purple' ? 'text-purple-600' :
+                    playbook.color === 'orange' ? 'text-orange-600' :
                     'text-green-600'
                   }`} />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">
-                    {playbook.name}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">
+                      {playbook.name}
+                    </h3>
+                    {playbook.badge && (
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+                        {playbook.badge}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-500 mt-1">{playbook.description}</p>
                 </div>
               </div>
