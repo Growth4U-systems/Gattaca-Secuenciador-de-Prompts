@@ -24,6 +24,7 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   { type: 'tiktok_comments', status: 'enabled', category: 'social' },
   { type: 'linkedin_company_posts', status: 'enabled', category: 'social' },
   { type: 'linkedin_comments', status: 'enabled', category: 'social' },
+  { type: 'linkedin_company_profile', status: 'enabled', category: 'social' },
   { type: 'reddit_posts', status: 'enabled', category: 'social' },
   // linkedin_company_insights: disabled - requires paid Apify subscription
   { type: 'facebook_posts', status: 'pending', category: 'social' },
@@ -72,6 +73,7 @@ const SCRAPER_ICONS: Record<string, React.ReactNode> = {
   linkedin_company_posts: <Briefcase size={20} />,
   linkedin_comments: <MessageSquare size={20} />,
   linkedin_company_insights: <Briefcase size={20} />,
+  linkedin_company_profile: <Briefcase size={20} />,
   facebook_posts: <Facebook size={20} />,
   facebook_comments: <MessageSquare size={20} />,
   reddit_posts: <MessageSquare size={20} />,
@@ -101,10 +103,12 @@ const SCRAPER_DESCRIPTIONS: Record<string, string> = {
   facebook_posts: 'Extrae publicaciones de páginas de Facebook con texto, imágenes y reacciones.',
   facebook_comments: 'Obtiene comentarios de posts de Facebook con autor y respuestas.',
   reddit_posts: 'Busca posts y comentarios en subreddits o búsquedas. Pay-per-use: $0.002/item (1000 gratis/mes).',
+
   // YouTube
   youtube_channel_videos: 'Lista de videos de canales de YouTube con título, descripción, views y likes.',
   youtube_comments: 'Extrae comentarios de videos de YouTube ordenados por relevancia o fecha.',
   youtube_transcripts: 'Obtiene transcripciones/subtítulos de videos de YouTube con timestamps.',
+
   // Reviews
   trustpilot_reviews: 'Reviews de empresas en Trustpilot con rating, título, texto completo y fecha.',
   g2_reviews: 'Reviews de software B2B en G2 con pros, contras y ratings detallados. Mínimo 200 reviews.',
@@ -112,6 +116,7 @@ const SCRAPER_DESCRIPTIONS: Record<string, string> = {
   appstore_reviews: 'Reviews de apps en Apple App Store con rating, versión de la app y país.',
   playstore_reviews: 'Reviews de apps en Google Play Store con rating, versión y tipo de dispositivo.',
   google_maps_reviews: 'Reviews de negocios locales en Google Maps con rating, texto y fotos del reviewer.',
+
   // Web & News
   website: 'Extrae contenido de páginas web. Modo scrape (1 página) o crawl (múltiples páginas del sitio).',
   google_news: 'Busca noticias recientes en Google News por keywords, empresa o tema específico.',
@@ -127,6 +132,7 @@ const SCRAPER_COLORS: Record<string, { bg: string; text: string; border: string 
   linkedin_company_posts: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
   linkedin_comments: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
   linkedin_company_insights: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
+  linkedin_company_profile: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
   facebook_posts: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
   facebook_comments: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
   reddit_posts: { bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200' },
@@ -285,6 +291,7 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
         linkedin_company_posts: 'LinkedIn',
         linkedin_comments: 'LinkedIn',
         linkedin_company_insights: 'LinkedIn',
+        linkedin_company_profile: 'LinkedIn',
         facebook_posts: 'Facebook',
         facebook_comments: 'Facebook',
         youtube_channel_videos: 'YouTube',
