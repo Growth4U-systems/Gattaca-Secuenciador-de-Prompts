@@ -72,6 +72,37 @@ CREATE TABLE IF NOT EXISTS playbooks (
 );
 
 -- ============================================
+-- ENSURE missing columns exist in playbooks (for existing DBs)
+-- ============================================
+DO $$
+BEGIN
+  -- playbook_type
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'playbooks' AND column_name = 'playbook_type'
+  ) THEN
+    ALTER TABLE playbooks ADD COLUMN playbook_type TEXT NOT NULL DEFAULT 'ecp'
+      CHECK (playbook_type IN ('ecp', 'competitor_analysis', 'niche_finder', 'custom'));
+  END IF;
+
+  -- is_public
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'playbooks' AND column_name = 'is_public'
+  ) THEN
+    ALTER TABLE playbooks ADD COLUMN is_public BOOLEAN DEFAULT false;
+  END IF;
+
+  -- version
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'playbooks' AND column_name = 'version'
+  ) THEN
+    ALTER TABLE playbooks ADD COLUMN version TEXT DEFAULT '1.0.0';
+  END IF;
+END $$;
+
+-- ============================================
 -- INDEXES
 -- ============================================
 CREATE INDEX IF NOT EXISTS idx_agency_members_user ON agency_members(user_id);
@@ -153,3 +184,36 @@ BEGIN
     );
   END IF;
 END $$;
+
+-- ============================================
+-- ADD ALL EXISTING USERS TO DEFAULT AGENCY
+-- ============================================
+-- This ensures existing users can access the system
+INSERT INTO agency_members (agency_id, user_id, role)
+SELECT '00000000-0000-0000-0000-000000000001', id, 'owner'
+FROM auth.users
+WHERE NOT EXISTS (
+  SELECT 1 FROM agency_members
+  WHERE agency_members.user_id = auth.users.id
+)
+ON CONFLICT (agency_id, user_id) DO NOTHING;
+
+-- ============================================
+-- AUTO-ADD NEW USERS TO DEFAULT AGENCY
+-- ============================================
+CREATE OR REPLACE FUNCTION add_user_to_default_agency()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Add new user to default agency as member
+  INSERT INTO agency_members (agency_id, user_id, role)
+  VALUES ('00000000-0000-0000-0000-000000000001', NEW.id, 'member')
+  ON CONFLICT (agency_id, user_id) DO NOTHING;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION add_user_to_default_agency();

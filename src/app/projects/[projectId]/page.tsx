@@ -491,7 +491,6 @@ function DocumentsTab({
 }) {
   const toast = useToast()
   const [viewingDoc, setViewingDoc] = useState<any | null>(null)
-  const [showGuide, setShowGuide] = useState(true)
   const [campaigns, setCampaigns] = useState<Array<{ id: string; ecp_name: string }>>([])
   const [showScraperLauncher, setShowScraperLauncher] = useState(false)
 
@@ -573,13 +572,6 @@ function DocumentsTab({
     tokens: doc.token_count || 0,
   }))
 
-  const categoryCards = [
-    { key: 'product', icon: '📦', label: 'Producto', color: 'blue', description: 'Fichas técnicas, features, beneficios' },
-    { key: 'competitor', icon: '🎯', label: 'Competidor', color: 'purple', description: 'Análisis competitivo, comparativas' },
-    { key: 'research', icon: '🔬', label: 'Research', color: 'green', description: 'Estudios de mercado, insights' },
-    { key: 'output', icon: '📝', label: 'Output', color: 'orange', description: 'Guías de marca, ejemplos previos' },
-  ]
-
   return (
     <div>
       {/* Header */}
@@ -600,35 +592,6 @@ function DocumentsTab({
           <DocumentBulkUpload projectId={projectId} onUploadComplete={onReload} />
         </div>
       </div>
-
-      {/* Documentation Guide */}
-      {showGuide && documents.length === 0 && (
-        <div className="mb-6 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h3 className="font-semibold text-blue-900 mb-3">Guía de Documentación</h3>
-              <p className="text-sm text-blue-800 mb-4">
-                Organiza tu documentación en estas categorías para mejores resultados:
-              </p>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {categoryCards.map((cat) => (
-                  <div key={cat.key} className="bg-white/70 rounded-xl p-3 border border-blue-100">
-                    <span className="text-lg">{cat.icon}</span>
-                    <p className={`font-medium text-${cat.color}-700 text-sm mt-1`}>{cat.label}</p>
-                    <p className="text-xs text-gray-600 mt-0.5">{cat.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <button
-              onClick={() => setShowGuide(false)}
-              className="p-1 text-blue-400 hover:text-blue-600"
-            >
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Token Monitor */}
       {documents.length > 0 && (
