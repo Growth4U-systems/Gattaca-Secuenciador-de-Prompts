@@ -1,18 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { Plus, Building2, FolderOpen, ChevronRight, Search, Loader2 } from 'lucide-react'
-import { useClients, createClient, type Client } from '@/hooks/useClients'
+import { useClients, type Client } from '@/hooks/useClients'
 import { useToast, useModal } from '@/components/ui'
-
-// Default agency ID for development
-const DEFAULT_AGENCY_ID = '00000000-0000-0000-0000-000000000001'
 
 export default function ClientsPage() {
   const toast = useToast()
   const modal = useModal()
-  const { clients, loading, error, refetch } = useClients(DEFAULT_AGENCY_ID)
+  // No pasamos agency_id - el hook cargará todos los clientes accesibles según RLS
+  const { clients, loading, error, refetch, createClient } = useClients()
   const [searchQuery, setSearchQuery] = useState('')
   const [showNewClientModal, setShowNewClientModal] = useState(false)
   const [newClientName, setNewClientName] = useState('')
@@ -32,18 +30,13 @@ export default function ClientsPage() {
 
     setCreating(true)
     try {
-      await createClient({
-        agency_id: DEFAULT_AGENCY_ID,
-        name: newClientName.trim(),
-        industry: newClientIndustry.trim() || null,
-        status: 'active',
-        settings: {},
-      })
+      // El hook createClient ya obtiene la agencia del usuario automáticamente
+      await createClient(newClientName.trim())
       toast.success('Cliente creado', `${newClientName} ha sido creado exitosamente`)
       setNewClientName('')
       setNewClientIndustry('')
       setShowNewClientModal(false)
-      refetch()
+      // refetch no es necesario, el hook lo hace internamente
     } catch (err) {
       console.error('Error creating client:', err)
       toast.error('Error', err instanceof Error ? err.message : 'Error al crear cliente')
