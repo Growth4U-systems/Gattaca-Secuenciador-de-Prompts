@@ -141,7 +141,7 @@ Combina búsquedas en Google, análisis de Reddit y foros especializados para id
   ecp: {
     // Información básica
     purpose:
-      'Define el posicionamiento único de tu producto usando el framework ECP (Earned, Credibility, Proof).',
+      'Define el Early Customer Profile (ECP) ideal para tu producto e identifica los primeros adoptantes.',
     whenToUse: [
       'Lanzar un nuevo producto al mercado',
       'Reposicionar un producto existente',
@@ -159,14 +159,14 @@ Combina búsquedas en Google, análisis de Reddit y foros especializados para id
     },
     // Información extendida
     icon: '🎯',
-    description: `El ECP Positioning es un framework de posicionamiento estratégico que te ayuda a definir cómo tu producto se diferencia en el mercado.
+    description: `El ECP (Early Customer Profile) es un framework para identificar a los primeros adoptantes ideales de tu producto.
 
-ECP significa:
-• Earned: Lo que has ganado (experiencia, conocimiento, trayectoria)
-• Credibility: Lo que te hace creíble (certificaciones, casos de éxito)
-• Proof: Las pruebas que lo demuestran (testimonios, métricas, resultados)
+Define quiénes son los clientes que:
+• Tienen el problema más urgente que tu producto resuelve
+• Están dispuestos a probar soluciones nuevas
+• Pueden convertirse en evangelistas de tu marca
 
-Este playbook te guía para construir un posicionamiento sólido basado en estos tres pilares.`,
+Este playbook te guía para identificar, validar y priorizar tus primeros clientes objetivo.`,
     objectives: [
       'Definir tu propuesta de valor única',
       'Identificar tus diferenciadores vs competencia',
