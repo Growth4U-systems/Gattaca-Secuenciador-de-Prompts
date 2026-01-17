@@ -184,7 +184,7 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.LINKEDIN_COMPANY_INSIGHTS,
     category: 'social',
     inputSchema: {
-      required: ['urls'],
+      required: ['urls', 'list_cookies'],
       optional: ['get_alumni', 'get_new_hires', 'max_alumni', 'max_new_hires'],
       defaults: {
         get_alumni: true,
@@ -193,7 +193,7 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
         max_new_hires: 3,
       },
     },
-    outputFields: ['name', 'description', 'industry', 'employeeCount', 'headquarters', 'website'],
+    outputFields: ['name', 'description', 'industry', 'employeeCount', 'headquarters', 'website', 'alumni', 'new_hires'],
   },
 
   reddit_posts: {
