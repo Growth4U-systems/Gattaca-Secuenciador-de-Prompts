@@ -8,6 +8,9 @@ import { useModal } from '@/components/ui'
 import CSVTableViewer from './CSVTableViewer'
 import JSONViewer from './JSONViewer'
 
+type DocumentTier = 'T1' | 'T2' | 'T3'
+type DocumentSourceType = 'manual' | 'scraper' | 'playbook' | 'api' | 'import'
+
 interface Document {
   id: string
   filename: string
@@ -19,7 +22,11 @@ interface Document {
   campaign_id?: string | null
   extracted_content?: string | null
   tags?: string[] | null
-  source_type?: string | null
+  source_type?: DocumentSourceType | string | null
+  tier?: DocumentTier | null
+  project_id?: string | null
+  client_id?: string | null
+  isShared?: boolean
 }
 
 interface Campaign {
@@ -35,6 +42,8 @@ interface DocumentListProps {
   onCampaignChange?: (docId: string, campaignId: string | null) => void
   onRename?: (docId: string, newName: string) => Promise<void>
   onUpdateDescription?: (docId: string, description: string) => Promise<void>
+  onTierChange?: (docId: string, tier: DocumentTier) => Promise<void>
+  showContextLakeFilters?: boolean
 }
 
 const CATEGORY_STYLES: Record<string, { bg: string; text: string; icon: string }> = {
@@ -42,6 +51,20 @@ const CATEGORY_STYLES: Record<string, { bg: string; text: string; icon: string }
   competitor: { bg: 'bg-purple-50', text: 'text-purple-700', icon: '🎯' },
   research: { bg: 'bg-green-50', text: 'text-green-700', icon: '🔬' },
   output: { bg: 'bg-orange-50', text: 'text-orange-700', icon: '📝' },
+}
+
+const SOURCE_TYPE_STYLES: Record<DocumentSourceType, { bg: string; text: string; icon: string; label: string }> = {
+  manual: { bg: 'bg-gray-50', text: 'text-gray-600', icon: '📤', label: 'Subido' },
+  scraper: { bg: 'bg-green-50', text: 'text-green-600', icon: '🔍', label: 'Scraper' },
+  playbook: { bg: 'bg-blue-50', text: 'text-blue-600', icon: '🎯', label: 'Playbook' },
+  api: { bg: 'bg-purple-50', text: 'text-purple-600', icon: '🔗', label: 'API' },
+  import: { bg: 'bg-amber-50', text: 'text-amber-600', icon: '📥', label: 'Importado' },
+}
+
+const TIER_STYLES: Record<DocumentTier, { bg: string; text: string; label: string; description: string }> = {
+  T1: { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'T1', description: 'Siempre incluido' },
+  T2: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'T2', description: 'Si es relevante' },
+  T3: { bg: 'bg-gray-50', text: 'text-gray-500', label: 'T3', description: 'Opcional' },
 }
 
 export default function DocumentList({
@@ -52,6 +75,8 @@ export default function DocumentList({
   onCampaignChange,
   onRename,
   onUpdateDescription,
+  onTierChange,
+  showContextLakeFilters = false,
 }: DocumentListProps) {
   const modal = useModal()
 
@@ -61,6 +86,9 @@ export default function DocumentList({
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'global' | 'assigned'>('all')
   const [tagFilter, setTagFilter] = useState<string>('all')
+  const [sourceTypeFilter, setSourceTypeFilter] = useState<string>('all')
+  const [tierFilter, setTierFilter] = useState<string>('all')
+  const [sharedFilter, setSharedFilter] = useState<'all' | 'project' | 'shared'>('all')
 
   // State for inline editing
   const [editingDocId, setEditingDocId] = useState<string | null>(null)
@@ -126,9 +154,22 @@ export default function DocumentList({
       if (assignmentFilter === 'assigned' && !doc.campaign_id) {
         return false
       }
+      // Context Lake filters
+      if (sourceTypeFilter !== 'all' && doc.source_type !== sourceTypeFilter) {
+        return false
+      }
+      if (tierFilter !== 'all' && doc.tier !== tierFilter) {
+        return false
+      }
+      if (sharedFilter === 'project' && doc.isShared) {
+        return false
+      }
+      if (sharedFilter === 'shared' && !doc.isShared) {
+        return false
+      }
       return true
     })
-  }, [documents, searchQuery, searchInContent, categoryFilter, tagFilter, assignmentFilter])
+  }, [documents, searchQuery, searchInContent, categoryFilter, tagFilter, assignmentFilter, sourceTypeFilter, tierFilter, sharedFilter])
 
   // Get content match snippet
   const getContentMatchSnippet = (content: string | null | undefined, query: string): string | null => {
@@ -443,8 +484,79 @@ export default function DocumentList({
         )}
       </div>
 
+      {/* Context Lake Filters */}
+      {showContextLakeFilters && (
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100">
+          {/* Source Type Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Origen:</span>
+            <select
+              value={sourceTypeFilter}
+              onChange={(e) => setSourceTypeFilter(e.target.value)}
+              className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-700 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Todos</option>
+              {Object.entries(SOURCE_TYPE_STYLES).map(([key, style]) => (
+                <option key={key} value={key}>
+                  {style.icon} {style.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Tier Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Tier:</span>
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setTierFilter('all')}
+                className={`px-2 py-1 text-xs font-medium rounded transition-all ${
+                  tierFilter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Todos
+              </button>
+              {(['T1', 'T2', 'T3'] as DocumentTier[]).map((tier) => {
+                const style = TIER_STYLES[tier]
+                return (
+                  <button
+                    key={tier}
+                    onClick={() => setTierFilter(tier)}
+                    title={style.description}
+                    className={`px-2 py-1 text-xs font-medium rounded transition-all ${
+                      tierFilter === tier ? `${style.bg} ${style.text} shadow-sm` : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {tier}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Shared/Project Filter */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+            {[
+              { value: 'all', label: 'Todo' },
+              { value: 'project', label: '📁 Proyecto' },
+              { value: 'shared', label: '🔗 Compartido' },
+            ].map((filter) => (
+              <button
+                key={filter.value}
+                onClick={() => setSharedFilter(filter.value as typeof sharedFilter)}
+                className={`px-2 py-1 text-xs font-medium rounded transition-all ${
+                  sharedFilter === filter.value ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Results count */}
-      {(searchQuery || categoryFilter !== 'all' || tagFilter !== 'all' || assignmentFilter !== 'all') && (
+      {(searchQuery || categoryFilter !== 'all' || tagFilter !== 'all' || assignmentFilter !== 'all' || sourceTypeFilter !== 'all' || tierFilter !== 'all' || sharedFilter !== 'all') && (
         <div className="flex items-center justify-between text-sm text-gray-500">
           <span>
             Mostrando {filteredDocs.length} de {documents.length} documentos
@@ -459,20 +571,26 @@ export default function DocumentList({
                 con tag <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-xs">{tagFilter}</span>
               </span>
             )}
+            {tierFilter !== 'all' && (
+              <span className="ml-1">
+                tier <span className={`${TIER_STYLES[tierFilter as DocumentTier]?.bg} ${TIER_STYLES[tierFilter as DocumentTier]?.text} px-1.5 py-0.5 rounded text-xs`}>{tierFilter}</span>
+              </span>
+            )}
           </span>
-          {(searchQuery || categoryFilter !== 'all' || tagFilter !== 'all' || assignmentFilter !== 'all') && (
-            <button
-              onClick={() => {
-                setSearchQuery('')
-                setCategoryFilter('all')
-                setTagFilter('all')
-                setAssignmentFilter('all')
-              }}
-              className="text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Limpiar filtros
-            </button>
-          )}
+          <button
+            onClick={() => {
+              setSearchQuery('')
+              setCategoryFilter('all')
+              setTagFilter('all')
+              setAssignmentFilter('all')
+              setSourceTypeFilter('all')
+              setTierFilter('all')
+              setSharedFilter('all')
+            }}
+            className="text-blue-600 hover:text-blue-700 font-medium"
+          >
+            Limpiar filtros
+          </button>
         </div>
       )}
 
@@ -527,6 +645,9 @@ export default function DocumentList({
               setCategoryFilter('all')
               setTagFilter('all')
               setAssignmentFilter('all')
+              setSourceTypeFilter('all')
+              setTierFilter('all')
+              setSharedFilter('all')
             }}
             className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
           >
@@ -615,6 +736,43 @@ export default function DocumentList({
 
                   {/* Inline badges */}
                   <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {/* Shared badge */}
+                    {doc.isShared && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-600" title="Documento compartido del cliente">
+                        🔗
+                      </span>
+                    )}
+                    {/* Tier badge */}
+                    {doc.tier && onTierChange ? (
+                      <select
+                        value={doc.tier}
+                        onChange={async (e) => {
+                          e.stopPropagation()
+                          await onTierChange(doc.id, e.target.value as DocumentTier)
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium border-0 cursor-pointer ${TIER_STYLES[doc.tier as DocumentTier]?.bg || 'bg-gray-50'} ${TIER_STYLES[doc.tier as DocumentTier]?.text || 'text-gray-600'}`}
+                        title={TIER_STYLES[doc.tier as DocumentTier]?.description}
+                      >
+                        <option value="T1">T1</option>
+                        <option value="T2">T2</option>
+                        <option value="T3">T3</option>
+                      </select>
+                    ) : doc.tier && (
+                      <span
+                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${TIER_STYLES[doc.tier as DocumentTier]?.bg || 'bg-gray-50'} ${TIER_STYLES[doc.tier as DocumentTier]?.text || 'text-gray-600'}`}
+                        title={TIER_STYLES[doc.tier as DocumentTier]?.description}
+                      >
+                        {doc.tier}
+                      </span>
+                    )}
+                    {/* Source type badge */}
+                    {doc.source_type && doc.source_type !== 'manual' && (
+                      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.bg || 'bg-gray-50'} ${SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.text || 'text-gray-600'}`}>
+                        <span>{SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.icon || '📄'}</span>
+                        {SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.label || doc.source_type}
+                      </span>
+                    )}
                     {getCategoryBadge(doc.category)}
                     {doc.token_count && (
                       <span className="text-xs text-gray-400 whitespace-nowrap">
@@ -642,11 +800,6 @@ export default function DocumentList({
                       ))}
                       {doc.tags.length > 3 && (
                         <span className="text-[10px] text-gray-400">+{doc.tags.length - 3}</span>
-                      )}
-                      {doc.source_type === 'scraper' && (
-                        <span className="px-1.5 py-0.5 text-[10px] bg-green-50 text-green-600 rounded">
-                          Scraper
-                        </span>
                       )}
                     </div>
                   )}

@@ -84,6 +84,25 @@ const STAR_RATING_OPTIONS: SelectOption[] = [
 ];
 
 // ============================================
+// MANGOOLS SEO OPTIONS
+// ============================================
+const MANGOOLS_LOCATION_OPTIONS: SelectOption[] = [
+  { value: 'Spain', label: 'Espa\u00f1a' },
+  { value: 'United States', label: 'Estados Unidos' },
+  { value: 'United Kingdom', label: 'Reino Unido' },
+  { value: 'Mexico', label: 'M\u00e9xico' },
+  { value: 'Argentina', label: 'Argentina' },
+  { value: 'Colombia', label: 'Colombia' },
+  { value: 'Chile', label: 'Chile' },
+  { value: 'Peru', label: 'Per\u00fa' },
+  { value: 'Germany', label: 'Alemania' },
+  { value: 'France', label: 'Francia' },
+  { value: 'Italy', label: 'Italia' },
+  { value: 'Portugal', label: 'Portugal' },
+  { value: 'Brazil', label: 'Brasil' },
+];
+
+// ============================================
 // TRUSTPILOT-SPECIFIC OPTIONS
 // ============================================
 const TRUSTPILOT_DATE_OPTIONS: SelectOption[] = [
@@ -1139,7 +1158,7 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   },
 
   // ==========================================
-  // SEO KEYWORDS (MANGOOLS)
+  // SEO KEYWORDS (MANGOOLS - KWFinder)
   // ==========================================
   seo_keywords: {
     type: 'seo_keywords',
@@ -1162,13 +1181,162 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         type: 'select',
         label: 'Ubicaci\u00f3n',
         description: 'Pa\u00eds para los datos de b\u00fasqueda',
-        options: [
-          { value: 'Spain', label: 'Espa\u00f1a' },
-          { value: 'United States', label: 'Estados Unidos' },
-          { value: 'United Kingdom', label: 'Reino Unido' },
-          { value: 'Mexico', label: 'M\u00e9xico' },
-          { value: 'Argentina', label: 'Argentina' },
+        options: MANGOOLS_LOCATION_OPTIONS,
+        defaultValue: 'Spain',
+      },
+      language: {
+        key: 'language',
+        type: 'select',
+        label: 'Idioma',
+        description: 'Idioma de las b\u00fasquedas',
+        options: LANGUAGE_OPTIONS,
+        defaultValue: 'es',
+      },
+      includeSerpOverview: {
+        key: 'includeSerpOverview',
+        type: 'boolean',
+        label: 'Incluir SERP Overview',
+        description: 'Obtener los top 10 resultados de Google para cada keyword',
+        helpText: 'Consume 1 cr\u00e9dito extra por keyword. Incluye DA, PA, CF, TF de cada resultado.',
+        defaultValue: false,
+      },
+    },
+  },
+
+  // ==========================================
+  // SEO SERP CHECKER (MANGOOLS)
+  // ==========================================
+  seo_serp_checker: {
+    type: 'seo_serp_checker',
+    fields: {
+      keyword: {
+        key: 'keyword',
+        type: 'text',
+        label: 'Palabra clave',
+        description: 'La keyword para analizar el SERP',
+        placeholder: 'mejor banco digital',
+        required: true,
+        examples: [
+          'mejor banco digital',
+          'cuenta corriente online',
+          'tarjeta de credito sin comisiones',
         ],
+      },
+      location: {
+        key: 'location',
+        type: 'select',
+        label: 'Ubicaci\u00f3n',
+        description: 'Pa\u00eds para el an\u00e1lisis del SERP',
+        options: MANGOOLS_LOCATION_OPTIONS,
+        defaultValue: 'Spain',
+      },
+      language: {
+        key: 'language',
+        type: 'select',
+        label: 'Idioma',
+        description: 'Idioma de las b\u00fasquedas',
+        options: LANGUAGE_OPTIONS,
+        defaultValue: 'es',
+      },
+    },
+  },
+
+  // ==========================================
+  // SEO SITE PROFILER (MANGOOLS)
+  // ==========================================
+  seo_site_profiler: {
+    type: 'seo_site_profiler',
+    fields: {
+      url: {
+        key: 'url',
+        type: 'url',
+        label: 'URL del dominio',
+        description: 'El dominio que quieres analizar',
+        placeholder: 'https://revolut.com',
+        required: true,
+        helpText: 'Usa la URL principal del dominio',
+        examples: [
+          'https://revolut.com',
+          'https://n26.com',
+          'https://wise.com',
+        ],
+        validation: {
+          pattern: /^https?:\/\/.+/,
+          patternMessage: 'Debe ser una URL v\u00e1lida (https://...)',
+        },
+      },
+    },
+  },
+
+  // ==========================================
+  // SEO LINK MINER (MANGOOLS)
+  // ==========================================
+  seo_link_miner: {
+    type: 'seo_link_miner',
+    fields: {
+      url: {
+        key: 'url',
+        type: 'url',
+        label: 'URL a analizar',
+        description: 'El dominio o p\u00e1gina para analizar backlinks',
+        placeholder: 'https://revolut.com',
+        required: true,
+        helpText: 'Obt\u00e9n el perfil de backlinks del dominio',
+        examples: [
+          'https://revolut.com',
+          'https://n26.com/es-es',
+          'https://wise.com/es',
+        ],
+        validation: {
+          pattern: /^https?:\/\/.+/,
+          patternMessage: 'Debe ser una URL v\u00e1lida (https://...)',
+        },
+      },
+      linksPerDomain: {
+        key: 'linksPerDomain',
+        type: 'number',
+        label: 'Links por dominio',
+        description: 'M\u00e1ximo de backlinks a mostrar por dominio referente',
+        helpText: 'Limita cu\u00e1ntos links se muestran de cada dominio que enlaza',
+        defaultValue: 5,
+        validation: {
+          min: 1,
+          max: 100,
+        },
+      },
+    },
+  },
+
+  // ==========================================
+  // SEO COMPETITOR KEYWORDS (MANGOOLS)
+  // ==========================================
+  seo_competitor_keywords: {
+    type: 'seo_competitor_keywords',
+    fields: {
+      url: {
+        key: 'url',
+        type: 'url',
+        label: 'URL del competidor',
+        description: 'El dominio del competidor a analizar',
+        placeholder: 'https://n26.com',
+        required: true,
+        helpText: 'Descubre las keywords por las que posiciona tu competencia',
+        examples: [
+          'https://n26.com',
+          'https://wise.com',
+          'https://revolut.com',
+        ],
+        validation: {
+          pattern: /^https?:\/\/.+/,
+          patternMessage: 'Debe ser una URL v\u00e1lida (https://...)',
+        },
+      },
+      location: {
+        key: 'location',
+        type: 'select',
+        label: 'Ubicaci\u00f3n',
+        description: 'Pa\u00eds para el an\u00e1lisis de keywords',
+        options: MANGOOLS_LOCATION_OPTIONS,
         defaultValue: 'Spain',
       },
       language: {

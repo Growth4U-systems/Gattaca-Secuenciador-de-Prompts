@@ -13,7 +13,7 @@ type ScraperStatus = 'enabled' | 'pending'
 interface ScraperConfig {
   type: ScraperType
   status: ScraperStatus
-  category: 'social' | 'reviews' | 'web' | 'other'
+  category: 'social' | 'reviews' | 'web' | 'seo' | 'other'
 }
 
 // All scrapers with their status
@@ -45,7 +45,13 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   { type: 'website', status: 'enabled', category: 'web' },
   { type: 'google_news', status: 'enabled', category: 'web' },
   { type: 'news_bing', status: 'enabled', category: 'web' },
-  { type: 'seo_keywords', status: 'enabled', category: 'web' },
+
+  // SEO & Keywords (Mangools)
+  { type: 'seo_keywords', status: 'enabled', category: 'seo' },
+  { type: 'seo_serp_checker', status: 'enabled', category: 'seo' },
+  { type: 'seo_site_profiler', status: 'enabled', category: 'seo' },
+  { type: 'seo_link_miner', status: 'enabled', category: 'seo' },
+  { type: 'seo_competitor_keywords', status: 'enabled', category: 'seo' },
 ]
 
 // Category labels
@@ -53,6 +59,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   social: 'Redes Sociales',
   reviews: 'Reviews',
   web: 'Web & Noticias',
+  seo: 'SEO & Keywords',
   other: 'Otros',
 }
 
@@ -88,6 +95,10 @@ const SCRAPER_ICONS: Record<string, React.ReactNode> = {
   google_news: <Newspaper size={20} />,
   news_bing: <Newspaper size={20} />,
   seo_keywords: <Search size={20} />,
+  seo_serp_checker: <Search size={20} />,
+  seo_site_profiler: <Globe size={20} />,
+  seo_link_miner: <Globe size={20} />,
+  seo_competitor_keywords: <Search size={20} />,
 }
 
 // Detailed descriptions for each scraper (shown on hover and in configure step)
@@ -121,7 +132,11 @@ const SCRAPER_DESCRIPTIONS: Record<string, string> = {
   website: 'Extrae contenido de páginas web. Modo scrape (1 página) o crawl (múltiples páginas del sitio).',
   google_news: 'Busca noticias recientes en Google News por keywords, empresa o tema específico.',
   news_bing: 'Busca noticias en Bing News con filtros avanzados de fecha, idioma y relevancia.',
-  seo_keywords: 'Análisis de keywords SEO con volumen de búsqueda, dificultad y competencia.',
+  seo_keywords: 'An\u00e1lisis de keywords SEO con volumen de b\u00fasqueda, dificultad y competencia (KWFinder).',
+  seo_serp_checker: 'An\u00e1lisis de SERPs con m\u00e9tricas SEO: DA, PA, CF, TF, backlinks y posiciones.',
+  seo_site_profiler: 'Perfil completo de dominio: autoridad, backlinks, tr\u00e1fico estimado y competidores.',
+  seo_link_miner: 'An\u00e1lisis de backlinks: encuentra enlaces entrantes con m\u00e9tricas de calidad.',
+  seo_competitor_keywords: 'Descubre keywords org\u00e1nicas de competidores con vol\u00famenes y posiciones.',
 }
 
 const SCRAPER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -150,7 +165,12 @@ const SCRAPER_COLORS: Record<string, { bg: string; text: string; border: string 
   website: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200' },
   google_news: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
   news_bing: { bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-200' },
+  // SEO & Keywords
   seo_keywords: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
+  seo_serp_checker: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
+  seo_site_profiler: { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' },
+  seo_link_miner: { bg: 'bg-fuchsia-50', text: 'text-fuchsia-600', border: 'border-fuchsia-200' },
+  seo_competitor_keywords: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
 }
 
 export default function ScraperLauncher({ projectId, onComplete, onClose }: ScraperLauncherProps) {
@@ -304,6 +324,10 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
         google_maps_reviews: 'GoogleMaps',
         news_bing: 'News',
         seo_keywords: 'SEO',
+        seo_serp_checker: 'SEO',
+        seo_site_profiler: 'SEO',
+        seo_link_miner: 'SEO',
+        seo_competitor_keywords: 'SEO',
       }
 
       const sourceName = sourceNames[selectedScraper] || selectedScraper
@@ -878,7 +902,7 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
               </p>
 
               {/* Group scrapers by category */}
-              {(['social', 'reviews', 'web', 'other'] as const).map(category => {
+              {(['social', 'reviews', 'web', 'seo', 'other'] as const).map(category => {
                 const categoryScrapers = ALL_SCRAPERS.filter(s => s.category === category)
                 if (categoryScrapers.length === 0) return null
 
