@@ -289,3 +289,106 @@ export async function updateDocument(docId: string, updates: Partial<Document>) 
   if (error) throw error
   return data
 }
+
+// ============================================
+// HOOK: useAllClientDocuments (ALL docs for a client including all projects)
+// ============================================
+export function useAllClientDocuments(clientId: string, filters?: DocumentFilters) {
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [projectsMap, setProjectsMap] = useState<Record<string, string>>({})
+
+  const loadDocuments = useCallback(async () => {
+    if (!clientId) return
+
+    try {
+      setLoading(true)
+      const supabase = createClient()
+
+      // First, get all projects for this client
+      const { data: projects, error: projectsError } = await supabase
+        .from('projects')
+        .select('id, name')
+        .eq('client_id', clientId)
+
+      if (projectsError) throw projectsError
+
+      const projectIds = projects?.map(p => p.id) || []
+      const projectNames: Record<string, string> = {}
+      projects?.forEach(p => {
+        projectNames[p.id] = p.name
+      })
+      setProjectsMap(projectNames)
+
+      // Get client-level documents
+      let clientQuery = supabase
+        .from('knowledge_base_docs')
+        .select('*')
+        .eq('client_id', clientId)
+        .is('project_id', null)
+
+      if (filters?.sourceType) clientQuery = clientQuery.eq('source_type', filters.sourceType)
+      if (filters?.tier) clientQuery = clientQuery.eq('tier', filters.tier)
+      if (filters?.category) clientQuery = clientQuery.eq('category', filters.category)
+
+      const { data: clientDocs, error: clientError } = await clientQuery
+
+      if (clientError) throw clientError
+
+      // Get documents from all projects
+      let projectDocs: Document[] = []
+      if (projectIds.length > 0) {
+        let projectQuery = supabase
+          .from('knowledge_base_docs')
+          .select('*')
+          .in('project_id', projectIds)
+
+        if (filters?.sourceType) projectQuery = projectQuery.eq('source_type', filters.sourceType)
+        if (filters?.tier) projectQuery = projectQuery.eq('tier', filters.tier)
+        if (filters?.category) projectQuery = projectQuery.eq('category', filters.category)
+
+        const { data, error: projectError } = await projectQuery
+
+        if (projectError) throw projectError
+        projectDocs = data || []
+      }
+
+      // Mark client docs as shared, project docs with their project name
+      const sharedDocs = (clientDocs || []).map(doc => ({
+        ...doc,
+        isShared: true,
+        projectName: 'Cliente (compartido)'
+      }))
+
+      const allProjectDocs = projectDocs.map(doc => ({
+        ...doc,
+        isShared: false,
+        projectName: projectNames[doc.project_id || ''] || 'Proyecto'
+      }))
+
+      // Combine and sort
+      const allDocs = [...sharedDocs, ...allProjectDocs]
+
+      // Sort: T1 first, then T2, then T3, then by date
+      allDocs.sort((a, b) => {
+        const tierOrder = { T1: 0, T2: 1, T3: 2 }
+        const tierDiff = (tierOrder[a.tier as DocumentTier] || 2) - (tierOrder[b.tier as DocumentTier] || 2)
+        if (tierDiff !== 0) return tierDiff
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      })
+
+      setDocuments(allDocs as Document[])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setLoading(false)
+    }
+  }, [clientId, filters?.sourceType, filters?.tier, filters?.category])
+
+  useEffect(() => {
+    loadDocuments()
+  }, [loadDocuments])
+
+  return { documents, loading, error, reload: loadDocuments, projectsMap }
+}
