@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Building2,
   FolderOpen,
@@ -18,7 +18,7 @@ import {
   Rocket,
 } from 'lucide-react'
 import { useClient } from '@/hooks/useClients'
-import { useClientDocuments, type Document, updateDocumentTier, type DocumentTier } from '@/hooks/useDocuments'
+import { useAllClientDocuments, type Document, updateDocumentTier, type DocumentTier } from '@/hooks/useDocuments'
 import DocumentList from '@/components/documents/DocumentList'
 import { useToast } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
@@ -39,10 +39,24 @@ export default function ClientPage({
   params: { clientId: string }
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const toast = useToast()
   const { client, loading: clientLoading, error: clientError } = useClient(params.clientId)
-  const { documents, loading: docsLoading, reload: reloadDocs } = useClientDocuments(params.clientId)
-  const [activeTab, setActiveTab] = useState<TabType>('overview')
+  const { documents, loading: docsLoading, reload: reloadDocs, projectsMap } = useAllClientDocuments(params.clientId)
+
+  // Sync activeTab with URL query param
+  const tabFromUrl = searchParams.get('tab') as TabType | null
+  const [activeTab, setActiveTab] = useState<TabType>(tabFromUrl || 'overview')
+
+  // Update activeTab when URL changes
+  useEffect(() => {
+    const tab = searchParams.get('tab') as TabType | null
+    if (tab && ['overview', 'context-lake', 'projects', 'playbooks', 'settings'].includes(tab)) {
+      setActiveTab(tab)
+    } else if (!tab) {
+      setActiveTab('overview')
+    }
+  }, [searchParams])
   const [projects, setProjects] = useState<Project[]>([])
   const [loadingProjects, setLoadingProjects] = useState(true)
 
@@ -189,7 +203,14 @@ export default function ClientPage({
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      setActiveTab(tab.id)
+                      // Update URL to reflect tab change
+                      const url = tab.id === 'overview'
+                        ? `/clients/${params.clientId}`
+                        : `/clients/${params.clientId}?tab=${tab.id}`
+                      router.push(url, { scroll: false })
+                    }}
                     className={`relative flex-shrink-0 flex items-center gap-2.5 px-6 py-4 text-sm font-medium transition-all ${
                       isActive ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-700'
                     }`}
@@ -218,6 +239,7 @@ export default function ClientPage({
                 loading={docsLoading}
                 onTierChange={handleTierChange}
                 onReload={reloadDocs}
+                projectsMap={projectsMap}
               />
             )}
             {activeTab === 'projects' && (
@@ -335,13 +357,16 @@ function ContextLakeTab({
   loading,
   onTierChange,
   onReload,
+  projectsMap,
 }: {
   documents: Document[]
   loading: boolean
   onTierChange: (docId: string, tier: DocumentTier) => Promise<void>
   onReload: () => void
+  projectsMap: Record<string, string>
 }) {
   const toast = useToast()
+  const [projectFilter, setProjectFilter] = useState<string>('all')
 
   const handleDelete = async (docId: string) => {
     try {
@@ -357,14 +382,68 @@ function ContextLakeTab({
     }
   }
 
+  // Get unique projects from documents
+  const uniqueProjects = [...new Set(documents.map(d => d.project_id).filter(Boolean))]
+
+  // Filter documents by project
+  const filteredDocuments = projectFilter === 'all'
+    ? documents
+    : projectFilter === 'shared'
+      ? documents.filter(d => !d.project_id)
+      : documents.filter(d => d.project_id === projectFilter)
+
+  // Stats
+  const sharedCount = documents.filter(d => !d.project_id).length
+  const projectDocsCount = documents.filter(d => d.project_id).length
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Context Lake</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Documentos compartidos para todos los proyectos del cliente
+            Todos los documentos del cliente: {sharedCount} compartidos + {projectDocsCount} en proyectos
           </p>
+        </div>
+      </div>
+
+      {/* Project Filter */}
+      <div className="flex flex-wrap items-center gap-3 mb-4 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
+        <span className="text-sm font-medium text-indigo-700">Filtrar por origen:</span>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setProjectFilter('all')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+              projectFilter === 'all'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-white text-gray-600 hover:bg-indigo-100'
+            }`}
+          >
+            Todos ({documents.length})
+          </button>
+          <button
+            onClick={() => setProjectFilter('shared')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+              projectFilter === 'shared'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'bg-white text-gray-600 hover:bg-purple-100'
+            }`}
+          >
+            🔗 Compartidos ({sharedCount})
+          </button>
+          {uniqueProjects.map(projectId => (
+            <button
+              key={projectId}
+              onClick={() => setProjectFilter(projectId!)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                projectFilter === projectId
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-white text-gray-600 hover:bg-blue-100'
+              }`}
+            >
+              📁 {projectsMap[projectId!] || 'Proyecto'} ({documents.filter(d => d.project_id === projectId).length})
+            </button>
+          ))}
         </div>
       </div>
 
@@ -375,7 +454,7 @@ function ContextLakeTab({
           <span className="text-sm text-gray-600">Siempre incluido en prompts</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 text-xs font-medium rounded bg-blue-50 text-blue-700">T2</span>
+          <span className="px-2 py-0.5 text-xs font-medium rounded bg-yellow-50 text-yellow-700">T2</span>
           <span className="text-sm text-gray-600">Incluido si es relevante</span>
         </div>
         <div className="flex items-center gap-2">
@@ -390,7 +469,7 @@ function ContextLakeTab({
         </div>
       ) : (
         <DocumentList
-          documents={documents as any[]}
+          documents={filteredDocuments as any[]}
           onDelete={handleDelete}
           onView={() => {}}
           onTierChange={onTierChange}

@@ -766,13 +766,22 @@ export default function DocumentList({
                         {doc.tier}
                       </span>
                     )}
-                    {/* Source type badge */}
-                    {doc.source_type && doc.source_type !== 'manual' && (
-                      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.bg || 'bg-gray-50'} ${SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.text || 'text-gray-600'}`}>
-                        <span>{SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.icon || '📄'}</span>
-                        {SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.label || doc.source_type}
-                      </span>
-                    )}
+                    {/* Source type badge - ALWAYS shown */}
+                    <span
+                      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        doc.source_type
+                          ? (SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.bg || 'bg-gray-50')
+                          : 'bg-gray-50'
+                      } ${
+                        doc.source_type
+                          ? (SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.text || 'text-gray-600')
+                          : 'text-gray-600'
+                      }`}
+                      title={`Origen: ${doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.label || doc.source_type) : 'Subido'}`}
+                    >
+                      <span>{doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.icon || '📄') : '📤'}</span>
+                      {doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type as DocumentSourceType]?.label || doc.source_type) : 'Subido'}
+                    </span>
                     {getCategoryBadge(doc.category)}
                     {doc.token_count && (
                       <span className="text-xs text-gray-400 whitespace-nowrap">
