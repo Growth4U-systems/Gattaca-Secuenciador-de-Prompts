@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { useRouter, usePathname } from 'next/navigation'
-import { LogOut, Sparkles, Loader2, ChevronDown, Dna, HelpCircle, FolderKanban, Users } from 'lucide-react'
+import { LogOut, Sparkles, Loader2, ChevronDown, Dna, HelpCircle, Users } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import NotificationBell from '@/components/notifications/NotificationBell'
@@ -194,18 +194,7 @@ export default function Header() {
                   <Link
                     href="/"
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      pathname === '/'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
-                    }`}
-                  >
-                    <FolderKanban className="w-4 h-4" />
-                    Proyectos
-                  </Link>
-                  <Link
-                    href="/clients"
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      pathname?.startsWith('/clients')
+                      pathname === '/' || pathname?.startsWith('/clients')
                         ? 'bg-blue-100 text-blue-700'
                         : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
                     }`}

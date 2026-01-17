@@ -13,6 +13,7 @@ import {
   Zap,
   Target,
   X,
+  Trash2,
 } from 'lucide-react'
 import { useClients } from '@/hooks/useClients'
 import { useProjects } from '@/hooks/useProjects'
@@ -49,12 +50,14 @@ function ClientCardSkeleton() {
 }
 
 export default function HomePage() {
-  const { clients, loading: loadingClients, error: errorClients, createClient } = useClients()
+  const { clients, loading: loadingClients, error: errorClients, createClient, deleteClient } = useClients()
   const { projects, loading: loadingProjects } = useProjects()
   const [searchQuery, setSearchQuery] = useState('')
   const [showNewClientModal, setShowNewClientModal] = useState(false)
   const [newClientName, setNewClientName] = useState('')
   const [creatingClient, setCreatingClient] = useState(false)
+  const [deletingClientId, setDeletingClientId] = useState<string | null>(null)
+  const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null)
 
   const loading = loadingClients || loadingProjects
   const error = errorClients
@@ -89,6 +92,19 @@ export default function HomePage() {
       console.error('Error creating client:', err)
     } finally {
       setCreatingClient(false)
+    }
+  }
+
+  const handleDeleteClient = async () => {
+    if (!clientToDelete) return
+    setDeletingClientId(clientToDelete.id)
+    try {
+      await deleteClient(clientToDelete.id)
+      setClientToDelete(null)
+    } catch (err) {
+      console.error('Error deleting client:', err)
+    } finally {
+      setDeletingClientId(null)
     }
   }
 
@@ -270,58 +286,72 @@ export default function HomePage() {
               )
 
               return (
-                <Link
+                <div
                   key={client.id}
-                  href={`/clients/${client.id}`}
-                  className="group bg-white rounded-2xl border border-gray-100 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50 transition-all duration-300 p-6"
+                  className="group bg-white rounded-2xl border border-gray-100 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50 transition-all duration-300 p-6 relative"
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl group-hover:from-blue-100 group-hover:to-indigo-200 transition-colors">
-                      <Building2 className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
-                          {client.name}
-                        </h3>
-                        <ChevronRight
-                          size={18}
-                          className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all"
-                        />
+                  {/* Delete button */}
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setClientToDelete({ id: client.id, name: client.name })
+                    }}
+                    className="absolute top-3 right-3 p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                    title="Eliminar cliente"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+
+                  <Link href={`/clients/${client.id}`} className="block">
+                    <div className="flex items-start gap-4">
+                      <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl group-hover:from-blue-100 group-hover:to-indigo-200 transition-colors">
+                        <Building2 className="w-6 h-6 text-blue-600" />
                       </div>
-                      <p className="text-sm text-gray-500 mt-0.5">
-                        {clientProjects.length}{' '}
-                        {clientProjects.length === 1 ? 'proyecto' : 'proyectos'}
-                      </p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                            {client.name}
+                          </h3>
+                          <ChevronRight
+                            size={18}
+                            className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all"
+                          />
+                        </div>
+                        <p className="text-sm text-gray-500 mt-0.5">
+                          {clientProjects.length}{' '}
+                          {clientProjects.length === 1 ? 'proyecto' : 'proyectos'}
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Project Types Preview */}
-                  {clientProjects.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-gray-50 flex flex-wrap gap-2">
-                      {(Object.entries(projectTypes) as [string, number][]).map(([type, count]) => {
-                        const Icon = PlaybookIcon[type] || FolderOpen
-                        const colorClass = PlaybookColor[type] || 'bg-gray-100 text-gray-600'
-                        return (
-                          <span
-                            key={type}
-                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${colorClass}`}
-                          >
-                            <Icon size={12} />
-                            {count}
-                          </span>
-                        )
-                      })}
-                    </div>
-                  )}
+                    {/* Project Types Preview */}
+                    {clientProjects.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-50 flex flex-wrap gap-2">
+                        {(Object.entries(projectTypes) as [string, number][]).map(([type, count]) => {
+                          const Icon = PlaybookIcon[type] || FolderOpen
+                          const colorClass = PlaybookColor[type] || 'bg-gray-100 text-gray-600'
+                          return (
+                            <span
+                              key={type}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${colorClass}`}
+                            >
+                              <Icon size={12} />
+                              {count}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
 
-                  {/* Empty state for client without projects */}
-                  {clientProjects.length === 0 && (
-                    <div className="mt-4 pt-4 border-t border-gray-50">
-                      <p className="text-xs text-gray-400 italic">Sin proyectos aún</p>
-                    </div>
-                  )}
-                </Link>
+                    {/* Empty state for client without projects */}
+                    {clientProjects.length === 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-50">
+                        <p className="text-xs text-gray-400 italic">Sin proyectos aún</p>
+                      </div>
+                    )}
+                  </Link>
+                </div>
               )
             })}
           </div>
@@ -375,6 +405,60 @@ export default function HomePage() {
                     </>
                   ) : (
                     'Crear Cliente'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Client Confirmation Modal */}
+      {clientToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900">Eliminar Cliente</h2>
+              <button
+                onClick={() => setClientToDelete(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="p-3 bg-red-100 rounded-xl">
+                  <Trash2 className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-gray-900 font-medium">
+                    ¿Eliminar &quot;{clientToDelete.name}&quot;?
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Se eliminarán todos los proyectos y documentos asociados.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-6 flex gap-3 justify-end">
+                <button
+                  onClick={() => setClientToDelete(null)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteClient}
+                  disabled={deletingClientId === clientToDelete.id}
+                  className="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {deletingClientId === clientToDelete.id ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Eliminando...
+                    </>
+                  ) : (
+                    'Eliminar'
                   )}
                 </button>
               </div>
