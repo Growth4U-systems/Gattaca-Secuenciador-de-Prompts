@@ -8,7 +8,7 @@ import {
   FolderOpen,
   FileText,
   ChevronRight,
-  Home,
+  ChevronLeft,
   Plus,
   Settings,
   Database,
@@ -16,12 +16,15 @@ import {
   X,
   Book,
   Rocket,
+  LayoutDashboard,
+  Sparkles,
 } from 'lucide-react'
 import { useClient } from '@/hooks/useClients'
 import { useAllClientDocuments, type Document } from '@/hooks/useDocuments'
 import DocumentList from '@/components/documents/DocumentList'
 import { useToast } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
+import { Growth4ULogo } from '@/components/ui/Growth4ULogo'
 
 type TabType = 'overview' | 'context-lake' | 'projects' | 'playbooks' | 'settings'
 
@@ -31,6 +34,15 @@ interface Project {
   description: string | null
   playbook_type: string
   created_at: string
+}
+
+interface Playbook {
+  id: string
+  name: string
+  description: string | null
+  playbook_type: string
+  is_public: boolean
+  version: string
 }
 
 export default function ClientPage({
@@ -57,8 +69,11 @@ export default function ClientPage({
       setActiveTab('overview')
     }
   }, [searchParams])
+
   const [projects, setProjects] = useState<Project[]>([])
   const [loadingProjects, setLoadingProjects] = useState(true)
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([])
+  const [loadingPlaybooks, setLoadingPlaybooks] = useState(true)
 
   // Load projects for this client
   useEffect(() => {
@@ -84,22 +99,48 @@ export default function ClientPage({
     loadProjects()
   }, [params.clientId])
 
+  // Load all playbooks
+  useEffect(() => {
+    const loadPlaybooks = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('playbooks')
+          .select('id, name, description, playbook_type, is_public, version')
+          .order('name')
+
+        if (error) throw error
+        setPlaybooks(data || [])
+      } catch (err) {
+        console.error('Error loading playbooks:', err)
+      } finally {
+        setLoadingPlaybooks(false)
+      }
+    }
+
+    loadPlaybooks()
+  }, [])
+
   const tabs = [
-    { id: 'overview' as const, label: 'Resumen', icon: Building2 },
+    { id: 'overview' as const, label: 'Resumen', icon: LayoutDashboard },
     { id: 'context-lake' as const, label: 'Context Lake', icon: Database },
-    { id: 'projects' as const, label: 'Proyectos', icon: FolderOpen },
     { id: 'playbooks' as const, label: 'Playbooks', icon: Book },
     { id: 'settings' as const, label: 'Configuración', icon: Settings },
   ]
 
+  const handleTabChange = (tabId: TabType) => {
+    setActiveTab(tabId)
+    const url = tabId === 'overview'
+      ? `/clients/${params.clientId}`
+      : `/clients/${params.clientId}?tab=${tabId}`
+    router.push(url, { scroll: false })
+  }
+
   if (clientLoading) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 w-48 bg-gray-200 rounded" />
-            <div className="h-40 bg-gray-100 rounded-2xl" />
-          </div>
+      <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+          <p className="text-gray-500">Cargando cliente...</p>
         </div>
       </main>
     )
@@ -117,7 +158,7 @@ export default function ClientPage({
               href="/clients"
               className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
             >
-              <Home size={18} />
+              <ChevronLeft size={18} />
               Volver a Clientes
             </Link>
           </div>
@@ -126,121 +167,151 @@ export default function ClientPage({
     )
   }
 
+  // Get playbook types in use
+  const playbookTypesInUse = new Set(projects.map(p => p.playbook_type))
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
-      {/* Top Navigation */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex items-center gap-2 py-3 text-sm">
-            <Link
-              href="/clients"
-              className="inline-flex items-center gap-1.5 text-gray-500 hover:text-blue-600 transition-colors"
-            >
-              <Building2 size={14} />
-              <span>Clientes</span>
-            </Link>
-            <ChevronRight size={14} className="text-gray-300" />
-            <span className="text-gray-900 font-medium">{client.name}</span>
-          </nav>
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex">
+      {/* Sidebar */}
+      <aside className="w-64 bg-white border-r border-gray-100 flex flex-col min-h-screen sticky top-0">
+        {/* Logo */}
+        <div className="p-4 border-b border-gray-100">
+          <Link href="/" className="block">
+            <Growth4ULogo size="lg" />
+          </Link>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Client Header */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
-          <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-700 px-6 py-5">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-white/10 backdrop-blur rounded-xl">
-                <Building2 className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white">{client.name}</h1>
-                {client.industry && (
-                  <p className="text-indigo-200 text-sm mt-0.5">{client.industry}</p>
-                )}
-              </div>
+        {/* Client Info */}
+        <div className="p-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-xl">
+              <Building2 className="w-5 h-5 text-indigo-600" />
             </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="font-semibold text-gray-900 truncate">{client.name}</h2>
+              {client.industry && (
+                <p className="text-xs text-gray-500 truncate">{client.industry}</p>
+              )}
+            </div>
+          </div>
+          <div className="mt-3">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+              client.status === 'active' ? 'bg-green-100 text-green-700' :
+              client.status === 'inactive' ? 'bg-gray-100 text-gray-600' :
+              'bg-amber-100 text-amber-700'
+            }`}>
+              {client.status === 'active' ? 'Activo' :
+               client.status === 'inactive' ? 'Inactivo' : 'Archivado'}
+            </span>
+          </div>
+        </div>
 
-            {/* Quick Stats */}
-            <div className="flex flex-wrap gap-3 mt-4">
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
-                <FolderOpen className="w-4 h-4 text-indigo-200" />
-                <span className="text-sm text-white">{projects.length} proyectos</span>
-              </div>
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
-                <FileText className="w-4 h-4 text-indigo-200" />
-                <span className="text-sm text-white">{documents.length} documentos</span>
-              </div>
-              <span className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm ${
-                client.status === 'active' ? 'bg-green-500/20 text-green-100' :
-                client.status === 'inactive' ? 'bg-gray-500/20 text-gray-200' :
-                'bg-amber-500/20 text-amber-100'
-              }`}>
-                {client.status === 'active' ? 'Activo' :
-                 client.status === 'inactive' ? 'Inactivo' : 'Archivado'}
+        {/* Navigation */}
+        <nav className="flex-1 p-3">
+          <div className="space-y-1">
+            {tabs.map((tab) => {
+              const Icon = tab.icon
+              const isActive = activeTab === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <Icon size={18} className={isActive ? 'text-indigo-600' : 'text-gray-400'} />
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Projects Section */}
+          <div className="mt-6">
+            <div className="flex items-center justify-between px-3 mb-2">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Proyectos ({projects.length})
               </span>
+              <Link
+                href={`/projects/new?clientId=${params.clientId}`}
+                className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                title="Nuevo proyecto"
+              >
+                <Plus size={14} />
+              </Link>
+            </div>
+            <div className="space-y-1">
+              {loadingProjects ? (
+                <div className="px-3 py-2">
+                  <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                </div>
+              ) : projects.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-gray-400">Sin proyectos</p>
+              ) : (
+                projects.slice(0, 5).map((project) => (
+                  <Link
+                    key={project.id}
+                    href={`/projects/${project.id}`}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors"
+                  >
+                    <FolderOpen size={14} className="text-gray-400 flex-shrink-0" />
+                    <span className="truncate">{project.name}</span>
+                  </Link>
+                ))
+              )}
+              {projects.length > 5 && (
+                <button
+                  onClick={() => handleTabChange('overview')}
+                  className="w-full px-3 py-1.5 text-xs text-indigo-600 hover:text-indigo-700 text-left"
+                >
+                  Ver todos ({projects.length})
+                </button>
+              )}
             </div>
           </div>
+        </nav>
+
+        {/* Back to Clients */}
+        <div className="p-3 border-t border-gray-100">
+          <Link
+            href="/clients"
+            className="flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors"
+          >
+            <ChevronLeft size={18} className="text-gray-400" />
+            Todos los clientes
+          </Link>
         </div>
+      </aside>
 
-        {/* Tabs */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="border-b border-gray-100">
-            <nav className="flex -mb-px overflow-x-auto">
-              {tabs.map((tab) => {
-                const Icon = tab.icon
-                const isActive = activeTab === tab.id
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => {
-                      setActiveTab(tab.id)
-                      // Update URL to reflect tab change
-                      const url = tab.id === 'overview'
-                        ? `/clients/${params.clientId}`
-                        : `/clients/${params.clientId}?tab=${tab.id}`
-                      router.push(url, { scroll: false })
-                    }}
-                    className={`relative flex-shrink-0 flex items-center gap-2.5 px-6 py-4 text-sm font-medium transition-all ${
-                      isActive ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    <div className={`p-1.5 rounded-lg ${isActive ? 'bg-indigo-100' : 'bg-gray-100'}`}>
-                      <Icon size={16} className={isActive ? 'text-indigo-600' : 'text-gray-500'} />
-                    </div>
-                    <span>{tab.label}</span>
-                    {isActive && (
-                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />
-                    )}
-                  </button>
-                )
-              })}
-            </nav>
-          </div>
-
+      {/* Main Content */}
+      <div className="flex-1 min-w-0">
+        <div className="max-w-5xl mx-auto px-6 py-8">
           {/* Tab Content */}
-          <div className="p-6">
-            {activeTab === 'overview' && (
-              <OverviewTab client={client} projects={projects} documents={documents} />
-            )}
-            {activeTab === 'context-lake' && (
-              <ContextLakeTab
-                documents={documents}
-                loading={docsLoading}
-                onReload={reloadDocs}
-                projectsMap={projectsMap}
-              />
-            )}
-            {activeTab === 'projects' && (
-              <ProjectsTab clientId={params.clientId} projects={projects} loading={loadingProjects} />
-            )}
-            {activeTab === 'playbooks' && (
-              <PlaybooksTab />
-            )}
-            {activeTab === 'settings' && (
-              <SettingsTab client={client} />
-            )}
-          </div>
+          {activeTab === 'overview' && (
+            <OverviewTab client={client} projects={projects} documents={documents} />
+          )}
+          {activeTab === 'context-lake' && (
+            <ContextLakeTab
+              documents={documents}
+              loading={docsLoading}
+              onReload={reloadDocs}
+              projectsMap={projectsMap}
+            />
+          )}
+          {activeTab === 'playbooks' && (
+            <PlaybooksTab
+              clientId={params.clientId}
+              playbooks={playbooks}
+              loading={loadingPlaybooks}
+              playbookTypesInUse={playbookTypesInUse}
+            />
+          )}
+          {activeTab === 'settings' && (
+            <SettingsTab client={client} />
+          )}
         </div>
       </div>
     </main>
@@ -270,6 +341,11 @@ function OverviewTab({
 
   return (
     <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Resumen</h1>
+        <p className="text-gray-500 mt-1">Vista general de {client.name}</p>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Projects */}
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100">
@@ -383,13 +459,11 @@ function ContextLakeTab({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Context Lake</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Todos los documentos del cliente: {sharedCount} compartidos + {projectDocsCount} en proyectos
-          </p>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Context Lake</h1>
+        <p className="text-gray-500 mt-1">
+          Todos los documentos del cliente: {sharedCount} compartidos + {projectDocsCount} en proyectos
+        </p>
       </div>
 
       {/* Project Filter */}
@@ -448,17 +522,33 @@ function ContextLakeTab({
   )
 }
 
-// Projects Tab
-function ProjectsTab({
+// Playbooks Tab
+function PlaybooksTab({
   clientId,
-  projects,
+  playbooks,
   loading,
+  playbookTypesInUse,
 }: {
   clientId: string
-  projects: Project[]
+  playbooks: Playbook[]
   loading: boolean
+  playbookTypesInUse: Set<string>
 }) {
-  const router = useRouter()
+  const playbooksInUse = playbooks.filter(p => playbookTypesInUse.has(p.playbook_type)).length
+
+  // Map playbook_type to icon
+  const getPlaybookIcon = (type: string) => {
+    switch (type) {
+      case 'niche-finder':
+        return '🔍'
+      case 'competitor-analysis':
+        return '📊'
+      case 'ecp':
+        return '🎯'
+      default:
+        return '📖'
+    }
+  }
 
   if (loading) {
     return (
@@ -472,75 +562,78 @@ function ProjectsTab({
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Proyectos</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Todos los proyectos de este cliente
+          <h1 className="text-2xl font-bold text-gray-900">Playbooks</h1>
+          <p className="text-gray-500 mt-1">
+            {playbooks.length} disponibles • {playbooksInUse} en uso
           </p>
         </div>
-        <Link
-          href={`/projects/new?clientId=${clientId}`}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+        <button
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm font-medium"
         >
-          <Plus size={18} />
-          Nuevo Proyecto
-        </Link>
+          <Sparkles size={18} />
+          Crear Playbook
+        </button>
       </div>
 
-      {projects.length === 0 ? (
-        <div className="text-center py-12">
-          <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="font-medium text-gray-900 mb-2">No hay proyectos</h3>
-          <p className="text-gray-500 text-sm mb-4">Crea el primer proyecto para este cliente</p>
-          <Link
-            href={`/projects/new?clientId=${clientId}`}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            <Plus size={18} />
-            Crear Proyecto
-          </Link>
+      {playbooks.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+          <Book className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <h3 className="font-medium text-gray-900 mb-2">No hay playbooks</h3>
+          <p className="text-gray-500 text-sm">
+            Crea tu primer playbook para empezar
+          </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {projects.map((project) => (
-            <Link
-              key={project.id}
-              href={`/projects/${project.id}`}
-              className="group bg-white border border-gray-200 rounded-xl p-5 hover:border-blue-200 hover:shadow-md transition-all"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <Rocket size={20} className="text-blue-600" />
+        <div className="space-y-4">
+          {playbooks.map((playbook) => {
+            const isInUse = playbookTypesInUse.has(playbook.playbook_type)
+            return (
+              <div
+                key={playbook.id}
+                className="bg-white rounded-xl border border-gray-200 p-5 hover:border-indigo-200 hover:shadow-md transition-all"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl text-2xl">
+                      {getPlaybookIcon(playbook.playbook_type)}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-900">{playbook.name}</h3>
+                        {isInUse && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                            ✓ En uso
+                          </span>
+                        )}
+                      </div>
+                      {playbook.description && (
+                        <p className="text-sm text-gray-500 mt-1">{playbook.description}</p>
+                      )}
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className="text-xs text-gray-400">
+                          {playbook.playbook_type} v{playbook.version}
+                        </span>
+                        {playbook.is_public && (
+                          <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                            Público
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <Link
+                    href={`/projects/new?clientId=${clientId}&playbookType=${playbook.playbook_type}`}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    <Rocket size={16} />
+                    Usar
+                  </Link>
                 </div>
-                <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
-                  {project.playbook_type}
-                </span>
               </div>
-              <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-                {project.name}
-              </h3>
-              {project.description && (
-                <p className="text-sm text-gray-500 mt-1 line-clamp-2">{project.description}</p>
-              )}
-              <p className="text-xs text-gray-400 mt-3">
-                Creado {new Date(project.created_at).toLocaleDateString('es-ES')}
-              </p>
-            </Link>
-          ))}
+            )
+          })}
         </div>
       )}
-    </div>
-  )
-}
-
-// Playbooks Tab
-function PlaybooksTab() {
-  return (
-    <div className="text-center py-12">
-      <Book className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-      <h3 className="font-medium text-gray-900 mb-2">Playbooks</h3>
-      <p className="text-gray-500 text-sm">
-        Los playbooks disponibles para este cliente aparecerán aquí
-      </p>
     </div>
   )
 }
@@ -549,44 +642,49 @@ function PlaybooksTab() {
 function SettingsTab({ client }: { client: any }) {
   return (
     <div className="max-w-2xl">
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Configuración del Cliente</h2>
-
-      <div className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
-          <input
-            type="text"
-            defaultValue={client.name}
-            className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900"
-            disabled
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Industria</label>
-          <input
-            type="text"
-            defaultValue={client.industry || ''}
-            className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900"
-            disabled
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-          <select
-            defaultValue={client.status}
-            className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900"
-            disabled
-          >
-            <option value="active">Activo</option>
-            <option value="inactive">Inactivo</option>
-            <option value="archived">Archivado</option>
-          </select>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
+        <p className="text-gray-500 mt-1">Configuración del cliente {client.name}</p>
       </div>
 
-      <p className="text-sm text-gray-500 mt-6">
-        La edición de configuración estará disponible próximamente.
-      </p>
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+            <input
+              type="text"
+              defaultValue={client.name}
+              className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900"
+              disabled
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Industria</label>
+            <input
+              type="text"
+              defaultValue={client.industry || ''}
+              className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900"
+              disabled
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+            <select
+              defaultValue={client.status}
+              className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900"
+              disabled
+            >
+              <option value="active">Activo</option>
+              <option value="inactive">Inactivo</option>
+              <option value="archived">Archivado</option>
+            </select>
+          </div>
+        </div>
+
+        <p className="text-sm text-gray-500 mt-6">
+          La edición de configuración estará disponible próximamente.
+        </p>
+      </div>
     </div>
   )
 }
