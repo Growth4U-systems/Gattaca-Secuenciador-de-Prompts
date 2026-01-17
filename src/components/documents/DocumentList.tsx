@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Trash2, Link2, Search, Filter, FolderOpen, X, Edit2, Check, Loader2, Tag, ChevronDown, ChevronRight, Maximize2 } from 'lucide-react'
+import { Trash2, Link2, Search, Filter, FolderOpen, X, Edit2, Check, Loader2, Tag, ChevronDown, ChevronRight, Maximize2, History } from 'lucide-react'
 import { DocCategory } from '@/types/database.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { useModal } from '@/components/ui'
@@ -27,6 +27,7 @@ interface Document {
   project_id?: string | null
   client_id?: string | null
   isShared?: boolean
+  version_count?: number
 }
 
 interface Campaign {
@@ -784,6 +785,16 @@ export default function DocumentList({
                       <span>{doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.icon || '📥') : '📥'}</span>
                       {doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.label || doc.source_type) : 'Importado'}
                     </span>
+                    {/* Version indicator */}
+                    {doc.version_count && doc.version_count > 1 && (
+                      <span
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700"
+                        title={`${doc.version_count} versiones disponibles`}
+                      >
+                        <History size={10} />
+                        v{doc.version_count}
+                      </span>
+                    )}
                     {getCategoryBadge(doc.category)}
                     {doc.token_count && (
                       <span className="text-xs text-gray-400 whitespace-nowrap">
