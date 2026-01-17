@@ -38,7 +38,9 @@ export type ClientInsert = {
 export type ClientUpdate = Partial<ClientInsert>
 
 /**
- * Hook para listar todos los clientes de una agencia.
+ * Hook para listar todos los clientes.
+ * Si se proporciona agencyId, filtra por agencia.
+ * Si no, carga todos los clientes accesibles.
  */
 export function useClients(agencyId?: string) {
   const [clients, setClients] = useState<Client[]>([])
@@ -46,21 +48,21 @@ export function useClients(agencyId?: string) {
   const [error, setError] = useState<string | null>(null)
 
   const loadClients = useCallback(async () => {
-    if (!agencyId) {
-      setClients([])
-      setLoading(false)
-      return
-    }
-
     try {
       setLoading(true)
       setError(null)
 
-      const { data, error: queryError } = await supabase
+      let query = supabase
         .from('clients')
         .select('*')
-        .eq('agency_id', agencyId)
         .order('updated_at', { ascending: false })
+
+      // If agencyId is provided, filter by it
+      if (agencyId) {
+        query = query.eq('agency_id', agencyId)
+      }
+
+      const { data, error: queryError } = await query
 
       if (queryError) throw queryError
       setClients(data || [])
@@ -76,11 +78,54 @@ export function useClients(agencyId?: string) {
     loadClients()
   }, [loadClients])
 
+  // Create client function that uses the hook's context
+  const createClientFn = useCallback(async (name: string): Promise<Client> => {
+    // Get first agency or create a default one
+    const { data: agencies } = await supabase
+      .from('agencies')
+      .select('id')
+      .limit(1)
+      .single()
+
+    const agencyIdToUse = agencyId || agencies?.id
+
+    if (!agencyIdToUse) {
+      throw new Error('No agency found to create client')
+    }
+
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') +
+      '-' +
+      Date.now().toString(36)
+
+    const { data: newClient, error } = await supabase
+      .from('clients')
+      .insert({
+        agency_id: agencyIdToUse,
+        name,
+        slug,
+        settings: {},
+        status: 'active',
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    // Refresh the list
+    await loadClients()
+
+    return newClient
+  }, [agencyId, loadClients])
+
   return {
     clients,
     loading,
     error,
     refetch: loadClients,
+    createClient: createClientFn,
   }
 }
 
