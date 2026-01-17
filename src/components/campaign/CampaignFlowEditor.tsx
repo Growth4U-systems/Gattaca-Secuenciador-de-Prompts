@@ -9,6 +9,8 @@ import { useToast, useModal } from '@/components/ui'
 
 interface CampaignFlowEditorProps {
   campaignId: string
+  projectId: string
+  clientId: string
   initialFlowConfig: FlowConfig | null
   documents: any[]
   projectVariables: any[]
@@ -19,6 +21,8 @@ interface CampaignFlowEditorProps {
 
 export default function CampaignFlowEditor({
   campaignId,
+  projectId,
+  clientId,
   initialFlowConfig,
   documents,
   projectVariables,
@@ -336,6 +340,8 @@ export default function CampaignFlowEditor({
       {editingStep && (
         <StepEditor
           step={editingStep}
+          projectId={projectId}
+          clientId={clientId}
           documents={documents}
           allSteps={flowConfig.steps}
           projectVariables={projectVariables}

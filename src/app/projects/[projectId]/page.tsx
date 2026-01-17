@@ -446,6 +446,7 @@ export default function ProjectPage({
               <div className="space-y-8">
                 <SetupTab
                   projectId={params.projectId}
+                  clientId={project.client?.id || ''}
                   initialVariables={project.variable_definitions || []}
                   documents={documents}
                   onVariablesUpdate={() => {
