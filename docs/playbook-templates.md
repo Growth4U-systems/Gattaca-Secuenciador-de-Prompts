@@ -238,6 +238,118 @@ if (template) {
 
 ---
 
+## Cómo Agregar un Nuevo Playbook
+
+### Paso 1: Crear el Template TypeScript
+
+1. Crear archivo en `src/lib/templates/[nombre]-playbook.ts`
+2. Implementar la interface `PlaybookTemplate`
+3. Exportar una función `get[Nombre]Template(): PlaybookTemplate`
+
+### Paso 2: Registrar en index.ts
+
+```typescript
+// En src/lib/templates/index.ts
+import { getNuevoPlaybookTemplate } from './nuevo-playbook'
+
+// Agregar al switch de getPlaybookTemplate()
+case 'nuevo_playbook':
+  return getNuevoPlaybookTemplate()
+
+// Agregar a getAllPlaybookTemplates()
+getNuevoPlaybookTemplate(),
+
+// Agregar al array de hasPlaybookTemplate()
+['ecp', 'niche_finder', 'competitor_analysis', 'signal_based_outreach', 'nuevo_playbook']
+```
+
+### Paso 3: Actualizar Tipos
+
+En `src/types/database.types.ts`:
+```typescript
+export type PlaybookType = 'ecp' | 'niche_finder' | 'competitor_analysis' | 'signal_based_outreach' | 'nuevo_playbook' | 'custom'
+```
+
+### Paso 4: Migraciones de Base de Datos (IMPORTANTE)
+
+Para que el playbook aparezca en la UI, se necesitan **DOS migraciones separadas**:
+
+**Migración 1: Agregar al enum + actualizar constraint**
+```sql
+-- supabase/migrations/YYYYMMDDHHMMSS_add_nuevo_playbook_type.sql
+
+-- Agregar al enum (no se puede usar en la misma transacción)
+ALTER TYPE playbook_type ADD VALUE IF NOT EXISTS 'nuevo_playbook';
+
+-- Actualizar el check constraint para incluir el nuevo tipo
+ALTER TABLE playbooks DROP CONSTRAINT IF EXISTS playbooks_playbook_type_check;
+ALTER TABLE playbooks ADD CONSTRAINT playbooks_playbook_type_check
+  CHECK (playbook_type IN ('ecp', 'niche_finder', 'competitor_analysis', 'signal_based_outreach', 'nuevo_playbook', 'video_viral_ia', 'custom'));
+```
+
+**Migración 2: Insertar el playbook** (en archivo separado o con timestamp posterior)
+```sql
+-- supabase/migrations/YYYYMMDDHHMMSS_insert_nuevo_playbook.sql
+
+DO $$
+DECLARE
+  sys_agency_id UUID;
+BEGIN
+  SELECT id INTO sys_agency_id FROM agencies WHERE id = '00000000-0000-0000-0000-000000000001';
+  IF sys_agency_id IS NULL THEN
+    SELECT id INTO sys_agency_id FROM agencies LIMIT 1;
+  END IF;
+
+  DELETE FROM playbooks WHERE slug = 'nuevo-playbook';
+
+  INSERT INTO playbooks (agency_id, name, slug, description, playbook_type, type, is_public, version, config)
+  VALUES (
+    sys_agency_id,
+    'Nuevo Playbook',
+    'nuevo-playbook',
+    'Descripcion del nuevo playbook.',
+    'nuevo_playbook',
+    'nuevo_playbook',
+    true,
+    '1.0.0',
+    '{"steps": ["paso1", "paso2", "paso3"]}'::jsonb
+  );
+END $$;
+```
+
+**NOTA**: Si las dos operaciones están en el mismo archivo, Postgres dará error `unsafe use of new value`. El enum value necesita ser commiteado antes de usarse.
+
+### Paso 5: Aplicar Migraciones
+
+```bash
+npx supabase db push
+```
+
+Si hay conflictos:
+```bash
+npx supabase migration repair --status reverted YYYYMMDDHHMMSS
+npx supabase db push
+```
+
+### Paso 6: Agregar a la UI (opcional)
+
+Si quieres que aparezca en `PlaybooksDashboard.tsx` (hardcoded):
+
+```typescript
+// En PLAYBOOK_TEMPLATES array
+{
+  id: 'nuevo_playbook',
+  name: 'Nuevo Playbook',
+  description: 'Descripcion corta',
+  icon: IconComponent,
+  color: 'blue', // blue, purple, green, orange
+  status: 'available',
+  badge: 'Beta', // opcional
+},
+```
+
+---
+
 ## Actualización de este Documento
 
 Al completar cada template, actualizar la tabla de verificación:
