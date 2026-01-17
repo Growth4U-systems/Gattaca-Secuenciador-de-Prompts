@@ -12,6 +12,7 @@ import StatusManager, { CustomStatus, DEFAULT_STATUSES, getStatusIcon, getStatus
 import { FlowConfig, FlowStep, LLMModel } from '@/types/flow.types'
 import { useToast, useModal } from '@/components/ui'
 import { useOpenRouter } from '@/lib/openrouter-context'
+import { useAuth } from '@/lib/auth-context'
 import { OpenRouterAuthModal } from '@/components/openrouter'
 import OpenRouterModelSelector from '@/components/openrouter/OpenRouterModelSelector'
 
@@ -91,6 +92,7 @@ interface ResearchPrompt {
 interface Project {
   id: string
   name: string
+  client_id?: string
   variable_definitions: Array<{
     name: string
     default_value: string
@@ -115,6 +117,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   const toast = useToast()
   const modal = useModal()
   const { isConnected: hasOpenRouter } = useOpenRouter()
+  const { user } = useAuth()
   const [showOpenRouterModal, setShowOpenRouterModal] = useState(false)
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
@@ -2283,6 +2286,16 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
               ))
             }}
             onClose={() => setEditingStepOutput(null)}
+            // Context Lake integration
+            projectId={projectId}
+            clientId={project?.client_id}
+            userId={user?.id}
+            playbookId={projectId}
+            playbookName={project?.name}
+            campaignVariables={campaign.custom_variables}
+            onSaveToContextLake={(docId) => {
+              toast.success('Guardado', `Documento guardado en Context Lake (ID: ${docId.substring(0, 8)}...)`)
+            }}
           />
         )
       })()}

@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { X, Save, RotateCcw, Edit2, AlertTriangle, Table, Download, Sparkles, Loader2, Check, XCircle, MousePointer2, ChevronDown, ChevronUp, FileOutput, Clock, Hash, Type, Cpu, Settings, Maximize2, Minimize2 } from 'lucide-react'
+import { X, Save, RotateCcw, Edit2, AlertTriangle, Table, Download, Sparkles, Loader2, Check, XCircle, MousePointer2, ChevronDown, ChevronUp, FileOutput, Clock, Hash, Type, Cpu, Settings, Maximize2, Minimize2, Database } from 'lucide-react'
 import MarkdownRenderer, { extractTables, tablesToCSV } from '../common/MarkdownRenderer'
 import { useToast, useModal } from '@/components/ui'
 import { useOpenRouter } from '@/lib/openrouter-context'
 import OpenRouterModelSelector from '@/components/openrouter/OpenRouterModelSelector'
+import SaveToContextLakeModal, { StepOutputContext } from '@/components/documents/SaveToContextLakeModal'
 
 // Token equivalence helper: 1 token ≈ 0.75 words, 500 words = 1 page
 const getTokenEquivalence = (tokens: number) => {
@@ -36,11 +37,23 @@ interface StepOutputEditorProps {
     completed_at?: string
     edited_at?: string
     original_output?: string
+    model_used?: string
+    model_provider?: string
+    input_tokens?: number
+    output_tokens?: number
   }
   allStepOutputs: Record<string, any>
   stepDocuments?: StepDocument[]
   onSave: (updatedStepOutputs: Record<string, any>) => void
   onClose: () => void
+  // Context Lake integration
+  projectId?: string
+  clientId?: string
+  userId?: string
+  playbookId?: string
+  playbookName?: string
+  campaignVariables?: Record<string, string>
+  onSaveToContextLake?: (docId: string) => void
 }
 
 // Generate a simple summary of changes between two texts
@@ -87,9 +100,20 @@ export default function StepOutputEditor({
   stepDocuments = [],
   onSave,
   onClose,
+  // Context Lake integration
+  projectId,
+  clientId,
+  userId,
+  playbookId,
+  playbookName,
+  campaignVariables,
+  onSaveToContextLake,
 }: StepOutputEditorProps) {
   const toast = useToast()
   const modal = useModal()
+
+  // Context Lake modal state
+  const [showContextLakeModal, setShowContextLakeModal] = useState(false)
 
   const [editedOutput, setEditedOutput] = useState(currentOutput.output || '')
   const [saving, setSaving] = useState(false)
@@ -671,6 +695,17 @@ export default function StepOutputEditor({
                 Restaurar Original
               </button>
             )}
+            {/* Save to Context Lake button */}
+            {!isEditing && !aiSuggestion && clientId && userId && editedOutput && (
+              <button
+                onClick={() => setShowContextLakeModal(true)}
+                className="px-3 py-1.5 text-xs bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 inline-flex items-center gap-1.5 font-medium transition-colors shadow-sm"
+                title="Guardar este output como documento permanente en el Context Lake"
+              >
+                <Database size={12} />
+                Guardar en Context Lake
+              </button>
+            )}
           </div>
         </div>
 
@@ -869,6 +904,41 @@ export default function StepOutputEditor({
           </div>
         </div>
       </div>
+
+      {/* Save to Context Lake Modal */}
+      {showContextLakeModal && clientId && userId && (
+        <SaveToContextLakeModal
+          isOpen={showContextLakeModal}
+          content={editedOutput}
+          projectId={projectId || ''}
+          clientId={clientId}
+          userId={userId}
+          stepContext={{
+            stepId,
+            stepName,
+            stepOrder,
+            campaignId,
+            campaignName,
+            campaignVariables,
+            playbookId: playbookId || projectId || '',
+            playbookName: playbookName || 'Proyecto',
+            executedAt: currentOutput.completed_at,
+            modelUsed: currentOutput.model_used,
+            modelProvider: currentOutput.model_provider,
+            inputTokens: currentOutput.input_tokens,
+            outputTokens: currentOutput.output_tokens,
+            inputDocumentIds: stepDocuments.map(d => d.id),
+            inputPreviousStepIds: [], // Could be enhanced to track this
+            wasEditedBeforeConversion: !!currentOutput.edited_at,
+          }}
+          onSave={(savedDocId) => {
+            setShowContextLakeModal(false)
+            toast.success('Guardado', 'Documento guardado en Context Lake')
+            onSaveToContextLake?.(savedDocId)
+          }}
+          onClose={() => setShowContextLakeModal(false)}
+        />
+      )}
     </div>
   )
 }

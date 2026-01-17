@@ -6,6 +6,15 @@ import { createClient } from '@/lib/supabase-browser'
 // ============================================
 export type DocumentSourceType = 'import' | 'scraper' | 'playbook' | 'api'
 
+export type DocumentChangeType =
+  | 'created'
+  | 'manual_edit'
+  | 'ai_suggestion'
+  | 'regenerated'
+  | 'imported'
+  | 'merged'
+  | 'restored'
+
 export interface Document {
   id: string
   project_id?: string | null
@@ -27,8 +36,67 @@ export interface Document {
   campaign_id?: string | null
   created_at: string
   updated_at?: string
+  // Traceability fields
+  created_by?: string | null
+  updated_by?: string | null
+  source_campaign_id?: string | null
+  source_step_id?: string | null
+  source_step_name?: string | null
+  // Soft delete
+  is_deleted?: boolean
+  deleted_at?: string | null
+  deleted_by?: string | null
+  // UI-only fields
   isShared?: boolean
   projectName?: string
+  version_count?: number
+}
+
+export interface DocumentVersion {
+  id: string
+  document_id: string
+  version_number: number
+  extracted_content: string
+  token_count: number | null
+  change_type: DocumentChangeType
+  change_summary: string | null
+  created_by: string | null
+  created_at: string
+}
+
+// Metadata structure for playbook step outputs
+export interface PlaybookStepSourceMetadata {
+  origin_type: 'flow_step_output'
+  // Playbook context
+  playbook_id: string
+  playbook_name: string
+  // Campaign context
+  campaign_id: string
+  campaign_name: string
+  campaign_variables: {
+    ecp_name?: string
+    problem_core?: string
+    country?: string
+    industry?: string
+    [key: string]: string | undefined
+  }
+  // Step context
+  step_id: string
+  step_name: string
+  step_order: number
+  // Execution info
+  executed_at: string
+  model_used: string
+  model_provider: string
+  input_tokens: number
+  output_tokens: number
+  // Input references
+  input_document_ids: string[]
+  input_previous_step_ids: string[]
+  // Conversion info
+  converted_at: string
+  converted_by: string
+  was_edited_before_conversion: boolean
 }
 
 export interface DocumentFilters {
@@ -54,6 +122,7 @@ export function useDocuments(projectId: string, filters?: DocumentFilters) {
         .from('knowledge_base_docs')
         .select('*')
         .eq('project_id', projectId)
+        .or('is_deleted.is.null,is_deleted.eq.false') // Filter out soft-deleted docs
 
       // Apply filters
       if (filters?.sourceType) {
@@ -102,6 +171,7 @@ export function useClientDocuments(clientId: string, filters?: DocumentFilters) 
         .select('*')
         .eq('client_id', clientId)
         .is('project_id', null) // Only client-level docs
+        .or('is_deleted.is.null,is_deleted.eq.false') // Filter out soft-deleted docs
 
       // Apply filters
       if (filters?.sourceType) {
@@ -151,6 +221,7 @@ export function useContextLake(projectId: string, clientId?: string, filters?: D
         .from('knowledge_base_docs')
         .select('*')
         .eq('project_id', projectId)
+        .or('is_deleted.is.null,is_deleted.eq.false')
 
       if (filters?.sourceType) projectQuery = projectQuery.eq('source_type', filters.sourceType)
       if (filters?.category) projectQuery = projectQuery.eq('category', filters.category)
@@ -168,6 +239,7 @@ export function useContextLake(projectId: string, clientId?: string, filters?: D
           .select('*')
           .eq('client_id', clientId)
           .is('project_id', null)
+          .or('is_deleted.is.null,is_deleted.eq.false')
 
         if (filters?.sourceType) clientQuery = clientQuery.eq('source_type', filters.sourceType)
         if (filters?.category) clientQuery = clientQuery.eq('category', filters.category)
@@ -205,11 +277,42 @@ export function useContextLake(projectId: string, clientId?: string, filters?: D
   return { documents, loading, error, reload: loadDocuments }
 }
 
-export async function deleteDocument(docId: string) {
+// Soft delete document (preserves for audit trail)
+export async function deleteDocument(docId: string, userId?: string) {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('knowledge_base_docs')
+    .update({
+      is_deleted: true,
+      deleted_at: new Date().toISOString(),
+      deleted_by: userId || null,
+    })
+    .eq('id', docId)
+
+  if (error) throw error
+}
+
+// Permanently delete document (use with caution)
+export async function hardDeleteDocument(docId: string) {
   const supabase = createClient()
   const { error } = await supabase
     .from('knowledge_base_docs')
     .delete()
+    .eq('id', docId)
+
+  if (error) throw error
+}
+
+// Restore soft-deleted document
+export async function restoreDocument(docId: string) {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('knowledge_base_docs')
+    .update({
+      is_deleted: false,
+      deleted_at: null,
+      deleted_by: null,
+    })
     .eq('id', docId)
 
   if (error) throw error
@@ -300,6 +403,7 @@ export function useAllClientDocuments(clientId: string, filters?: DocumentFilter
         .select('*')
         .eq('client_id', clientId)
         .is('project_id', null)
+        .or('is_deleted.is.null,is_deleted.eq.false') // Filter out soft-deleted docs
 
       if (filters?.sourceType) clientQuery = clientQuery.eq('source_type', filters.sourceType)
       if (filters?.category) clientQuery = clientQuery.eq('category', filters.category)
@@ -315,6 +419,7 @@ export function useAllClientDocuments(clientId: string, filters?: DocumentFilter
           .from('knowledge_base_docs')
           .select('*')
           .in('project_id', projectIds)
+          .or('is_deleted.is.null,is_deleted.eq.false') // Filter out soft-deleted docs
 
         if (filters?.sourceType) projectQuery = projectQuery.eq('source_type', filters.sourceType)
         if (filters?.category) projectQuery = projectQuery.eq('category', filters.category)
@@ -357,4 +462,90 @@ export function useAllClientDocuments(clientId: string, filters?: DocumentFilter
   }, [loadDocuments])
 
   return { documents, loading, error, reload: loadDocuments, projectsMap }
+}
+
+// ============================================
+// CREATE DOCUMENT FROM STEP OUTPUT
+// ============================================
+export interface CreateFromStepOutputData {
+  // Target location
+  projectId?: string
+  clientId?: string
+  // Document info
+  filename: string
+  category: string
+  content: string
+  description?: string
+  tags?: string[]
+  // Traceability
+  userId: string
+  // Source metadata (playbook step context)
+  sourceMetadata: PlaybookStepSourceMetadata
+  // Source linkage
+  sourceCampaignId: string
+  sourceStepId: string
+  sourceStepName: string
+  sourcePlaybookId?: string
+}
+
+export async function createDocumentFromStepOutput(data: CreateFromStepOutputData) {
+  const supabase = createClient()
+
+  const { data: newDoc, error } = await supabase
+    .from('knowledge_base_docs')
+    .insert({
+      project_id: data.projectId || null,
+      client_id: data.clientId || null,
+      filename: data.filename,
+      category: data.category,
+      extracted_content: data.content,
+      file_size_bytes: new Blob([data.content]).size,
+      mime_type: 'text/plain',
+      source_type: 'playbook' as DocumentSourceType,
+      source_playbook_id: data.sourcePlaybookId || null,
+      source_metadata: data.sourceMetadata,
+      description: data.description || null,
+      tags: data.tags || null,
+      // Traceability fields
+      created_by: data.userId,
+      updated_by: data.userId,
+      source_campaign_id: data.sourceCampaignId,
+      source_step_id: data.sourceStepId,
+      source_step_name: data.sourceStepName,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return newDoc
+}
+
+// ============================================
+// GET DOCUMENT WITH VERSION COUNT
+// ============================================
+export async function getDocumentWithVersionCount(docId: string): Promise<Document | null> {
+  const supabase = createClient()
+
+  // Get document
+  const { data: doc, error: docError } = await supabase
+    .from('knowledge_base_docs')
+    .select('*')
+    .eq('id', docId)
+    .single()
+
+  if (docError) throw docError
+  if (!doc) return null
+
+  // Get version count
+  const { count, error: countError } = await supabase
+    .from('document_versions')
+    .select('*', { count: 'exact', head: true })
+    .eq('document_id', docId)
+
+  if (countError) throw countError
+
+  return {
+    ...doc,
+    version_count: count || 0
+  }
 }
