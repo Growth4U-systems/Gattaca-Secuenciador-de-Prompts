@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import type { Client } from '@/hooks/useClients'
 import { useClients } from '@/hooks/useClients'
-import { useProjects } from '@/hooks/useProjects'
+import { useProjects, useDeletedProjects } from '@/hooks/useProjects'
 
 // Playbook type icons and colors
 const PlaybookIcon: Record<string, typeof Zap> = {
@@ -54,6 +54,7 @@ function ClientCardSkeleton() {
 export default function HomePage() {
   const { clients, loading: loadingClients, error: errorClients, createClient, updateClient, deleteClient } = useClients()
   const { projects, loading: loadingProjects } = useProjects()
+  const { projects: deletedProjects } = useDeletedProjects()
   const [searchQuery, setSearchQuery] = useState('')
   const [showNewClientModal, setShowNewClientModal] = useState(false)
   const [newClientName, setNewClientName] = useState('')
@@ -166,17 +167,33 @@ export default function HomePage() {
               </p>
             </div>
 
-            <button
-              onClick={() => setShowNewClientModal(true)}
-              className="group inline-flex items-center gap-2 px-6 py-3 bg-white text-blue-700 font-semibold rounded-xl hover:bg-blue-50 transition-all shadow-lg shadow-blue-900/20 hover:shadow-xl hover:shadow-blue-900/30"
-            >
-              <Plus size={20} />
-              Nuevo Cliente
-              <ArrowRight
-                size={16}
-                className="opacity-0 -ml-4 group-hover:opacity-100 group-hover:ml-0 transition-all"
-              />
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Trash Link */}
+              <Link
+                href="/trash"
+                className="relative p-3 bg-white/10 backdrop-blur rounded-xl hover:bg-white/20 transition-colors"
+                title="Papelera"
+              >
+                <Trash2 size={20} className="text-white" />
+                {deletedProjects.length > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center px-1.5 bg-red-500 text-white text-xs font-bold rounded-full">
+                    {deletedProjects.length}
+                  </span>
+                )}
+              </Link>
+
+              <button
+                onClick={() => setShowNewClientModal(true)}
+                className="group inline-flex items-center gap-2 px-6 py-3 bg-white text-blue-700 font-semibold rounded-xl hover:bg-blue-50 transition-all shadow-lg shadow-blue-900/20 hover:shadow-xl hover:shadow-blue-900/30"
+              >
+                <Plus size={20} />
+                Nuevo Cliente
+                <ArrowRight
+                  size={16}
+                  className="opacity-0 -ml-4 group-hover:opacity-100 group-hover:ml-0 transition-all"
+                />
+              </button>
+            </div>
           </div>
 
           {/* Stats */}
