@@ -926,8 +926,11 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
                                   <span className="flex-shrink-0 w-2 h-2 bg-green-500 rounded-full" title="Activo" />
                                 )}
                               </div>
-                              <p className={`text-xs truncate ${isEnabled ? 'text-gray-500' : 'text-gray-400'}`}>
-                                {scraper?.description?.slice(0, 40) || ''}...
+                              <p
+                                className={`text-xs line-clamp-2 ${isEnabled ? 'text-gray-500' : 'text-gray-400'}`}
+                                title={SCRAPER_DESCRIPTIONS[type] || scraper?.description || ''}
+                              >
+                                {SCRAPER_DESCRIPTIONS[type] || scraper?.description || ''}
                               </p>
                             </div>
                           </button>
@@ -961,6 +964,11 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
               {/* Scraper-specific inputs */}
               <div className="space-y-4">
                 <h4 className="text-sm font-medium text-gray-900">Configuración de {template.name}</h4>
+                {selectedScraper && SCRAPER_DESCRIPTIONS[selectedScraper] && (
+                  <p className="text-xs text-gray-500 -mt-2 pb-2 border-b border-gray-100">
+                    {SCRAPER_DESCRIPTIONS[selectedScraper]}
+                  </p>
+                )}
 
                 {/* Required fields */}
                 {template.inputSchema.required.map((key) => renderInputField(key, true))}
