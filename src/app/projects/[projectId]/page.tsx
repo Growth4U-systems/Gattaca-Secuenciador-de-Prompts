@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FileText, Rocket, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2, Building2, Table2, Globe, Search } from 'lucide-react'
+import { FileText, Rocket, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Folder, Calendar, MoreVertical, Share2, Building2, Table2, Globe, Search, List, Plus, Users } from 'lucide-react'
 import { useToast, useModal } from '@/components/ui'
 import { useProject } from '@/hooks/useProjects'
-import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
+import { useDocuments, deleteDocument, canDeleteDocument, updateDocumentFolder, groupByFolder, getFolders } from '@/hooks/useDocuments'
 import DocumentUpload from '@/components/documents/DocumentUpload'
 import DocumentBulkUpload from '@/components/documents/DocumentBulkUpload'
 import DocumentList from '@/components/documents/DocumentList'
+import DocumentFolderView from '@/components/documents/DocumentFolderView'
 import CSVTableViewer from '@/components/documents/CSVTableViewer'
 import JSONViewer from '@/components/documents/JSONViewer'
 import ScraperLauncher from '@/components/scraper/ScraperLauncher'
@@ -21,8 +22,9 @@ import ShareProjectModal from '@/components/project/ShareProjectModal'
 import ExportDataTab from '@/components/project/ExportDataTab'
 import ApiKeysConfig from '@/components/settings/ApiKeysConfig'
 import NicheFinderPlaybook from '@/components/niche-finder/NicheFinderPlaybook'
+import SignalBasedOutreachPlaybook from '@/components/signal-outreach/SignalBasedOutreachPlaybook'
 
-type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder'
+type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder' | 'signal-outreach'
 
 // Loading Skeleton
 function LoadingSkeleton() {
@@ -81,7 +83,11 @@ export default function ProjectPage({
   // Set initial tab based on project type
   useEffect(() => {
     if (project && activeTab === null) {
-      setActiveTab(project.playbook_type === 'niche_finder' ? 'niche-finder' : 'documents')
+      setActiveTab(
+        project.playbook_type === 'niche_finder' ? 'niche-finder' :
+        project.playbook_type === 'signal_based_outreach' ? 'signal-outreach' :
+        'documents'
+      )
     }
   }, [project, activeTab])
 
@@ -100,12 +106,22 @@ export default function ProjectPage({
     { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
   ]
 
+  // Signal-Based Outreach tabs
+  const signalOutreachTabs = [
+    { id: 'signal-outreach' as TabType, label: 'Signal Outreach', icon: Users, description: 'Configurar y ejecutar' },
+    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
+    { id: 'setup' as TabType, label: 'Setup', icon: Sliders, description: 'Variables y flujo' },
+    { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
+  ]
+
   // Add Export tab only for ECP projects
   const tabs = project?.playbook_type === 'niche_finder'
     ? nicheFinderTabs
-    : project?.playbook_type === 'ecp'
-      ? [...baseTabs, { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' }]
-      : baseTabs
+    : project?.playbook_type === 'signal_based_outreach'
+      ? signalOutreachTabs
+      : project?.playbook_type === 'ecp'
+        ? [...baseTabs, { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' }]
+        : baseTabs
 
   if (projectLoading || activeTab === null) {
     return <LoadingSkeleton />
@@ -459,6 +475,9 @@ export default function ProjectPage({
             {activeTab === 'niche-finder' && (
               <NicheFinderPlaybook projectId={params.projectId} />
             )}
+            {activeTab === 'signal-outreach' && (
+              <SignalBasedOutreachPlaybook projectId={params.projectId} />
+            )}
           </div>
         </div>
       </div>
@@ -493,6 +512,12 @@ function DocumentsTab({
   const [viewingDoc, setViewingDoc] = useState<any | null>(null)
   const [campaigns, setCampaigns] = useState<Array<{ id: string; ecp_name: string }>>([])
   const [showScraperLauncher, setShowScraperLauncher] = useState(false)
+  const [viewMode, setViewMode] = useState<'list' | 'folders'>('list')
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+
+  // Get existing folders from documents
+  const existingFolders = getFolders(documents)
 
   // Load campaigns for assignment
   useEffect(() => {
@@ -512,12 +537,39 @@ function DocumentsTab({
 
   const handleDelete = async (docId: string) => {
     try {
+      // Check for references first
+      const { canDelete, referenceCount, referencingProjects } = await canDeleteDocument(docId)
+      if (!canDelete) {
+        toast.error(
+          'No se puede eliminar',
+          `Este documento tiene ${referenceCount} referencia(s) en: ${referencingProjects.join(', ')}`
+        )
+        return
+      }
+
       await deleteDocument(docId)
       toast.success('Eliminado', 'Documento eliminado exitosamente')
       onReload()
     } catch (error) {
       toast.error('Error al eliminar', error instanceof Error ? error.message : 'Error desconocido')
     }
+  }
+
+  const handleMoveToFolder = async (docId: string, folder: string | null) => {
+    try {
+      await updateDocumentFolder(docId, folder)
+      toast.success('Movido', folder ? `Documento movido a "${folder}"` : 'Documento movido a Sin carpeta')
+      onReload()
+    } catch (error) {
+      toast.error('Error', 'No se pudo mover el documento')
+    }
+  }
+
+  const handleCreateFolder = () => {
+    if (!newFolderName.trim()) return
+    setShowNewFolderInput(false)
+    toast.success('Carpeta lista', `La carpeta "${newFolderName}" está disponible. Mueve documentos a ella.`)
+    setNewFolderName('')
   }
 
   const handleCampaignChange = async (docId: string, campaignId: string | null) => {
@@ -580,7 +632,33 @@ function DocumentsTab({
           <h2 className="text-xl font-semibold text-gray-900">Base de Conocimiento</h2>
           <p className="text-sm text-gray-500 mt-1">Gestiona los documentos que alimentan tus prompts</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-md transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              title="Vista lista"
+            >
+              <List size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode('folders')}
+              className={`p-2 rounded-md transition-colors ${
+                viewMode === 'folders'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              title="Vista carpetas"
+            >
+              <Folder size={16} />
+            </button>
+          </div>
+
           <button
             onClick={() => setShowScraperLauncher(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all shadow-sm"
@@ -592,6 +670,56 @@ function DocumentsTab({
           <DocumentBulkUpload projectId={projectId} onUploadComplete={onReload} />
         </div>
       </div>
+
+      {/* Create Folder (only in folder view) */}
+      {viewMode === 'folders' && (
+        <div className="mb-4">
+          {showNewFolderInput ? (
+            <div className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-xl">
+              <Folder size={18} className="text-gray-400" />
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateFolder()
+                  if (e.key === 'Escape') {
+                    setShowNewFolderInput(false)
+                    setNewFolderName('')
+                  }
+                }}
+                placeholder="Nombre de la carpeta..."
+                className="flex-1 px-2 py-1 text-sm border-0 focus:ring-0"
+                autoFocus
+              />
+              <button
+                onClick={handleCreateFolder}
+                disabled={!newFolderName.trim()}
+                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                Crear
+              </button>
+              <button
+                onClick={() => {
+                  setShowNewFolderInput(false)
+                  setNewFolderName('')
+                }}
+                className="p-1.5 text-gray-400 hover:text-gray-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowNewFolderInput(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              <Plus size={16} />
+              Nueva carpeta
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Token Monitor */}
       {documents.length > 0 && (
@@ -606,6 +734,13 @@ function DocumentsTab({
             <div key={i} className="h-20 bg-gray-50 rounded-xl animate-pulse" />
           ))}
         </div>
+      ) : viewMode === 'folders' ? (
+        <DocumentFolderView
+          documents={documents}
+          onDocumentClick={setViewingDoc}
+          showCreateFolder={false}
+          emptyMessage="No hay documentos en este proyecto"
+        />
       ) : (
         <DocumentList
           documents={documents}
