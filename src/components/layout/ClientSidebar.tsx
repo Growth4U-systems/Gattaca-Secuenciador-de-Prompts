@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import {
   Building2,
   FolderOpen,
@@ -30,6 +30,8 @@ interface ClientSidebarProps {
 
 export default function ClientSidebar({ clientId, clientName }: ClientSidebarProps) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const currentTab = searchParams.get('tab')
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [projectsExpanded, setProjectsExpanded] = useState(true)
@@ -64,10 +66,16 @@ export default function ClientSidebar({ clientId, clientName }: ClientSidebarPro
   ]
 
   const isActive = (href: string, exact?: boolean) => {
+    const isClientPage = pathname === `/clients/${clientId}`
+
     if (exact) {
-      return pathname === href.split('?')[0] && !pathname?.includes('tab=')
+      // "Resumen" is active when no tab parameter
+      return isClientPage && !currentTab
     }
-    return pathname?.startsWith(href.split('?')[0]) && href.includes(pathname || '')
+
+    // For other tabs, check if the tab matches
+    const hrefTab = href.includes('?tab=') ? href.split('?tab=')[1] : null
+    return isClientPage && currentTab === hrefTab
   }
 
   return (

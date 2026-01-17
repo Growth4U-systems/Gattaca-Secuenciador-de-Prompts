@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Building2,
   FolderOpen,
@@ -39,10 +39,24 @@ export default function ClientPage({
   params: { clientId: string }
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const toast = useToast()
   const { client, loading: clientLoading, error: clientError } = useClient(params.clientId)
   const { documents, loading: docsLoading, reload: reloadDocs, projectsMap } = useAllClientDocuments(params.clientId)
-  const [activeTab, setActiveTab] = useState<TabType>('overview')
+
+  // Sync activeTab with URL query param
+  const tabFromUrl = searchParams.get('tab') as TabType | null
+  const [activeTab, setActiveTab] = useState<TabType>(tabFromUrl || 'overview')
+
+  // Update activeTab when URL changes
+  useEffect(() => {
+    const tab = searchParams.get('tab') as TabType | null
+    if (tab && ['overview', 'context-lake', 'projects', 'playbooks', 'settings'].includes(tab)) {
+      setActiveTab(tab)
+    } else if (!tab) {
+      setActiveTab('overview')
+    }
+  }, [searchParams])
   const [projects, setProjects] = useState<Project[]>([])
   const [loadingProjects, setLoadingProjects] = useState(true)
 
@@ -189,7 +203,14 @@ export default function ClientPage({
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      setActiveTab(tab.id)
+                      // Update URL to reflect tab change
+                      const url = tab.id === 'overview'
+                        ? `/clients/${params.clientId}`
+                        : `/clients/${params.clientId}?tab=${tab.id}`
+                      router.push(url, { scroll: false })
+                    }}
                     className={`relative flex-shrink-0 flex items-center gap-2.5 px-6 py-4 text-sm font-medium transition-all ${
                       isActive ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-700'
                     }`}
