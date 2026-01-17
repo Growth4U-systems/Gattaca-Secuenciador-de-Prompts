@@ -21,8 +21,16 @@ import ShareProjectModal from '@/components/project/ShareProjectModal'
 import ExportDataTab from '@/components/project/ExportDataTab'
 import ApiKeysConfig from '@/components/settings/ApiKeysConfig'
 import NicheFinderPlaybook from '@/components/niche-finder/NicheFinderPlaybook'
+import ProjectSidebar from '@/components/project/ProjectSidebar'
+import { supabase } from '@/lib/supabase'
 
 type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder'
+
+interface SiblingProject {
+  id: string
+  name: string
+  playbook_type: string
+}
 
 // Loading Skeleton
 function LoadingSkeleton() {
@@ -77,6 +85,8 @@ export default function ProjectPage({
   const [savingProject, setSavingProject] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [siblingProjects, setSiblingProjects] = useState<SiblingProject[]>([])
 
   // Set initial tab based on project type
   useEffect(() => {
@@ -84,6 +94,47 @@ export default function ProjectPage({
       setActiveTab(project.playbook_type === 'niche_finder' ? 'niche-finder' : 'documents')
     }
   }, [project, activeTab])
+
+  // Load sidebar collapsed state from localStorage
+  useEffect(() => {
+    if (project?.client?.id) {
+      const saved = localStorage.getItem(`sidebar-collapsed-${project.client.id}`)
+      if (saved !== null) {
+        setSidebarCollapsed(JSON.parse(saved))
+      }
+    }
+  }, [project?.client?.id])
+
+  // Save sidebar state to localStorage
+  const handleSidebarToggle = () => {
+    const newState = !sidebarCollapsed
+    setSidebarCollapsed(newState)
+    if (project?.client?.id) {
+      localStorage.setItem(`sidebar-collapsed-${project.client.id}`, JSON.stringify(newState))
+    }
+  }
+
+  // Load sibling projects (other projects from same client)
+  useEffect(() => {
+    const loadSiblingProjects = async () => {
+      if (!project?.client?.id) return
+
+      try {
+        const { data, error } = await supabase
+          .from('projects')
+          .select('id, name, playbook_type')
+          .eq('client_id', project.client.id)
+          .order('updated_at', { ascending: false })
+
+        if (error) throw error
+        setSiblingProjects(data || [])
+      } catch (err) {
+        console.error('Error loading sibling projects:', err)
+      }
+    }
+
+    loadSiblingProjects()
+  }, [project?.client?.id])
 
   // Base tabs available for all projects (Setup unifies Variables + Flow)
   const baseTabs = [
@@ -217,28 +268,23 @@ export default function ProjectPage({
   const currentTab = tabs.find(t => t.id === activeTab)
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
-      {/* Top Navigation Bar */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Breadcrumbs */}
-          <nav className="flex items-center gap-2 py-3 text-sm" aria-label="Breadcrumb">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 text-gray-500 hover:text-blue-600 transition-colors"
-            >
-              <Home size={14} />
-              <span>Proyectos</span>
-            </Link>
-            <ChevronRight size={14} className="text-gray-300" />
-            <span className="text-gray-900 font-medium truncate max-w-[200px]" title={project.name}>
-              {project.name}
-            </span>
-          </nav>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex">
+      {/* Sidebar */}
+      {project.client?.id && (
+        <ProjectSidebar
+          clientId={project.client.id}
+          clientName={project.client.name || 'Cliente'}
+          clientIndustry={project.client.industry}
+          currentProjectId={params.projectId}
+          projects={siblingProjects}
+          isCollapsed={sidebarCollapsed}
+          onToggleCollapse={handleSidebarToggle}
+        />
+      )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Main Content */}
+      <main className="flex-1 min-w-0">
+        <div className="max-w-5xl mx-auto px-6 py-6">
         {/* Project Header Card */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
           <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 px-6 py-5">
@@ -463,15 +509,16 @@ export default function ProjectPage({
         </div>
       </div>
 
-      {/* Share Modal */}
-      {showShareModal && (
-        <ShareProjectModal
-          projectId={params.projectId}
-          projectName={project.name}
-          onClose={() => setShowShareModal(false)}
-        />
-      )}
-    </main>
+        {/* Share Modal */}
+        {showShareModal && (
+          <ShareProjectModal
+            projectId={params.projectId}
+            projectName={project.name}
+            onClose={() => setShowShareModal(false)}
+          />
+        )}
+      </main>
+    </div>
   )
 }
 
