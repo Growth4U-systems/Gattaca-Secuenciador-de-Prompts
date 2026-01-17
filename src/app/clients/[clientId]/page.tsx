@@ -108,7 +108,7 @@ export default function ClientPage({
       try {
         const { data, error } = await supabase
           .from('playbooks')
-          .select('id, name, description, playbook_type, is_public, version')
+          .select('id, name, description, playbook_type, is_public, version, config')
           .order('name')
 
         if (error) throw error
