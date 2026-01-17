@@ -18,6 +18,8 @@ import {
   Eye,
   Filter,
   Download,
+  Upload,
+  Database,
 } from 'lucide-react'
 import { useToast } from '@/components/ui'
 import ReactMarkdown from 'react-markdown'
@@ -35,6 +37,8 @@ interface Step {
   icon: React.ComponentType<{ className?: string }>
   status: StepStatus
   output?: string
+  importedData?: unknown[]
+  allowsImport?: boolean // For scraping steps that accept CSV import
 }
 
 interface Phase {
@@ -97,6 +101,7 @@ const INITIAL_PHASES: Phase[] = [
         description: 'Extrae los ultimos posts de cada creador con sus metricas',
         icon: Download,
         status: 'pending',
+        allowsImport: true,
       },
       {
         id: 'evaluate_posts',
@@ -127,6 +132,7 @@ const INITIAL_PHASES: Phase[] = [
         description: 'Extrae perfiles de quienes interactuaron con los posts',
         icon: Users,
         status: 'pending',
+        allowsImport: true,
       },
       {
         id: 'filter_icp',
@@ -175,6 +181,13 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
   const [phases, setPhases] = useState<Phase[]>(INITIAL_PHASES)
   const [currentStepId, setCurrentStepId] = useState<string | null>(null)
   const [isExecuting, setIsExecuting] = useState(false)
+  const [isLoadingOutputs, setIsLoadingOutputs] = useState(true)
+
+  // Import modal state
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importStepId, setImportStepId] = useState<string | null>(null)
+  const [importData, setImportData] = useState('')
+  const [isImporting, setIsImporting] = useState(false)
 
   // Load saved config from project
   useEffect(() => {
@@ -207,6 +220,40 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
       }
     }
     loadProjectConfig()
+  }, [projectId])
+
+  // Load saved step outputs from database
+  useEffect(() => {
+    const loadStepOutputs = async () => {
+      setIsLoadingOutputs(true)
+      try {
+        const response = await fetch(`/api/playbook/outputs?projectId=${projectId}&playbookType=signal_based_outreach`)
+        const data = await response.json()
+
+        if (data.success && data.outputs) {
+          setPhases(prev => prev.map(phase => ({
+            ...phase,
+            steps: phase.steps.map(step => {
+              const savedOutput = data.outputs.find((o: { step_id: string }) => o.step_id === step.id)
+              if (savedOutput) {
+                return {
+                  ...step,
+                  status: savedOutput.status as StepStatus,
+                  output: savedOutput.output_content || undefined,
+                  importedData: savedOutput.imported_data || undefined,
+                }
+              }
+              return step
+            }),
+          })))
+        }
+      } catch (error) {
+        console.error('Error loading step outputs:', error)
+      } finally {
+        setIsLoadingOutputs(false)
+      }
+    }
+    loadStepOutputs()
   }, [projectId])
 
   const togglePhase = (phaseId: string) => {
@@ -332,6 +379,108 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
 
   const getTotalStepsCount = (): number => {
     return phases.flatMap(p => p.steps).length
+  }
+
+  const openImportModal = (stepId: string) => {
+    setImportStepId(stepId)
+    setImportData('')
+    setImportModalOpen(true)
+  }
+
+  const closeImportModal = () => {
+    setImportModalOpen(false)
+    setImportStepId(null)
+    setImportData('')
+  }
+
+  const parseCSVorJSON = (text: string): unknown[] => {
+    const trimmed = text.trim()
+
+    // Try JSON first
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        return Array.isArray(parsed) ? parsed : [parsed]
+      } catch {
+        // Not valid JSON, try CSV
+      }
+    }
+
+    // Parse CSV
+    const lines = trimmed.split('\n').filter(line => line.trim())
+    if (lines.length < 2) return []
+
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''))
+    const data: Record<string, string>[] = []
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''))
+      const row: Record<string, string> = {}
+      headers.forEach((header, idx) => {
+        row[header] = values[idx] || ''
+      })
+      data.push(row)
+    }
+
+    return data
+  }
+
+  const handleImport = async () => {
+    if (!importStepId || !importData.trim()) return
+
+    setIsImporting(true)
+    try {
+      const parsedData = parseCSVorJSON(importData)
+
+      if (parsedData.length === 0) {
+        toast.error('Error', 'No se pudieron parsear los datos. Verifica el formato CSV o JSON.')
+        return
+      }
+
+      const response = await fetch('/api/playbook/import-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          stepId: importStepId,
+          playbookType: 'signal_based_outreach',
+          data: parsedData,
+          source: 'manual',
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Update local state
+        setPhases(prev => prev.map(phase => ({
+          ...phase,
+          steps: phase.steps.map(step =>
+            step.id === importStepId
+              ? { ...step, status: 'completed' as StepStatus, importedData: parsedData }
+              : step
+          ),
+        })))
+
+        toast.success('Datos importados', `${parsedData.length} registros importados correctamente`)
+        closeImportModal()
+      } else {
+        throw new Error(result.error || 'Error al importar datos')
+      }
+    } catch (error) {
+      console.error('Error importing data:', error)
+      toast.error('Error', error instanceof Error ? error.message : 'Error al importar datos')
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  const getImportedDataPreview = (stepId: string): unknown[] | undefined => {
+    for (const phase of phases) {
+      const step = phase.steps.find(s => s.id === stepId)
+      if (step?.importedData) return step.importedData
+    }
+    return undefined
   }
 
   return (
@@ -533,31 +682,61 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
                             </div>
                             <p className="text-sm text-gray-500 mb-3">{step.description}</p>
 
-                            {/* Execute Button */}
-                            {step.status !== 'completed' && (
-                              <button
-                                onClick={() => executeStep(step.id)}
-                                disabled={!canExecute || isExecuting}
-                                className={`
-                                  inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
-                                  ${canExecute && !isExecuting
-                                    ? 'bg-orange-600 text-white hover:bg-orange-700'
-                                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                  }
-                                `}
-                              >
-                                {isRunning ? (
-                                  <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    Ejecutando...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Play className="w-4 h-4" />
-                                    Ejecutar Paso
-                                  </>
-                                )}
-                              </button>
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {/* Execute Button */}
+                              {step.status !== 'completed' && (
+                                <button
+                                  onClick={() => executeStep(step.id)}
+                                  disabled={!canExecute || isExecuting}
+                                  className={`
+                                    inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                                    ${canExecute && !isExecuting
+                                      ? 'bg-orange-600 text-white hover:bg-orange-700'
+                                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                    }
+                                  `}
+                                >
+                                  {isRunning ? (
+                                    <>
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                      Ejecutando...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="w-4 h-4" />
+                                      Ejecutar Paso
+                                    </>
+                                  )}
+                                </button>
+                              )}
+
+                              {/* Import Button for scraping steps */}
+                              {step.allowsImport && (
+                                <button
+                                  onClick={() => openImportModal(step.id)}
+                                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200"
+                                >
+                                  <Upload className="w-4 h-4" />
+                                  Importar CSV
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Imported Data Preview */}
+                            {step.importedData && step.importedData.length > 0 && (
+                              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="flex items-center gap-2 text-sm text-blue-700 font-medium mb-2">
+                                  <Database className="w-4 h-4" />
+                                  {step.importedData.length} registros importados
+                                </div>
+                                <div className="text-xs text-blue-600 max-h-24 overflow-y-auto">
+                                  <pre className="whitespace-pre-wrap">
+                                    {JSON.stringify(step.importedData.slice(0, 3), null, 2)}
+                                    {step.importedData.length > 3 && `\n... y ${step.importedData.length - 3} más`}
+                                  </pre>
+                                </div>
+                              </div>
                             )}
 
                             {/* Output */}
@@ -579,6 +758,95 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
           )
         })}
       </div>
+
+      {/* Import Modal */}
+      {importModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Upload className="w-5 h-5 text-blue-600" />
+                Importar Datos
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Pega los datos en formato CSV o JSON
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Datos (CSV o JSON)
+                </label>
+                <textarea
+                  value={importData}
+                  onChange={(e) => setImportData(e.target.value)}
+                  rows={12}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm text-gray-900 placeholder:text-gray-400"
+                  placeholder={`CSV:
+fullName,profileUrl,headline
+Juan Garcia,https://linkedin.com/in/juan,CEO at Startup
+Maria Lopez,https://linkedin.com/in/maria,CTO at Tech
+
+O JSON:
+[
+  {"fullName": "Juan Garcia", "profileUrl": "...", "headline": "..."},
+  {"fullName": "Maria Lopez", "profileUrl": "...", "headline": "..."}
+]`}
+                />
+              </div>
+
+              {importData.trim() && (
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <div className="text-sm font-medium text-gray-700 mb-1">Vista previa:</div>
+                  <div className="text-xs text-gray-600">
+                    {(() => {
+                      try {
+                        const parsed = parseCSVorJSON(importData)
+                        return `${parsed.length} registros detectados`
+                      } catch {
+                        return 'Error al parsear datos'
+                      }
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={closeImportModal}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={!importData.trim() || isImporting}
+                className={`
+                  px-4 py-2 text-sm font-medium rounded-lg transition-colors inline-flex items-center gap-2
+                  ${importData.trim() && !isImporting
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }
+                `}
+              >
+                {isImporting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Importando...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    Importar
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

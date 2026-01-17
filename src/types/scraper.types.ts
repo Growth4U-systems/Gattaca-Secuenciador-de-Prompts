@@ -16,10 +16,11 @@ export type ScraperStatus =
   | 'cancelled';  // Cancelled by user
 
 export type ScraperProvider =
-  | 'apify'       // Apify actors
-  | 'firecrawl'   // Firecrawl API
-  | 'mangools'    // Mangools SEO API
-  | 'custom';     // Custom Edge Functions
+  | 'apify'         // Apify actors
+  | 'firecrawl'     // Firecrawl API
+  | 'mangools'      // Mangools SEO API
+  | 'phantombuster' // Phantombuster agents
+  | 'custom';       // Custom Edge Functions
 
 export type BatchStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
@@ -62,7 +63,10 @@ export type ScraperType =
   // News
   | 'google_news'
   // Custom
-  | 'news_bing';
+  | 'news_bing'
+  // Phantombuster
+  | 'linkedin_post_engagers'
+  | 'linkedin_profile_scraper';
 
 // ============================================
 // SCRAPER TEMPLATES

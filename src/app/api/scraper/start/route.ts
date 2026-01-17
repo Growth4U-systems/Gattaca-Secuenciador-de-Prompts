@@ -248,6 +248,8 @@ async function handleSingleScraper(
         return await launchApifyActor(supabase, job as ScraperJob, finalInput, webhookSecret, targetName, targetCategory, tags, userId);
       case 'mangools':
         return await executeMangools(supabase, job as ScraperJob, finalInput, targetName, targetCategory, tags, userId);
+      case 'phantombuster':
+        return await executePhantombuster(supabase, job as ScraperJob, finalInput, targetName, targetCategory, tags, userId);
       case 'custom':
         return await executeCustomScraper(supabase, job as ScraperJob, finalInput, targetName, targetCategory, tags, userId);
       default:
@@ -1814,4 +1816,335 @@ function getLanguageId(language: string): string {
     'it': '1004',
   };
   return languages[language] || '1003'; // Default to Spanish
+}
+
+// ============================================
+// PHANTOMBUSTER EXECUTOR
+// ============================================
+
+interface PhantombusterLaunchResponse {
+  status: string;
+  containerId?: string;
+  message?: string;
+}
+
+interface PhantombusterOutputResponse {
+  status: string;
+  containerStatus?: string;
+  output?: string;
+  resultObject?: string;
+  exitCode?: number;
+}
+
+interface PhantombusterEngager {
+  profileUrl?: string;
+  fullName?: string;
+  firstName?: string;
+  lastName?: string;
+  headline?: string;
+  location?: string;
+  connectionDegree?: string;
+  interactionType?: string;
+  postUrl?: string;
+  imgUrl?: string;
+  timestamp?: string;
+  error?: string;
+  [key: string]: unknown;
+}
+
+async function executePhantombuster(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  job: ScraperJob,
+  input: Record<string, unknown>,
+  targetName?: string,
+  targetCategory?: string,
+  providedTags?: string[],
+  userId?: string
+): Promise<NextResponse<StartScraperResponse>> {
+  // Get Phantombuster API key
+  const phantombusterApiKey = userId
+    ? await getUserApiKey({ userId, serviceName: 'phantombuster', supabase })
+    : process.env.PHANTOMBUSTER_API_KEY;
+
+  if (!phantombusterApiKey) {
+    throw new Error('Phantombuster API key not configured. Please add your API key in Settings > API Keys.');
+  }
+
+  // Get LinkedIn session cookie (required for LinkedIn scrapers)
+  let sessionCookie = input.sessionCookie as string | undefined;
+  if (!sessionCookie && userId) {
+    sessionCookie = await getUserApiKey({ userId, serviceName: 'linkedin_cookie', supabase }) || undefined;
+  }
+  if (!sessionCookie) {
+    sessionCookie = process.env.PHANTOMBUSTER_LINKEDIN_COOKIE || undefined;
+  }
+
+  if (!sessionCookie) {
+    throw new Error('LinkedIn session cookie not configured. Please add your li_at cookie in Settings > API Keys as "linkedin_cookie".');
+  }
+
+  // Update job to running
+  await supabase
+    .from('scraper_jobs')
+    .update({ status: 'running', started_at: new Date().toISOString() })
+    .eq('id', job.id);
+
+  try {
+    // Build agent argument based on scraper type
+    const agentArgument = buildPhantombusterArgument(job.scraper_type, input, sessionCookie);
+
+    // Launch the agent
+    const launchResponse = await fetch('https://api.phantombuster.com/api/v2/agents/launch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Phantombuster-Key': phantombusterApiKey,
+      },
+      body: JSON.stringify({
+        id: job.actor_id,
+        argument: agentArgument,
+      }),
+    });
+
+    if (!launchResponse.ok) {
+      const errorText = await launchResponse.text();
+      throw new Error(`Phantombuster launch error: ${launchResponse.status} - ${errorText}`);
+    }
+
+    const launchResult = await launchResponse.json() as PhantombusterLaunchResponse;
+
+    if (launchResult.status !== 'success') {
+      throw new Error(`Phantombuster launch failed: ${launchResult.message || 'Unknown error'}`);
+    }
+
+    const containerId = launchResult.containerId;
+    console.log('[scraper/start] Phantombuster agent launched, containerId:', containerId);
+
+    // Poll for completion (max 5 minutes)
+    const maxWaitTime = 300000; // 5 minutes
+    const pollInterval = 5000; // 5 seconds
+    const startTime = Date.now();
+
+    let outputResult: PhantombusterOutputResponse | null = null;
+
+    while (Date.now() - startTime < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+      const outputResponse = await fetch(`https://api.phantombuster.com/api/v2/agents/fetch-output?id=${job.actor_id}`, {
+        headers: {
+          'X-Phantombuster-Key': phantombusterApiKey,
+        },
+      });
+
+      if (!outputResponse.ok) {
+        continue; // Retry on error
+      }
+
+      const outputData = await outputResponse.json() as PhantombusterOutputResponse;
+
+      console.log('[scraper/start] Phantombuster status:', outputData.containerStatus);
+
+      // Update job progress
+      await supabase
+        .from('scraper_jobs')
+        .update({
+          provider_metadata: {
+            containerId,
+            status: outputData.containerStatus,
+          },
+        })
+        .eq('id', job.id);
+
+      if (outputData.containerStatus === 'finished') {
+        outputResult = outputData;
+        break;
+      } else if (outputData.containerStatus === 'error' || outputData.exitCode !== undefined && outputData.exitCode !== 0) {
+        throw new Error(`Phantombuster agent failed: ${outputData.output || 'Unknown error'}`);
+      }
+    }
+
+    if (!outputResult) {
+      throw new Error('Phantombuster agent timed out');
+    }
+
+    // Parse results
+    let results: PhantombusterEngager[] = [];
+    if (outputResult.resultObject) {
+      try {
+        results = JSON.parse(outputResult.resultObject);
+        if (!Array.isArray(results)) {
+          results = [results];
+        }
+      } catch {
+        console.error('[scraper/start] Failed to parse Phantombuster results');
+      }
+    }
+
+    // Filter out error entries
+    results = results.filter(r => !r.error && r.profileUrl);
+
+    const effectiveTargetName = targetName || `LinkedIn Engagers (${results.length})`;
+    const documentName = generateDocumentName(job.scraper_type, effectiveTargetName);
+    const documentTags = providedTags?.length
+      ? providedTags
+      : generateAutoTags(job.scraper_type, effectiveTargetName);
+
+    // Format results as markdown
+    const documentContent = formatPhantombusterResults(results, job.scraper_type, input);
+    const documentBrief = await generateDocumentBrief(documentContent, job.scraper_type, effectiveTargetName);
+
+    // Save to knowledge_base_docs
+    const adminClient = createAdminClient();
+    const { data: doc, error: docError } = await adminClient
+      .from('knowledge_base_docs')
+      .insert({
+        project_id: job.project_id,
+        filename: documentName,
+        extracted_content: documentContent,
+        description: documentBrief,
+        category: targetCategory || job.target_category || 'research',
+        tags: documentTags,
+        source_type: 'scraper',
+        source_job_id: job.id,
+        source_metadata: {
+          scraper_type: job.scraper_type,
+          scraped_at: new Date().toISOString(),
+          target_name: effectiveTargetName,
+          provider: 'phantombuster',
+          containerId,
+          profiles_count: results.length,
+          raw_data: results, // Store raw data for later use
+        },
+      })
+      .select()
+      .single();
+
+    if (docError) {
+      throw new Error(`Failed to save document: ${docError.message}`);
+    }
+
+    // Update job as completed
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'completed',
+        result_count: results.length,
+        result_preview: results.slice(0, 5).map(r => ({
+          name: r.fullName,
+          headline: r.headline,
+          url: r.profileUrl,
+        })),
+        completed_at: new Date().toISOString(),
+        provider_metadata: {
+          containerId,
+          document_id: doc?.id,
+          profiles_count: results.length,
+        },
+      })
+      .eq('id', job.id);
+
+    return NextResponse.json({
+      success: true,
+      job_id: job.id,
+      completed: true,
+    });
+
+  } catch (error) {
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'failed',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', job.id);
+
+    throw error;
+  }
+}
+
+function buildPhantombusterArgument(
+  scraperType: string,
+  input: Record<string, unknown>,
+  sessionCookie: string
+): Record<string, unknown> {
+  switch (scraperType) {
+    case 'linkedin_post_engagers':
+      return {
+        sessionCookie,
+        spreadsheetUrl: '', // We pass URLs directly
+        postUrls: input.postUrls,
+        numberOfLikersPerPost: input.numberOfLikersPerPost || 100,
+        numberOfCommentersPerPost: input.numberOfCommentersPerPost || 100,
+      };
+
+    case 'linkedin_profile_scraper':
+      return {
+        sessionCookie,
+        spreadsheetUrl: '', // We pass URLs directly
+        profileUrls: input.profileUrls,
+      };
+
+    default:
+      return {
+        sessionCookie,
+        ...input,
+      };
+  }
+}
+
+function formatPhantombusterResults(
+  results: PhantombusterEngager[],
+  scraperType: string,
+  input: Record<string, unknown>
+): string {
+  const today = new Date().toLocaleDateString('es-ES');
+
+  let markdown = `# LinkedIn Engagers\n\n`;
+  markdown += `**Tipo de scraper:** ${scraperType}\n`;
+  markdown += `**Fecha de extracción:** ${today}\n`;
+  markdown += `**Total de perfiles:** ${results.length}\n`;
+
+  if (input.postUrls) {
+    const postUrls = Array.isArray(input.postUrls) ? input.postUrls : [input.postUrls];
+    markdown += `**Posts analizados:** ${postUrls.length}\n`;
+  }
+
+  markdown += `\n---\n\n`;
+
+  if (results.length > 0) {
+    markdown += `## Perfiles Encontrados\n\n`;
+    markdown += `| Nombre | Headline | Ubicación | Tipo | URL |\n`;
+    markdown += `|--------|----------|-----------|------|-----|\n`;
+
+    for (const profile of results) {
+      const name = profile.fullName || `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'N/A';
+      const headline = (profile.headline || 'N/A').slice(0, 50);
+      const location = profile.location || 'N/A';
+      const interactionType = profile.interactionType || 'N/A';
+      const url = profile.profileUrl || 'N/A';
+
+      markdown += `| ${name} | ${headline} | ${location} | ${interactionType} | [Perfil](${url}) |\n`;
+    }
+
+    // Summary by interaction type
+    const likers = results.filter(r => r.interactionType === 'liker').length;
+    const commenters = results.filter(r => r.interactionType === 'commenter').length;
+
+    if (likers > 0 || commenters > 0) {
+      markdown += `\n### Resumen de Interacciones\n`;
+      markdown += `- **Likes:** ${likers}\n`;
+      markdown += `- **Comentarios:** ${commenters}\n`;
+    }
+  }
+
+  markdown += `\n---\n\n*Datos obtenidos de Phantombuster*\n`;
+
+  // Also include JSON data for programmatic use
+  markdown += `\n\n## Datos JSON\n\n`;
+  markdown += '```json\n';
+  markdown += JSON.stringify(results, null, 2);
+  markdown += '\n```\n';
+
+  return markdown;
 }
