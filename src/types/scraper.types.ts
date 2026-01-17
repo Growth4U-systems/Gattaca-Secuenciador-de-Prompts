@@ -55,6 +55,10 @@ export type ScraperType =
   // Web & SEO
   | 'website'
   | 'seo_keywords'
+  | 'seo_serp_checker'
+  | 'seo_site_profiler'
+  | 'seo_link_miner'
+  | 'seo_competitor_keywords'
   // News
   | 'google_news'
   // Custom
@@ -70,7 +74,7 @@ export interface ScraperTemplate {
   description: string;
   provider: ScraperProvider;
   actorId: string;
-  category: 'social' | 'youtube' | 'reviews' | 'web' | 'custom';
+  category: 'social' | 'youtube' | 'reviews' | 'web' | 'seo' | 'custom';
   inputSchema: ScraperInputSchema;
   outputFields: string[];  // Fields to extract from results
 }

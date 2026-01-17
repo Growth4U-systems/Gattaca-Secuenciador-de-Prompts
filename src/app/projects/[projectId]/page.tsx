@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FileText, Rocket, Workflow, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2, Building2, Table2, Globe, Search } from 'lucide-react'
+import { FileText, Rocket, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Calendar, MoreVertical, Share2, Building2, Table2, Globe, Search } from 'lucide-react'
 import { useToast, useModal } from '@/components/ui'
 import { useProject } from '@/hooks/useProjects'
 import { useDocuments, deleteDocument } from '@/hooks/useDocuments'
@@ -14,16 +14,15 @@ import CSVTableViewer from '@/components/documents/CSVTableViewer'
 import JSONViewer from '@/components/documents/JSONViewer'
 import ScraperLauncher from '@/components/scraper/ScraperLauncher'
 import TokenMonitor from '@/components/TokenMonitor'
-import FlowSetup from '@/components/flow/FlowSetup'
 import CampaignRunner from '@/components/campaign/CampaignRunner'
-import ProjectVariables from '@/components/project/ProjectVariables'
+import SetupTab from '@/components/project/SetupTab'
 import ResearchPromptsEditor from '@/components/project/ResearchPromptsEditor'
 import ShareProjectModal from '@/components/project/ShareProjectModal'
 import ExportDataTab from '@/components/project/ExportDataTab'
 import ApiKeysConfig from '@/components/settings/ApiKeysConfig'
 import NicheFinderPlaybook from '@/components/niche-finder/NicheFinderPlaybook'
 
-type TabType = 'documents' | 'flow' | 'config' | 'campaigns' | 'context' | 'variables' | 'export' | 'niche-finder'
+type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder'
 
 // Loading Skeleton
 function LoadingSkeleton() {
@@ -86,11 +85,10 @@ export default function ProjectPage({
     }
   }, [project, activeTab])
 
-  // Base tabs available for all projects
+  // Base tabs available for all projects (Setup unifies Variables + Flow)
   const baseTabs = [
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
-    { id: 'variables' as TabType, label: 'Variables', icon: Sliders, description: 'Configuración' },
-    { id: 'flow' as TabType, label: 'Flujo', icon: Workflow, description: 'Pasos y prompts' },
+    { id: 'setup' as TabType, label: 'Setup', icon: Sliders, description: 'Variables y flujo' },
     { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
   ]
 
@@ -98,8 +96,7 @@ export default function ProjectPage({
   const nicheFinderTabs = [
     { id: 'niche-finder' as TabType, label: 'Buscador de Nichos', icon: Search, description: 'Configurar y ejecutar' },
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
-    { id: 'variables' as TabType, label: 'Variables', icon: Sliders, description: 'Configuración' },
-    { id: 'flow' as TabType, label: 'Flujo', icon: Workflow, description: 'Pasos y prompts' },
+    { id: 'setup' as TabType, label: 'Setup', icon: Sliders, description: 'Variables y flujo' },
     { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
   ]
 
@@ -429,27 +426,29 @@ export default function ProjectPage({
                 totalTokens={totalTokens}
               />
             )}
-            {activeTab === 'variables' && (
-              <div className="space-y-6">
-                <ProjectVariables
+            {activeTab === 'setup' && (
+              <div className="space-y-8">
+                <SetupTab
                   projectId={params.projectId}
                   initialVariables={project.variable_definitions || []}
-                  onUpdate={() => {
+                  documents={documents}
+                  onVariablesUpdate={() => {
                     window.location.reload()
                   }}
                 />
-                <ResearchPromptsEditor
-                  projectId={params.projectId}
-                  initialPrompts={project.deep_research_prompts || []}
-                  onUpdate={() => {
-                    window.location.reload()
-                  }}
-                />
-                <ApiKeysConfig />
+                <div className="border-t border-gray-200 pt-6">
+                  <ResearchPromptsEditor
+                    projectId={params.projectId}
+                    initialPrompts={project.deep_research_prompts || []}
+                    onUpdate={() => {
+                      window.location.reload()
+                    }}
+                  />
+                </div>
+                <div className="border-t border-gray-200 pt-6">
+                  <ApiKeysConfig />
+                </div>
               </div>
-            )}
-            {activeTab === 'flow' && (
-              <FlowSetup projectId={params.projectId} documents={documents} />
             )}
             {activeTab === 'campaigns' && (
               <CampaignRunner projectId={params.projectId} project={project} />

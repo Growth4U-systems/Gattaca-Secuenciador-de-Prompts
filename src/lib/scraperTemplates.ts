@@ -427,11 +427,30 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
 
   seo_keywords: {
     type: 'seo_keywords',
-    name: 'SEO Keywords',
-    description: 'Get SEO keyword data from Mangools',
+    name: 'SEO Keywords (KWFinder)',
+    description: 'Investiga keywords: vol\u00famen, CPC, dificultad y sugerencias relacionadas',
     provider: 'mangools',
-    actorId: 'mangools',
-    category: 'web',
+    actorId: 'kwfinder',
+    category: 'seo',
+    inputSchema: {
+      required: ['keyword'],
+      optional: ['location', 'language', 'includeSerpOverview'],
+      defaults: {
+        location: 'Spain',
+        language: 'es',
+        includeSerpOverview: false,
+      },
+    },
+    outputFields: ['keyword', 'searchVolume', 'cpc', 'competition', 'trend', 'serpResults'],
+  },
+
+  seo_serp_checker: {
+    type: 'seo_serp_checker',
+    name: 'SERP Checker',
+    description: 'Analiza el SERP de Google: DA, PA, CF, TF y m\u00e9tricas de cada resultado',
+    provider: 'mangools',
+    actorId: 'serpchecker',
+    category: 'seo',
     inputSchema: {
       required: ['keyword'],
       optional: ['location', 'language'],
@@ -440,7 +459,57 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
         language: 'es',
       },
     },
-    outputFields: ['keyword', 'searchVolume', 'cpc', 'competition', 'trend'],
+    outputFields: ['position', 'url', 'title', 'da', 'pa', 'cf', 'tf', 'links', 'ctr'],
+  },
+
+  seo_site_profiler: {
+    type: 'seo_site_profiler',
+    name: 'Site Profiler',
+    description: 'M\u00e9tricas de dominio: DA, PA, backlinks, dominios referentes y tr\u00e1fico org\u00e1nico',
+    provider: 'mangools',
+    actorId: 'siteprofiler',
+    category: 'seo',
+    inputSchema: {
+      required: ['url'],
+      optional: [],
+      defaults: {},
+    },
+    outputFields: ['domain', 'da', 'pa', 'cf', 'tf', 'backlinks', 'refDomains', 'organicTraffic'],
+  },
+
+  seo_link_miner: {
+    type: 'seo_link_miner',
+    name: 'Link Miner',
+    description: 'An\u00e1lisis de backlinks: enlaces entrantes, ancors, CF/TF y tipo de link',
+    provider: 'mangools',
+    actorId: 'linkminer',
+    category: 'seo',
+    inputSchema: {
+      required: ['url'],
+      optional: ['linksPerDomain'],
+      defaults: {
+        linksPerDomain: 5,
+      },
+    },
+    outputFields: ['sourceUrl', 'anchor', 'cf', 'tf', 'dofollow', 'targetUrl'],
+  },
+
+  seo_competitor_keywords: {
+    type: 'seo_competitor_keywords',
+    name: 'Competitor Keywords',
+    description: 'Keywords de la competencia: posiciones, vol\u00famenes y URLs que rankean',
+    provider: 'mangools',
+    actorId: 'kwfinder-competitor',
+    category: 'seo',
+    inputSchema: {
+      required: ['url'],
+      optional: ['location', 'language'],
+      defaults: {
+        location: 'Spain',
+        language: 'es',
+      },
+    },
+    outputFields: ['keyword', 'position', 'searchVolume', 'cpc', 'url'],
   },
 
   // ==========================================
@@ -620,9 +689,15 @@ export const SCRAPER_CATEGORIES = [
   },
   {
     id: 'web',
-    name: 'Web & SEO',
-    description: 'Contenido web y keywords',
+    name: 'Web & Noticias',
+    description: 'Contenido web y noticias',
     icon: 'globe',
+  },
+  {
+    id: 'seo',
+    name: 'SEO & Keywords',
+    description: 'Keywords, backlinks y an\u00e1lisis SEO',
+    icon: 'search',
   },
   {
     id: 'custom',
