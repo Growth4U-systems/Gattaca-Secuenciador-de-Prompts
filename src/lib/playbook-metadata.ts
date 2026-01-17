@@ -313,6 +313,164 @@ Analiza sistemáticamente a tus competidores: cómo se posicionan, qué ofrecen,
       },
     ],
   },
+  signal_based_outreach: {
+    // Información básica
+    purpose:
+      'LinkedIn outreach usando señales de intención + lead magnet para 3x mejores tasas de respuesta.',
+    whenToUse: [
+      'Generar leads B2B cualificados en LinkedIn',
+      'Contactar personas que ya mostraron interés en temas relevantes',
+      'Ofrecer valor antes de pedir reuniones',
+    ],
+    outcome:
+      'Lista de 500+ leads ICP con mensajes personalizados y lead magnet listo para lanzar.',
+    relatedPlaybooks: ['niche_finder', 'ecp'],
+    targetAudience: 'SDRs, growth marketers, fundadores B2B',
+    steps: {
+      map_topics: 'Mapea propuesta de valor a temas de contenido',
+      find_creators: 'Busca creadores cuya audiencia es tu ICP',
+      evaluate_creators: 'Evalua actividad, viralidad y calidad de audiencia',
+      select_creators: 'Prioriza creadores para scrapear',
+      scrape_posts: 'Extrae posts recientes con metricas',
+      evaluate_posts: 'Puntua posts por engagement y alineamiento',
+      select_posts: 'Selecciona posts para scrapear engagers',
+      scrape_engagers: 'Extrae perfiles de quienes interactuaron',
+      filter_icp: 'Clasifica leads en ICP / Dudoso / Fuera',
+      lead_magnet_messages: 'Crea lead magnet y mensajes personalizados',
+      export_launch: 'Exporta CSV y lanza campana',
+    },
+    // Información extendida
+    icon: '📨',
+    description: `Signal-Based Outreach es un sistema para hacer outreach en LinkedIn usando:
+1. Creadores de contenido cuya audiencia coincide con tu ICP
+2. Señales de intención (reacciones a posts virales)
+3. Lead magnet como primer gesto de valor
+
+Resultado: De ~5% respuestas (outreach frío) a >15% respuestas.`,
+    objectives: [
+      'Identificar creadores cuya audiencia ES tu ICP',
+      'Contactar personas con contexto compartido',
+      'Generar 500+ leads ICP cualificados',
+      'Lograr >15% tasa de respuesta',
+    ],
+    requirements: [
+      'Definición clara de ICP (cargo, industria, tamaño empresa)',
+      'Lead magnet listo o definido',
+      'Cuenta LinkedIn activa',
+      'Acceso a herramientas de scraping (Apify/Phantombuster)',
+    ],
+    duration: '2-3 días',
+    detailedSteps: {
+      map_topics: {
+        brief: 'Mapea propuesta de valor a temas de contenido',
+        detailed:
+          'Traduce la propuesta de valor del cliente a un ecosistema de temas de contenido que atraigan al ICP. Incluye temas principales, adyacentes y tangenciales.',
+        tips: [
+          'El ICP no solo consume contenido sobre el tema principal',
+          'Ampliar el radar aumenta el pool de creadores',
+        ],
+      },
+      find_creators: {
+        brief: 'Busca creadores cuya audiencia es tu ICP',
+        detailed:
+          'Genera una lista de creadores candidatos usando búsqueda manual en LinkedIn, Perplexity, scrapers (Apify/Phantombuster) o análisis de creadores conocidos.',
+      },
+      evaluate_creators: {
+        brief: 'Evalúa actividad, viralidad y calidad de audiencia',
+        detailed:
+          'Evalúa cada creador por: actividad (posts/mes), viralidad (avg likes), alineamiento temático y calidad de audiencia (% comentaristas que son ICP).',
+        tips: [
+          'Score mínimo para scrapear: 3.5/5 ponderado',
+          'Revisar 10 comentaristas para estimar % ICP',
+        ],
+      },
+      select_creators: {
+        brief: 'Prioriza creadores para scrapear',
+        detailed:
+          'Consolida la lista final de creadores y priorízalos. Alta prioridad: score ≥4.0 + tema directo. Media: 3.5-4.0 + tema adyacente.',
+      },
+      scrape_posts: {
+        brief: 'Extrae posts recientes con métricas',
+        detailed:
+          'Obtén los últimos 20-30 posts de cada creador con sus métricas usando Apify LinkedIn Profile Scraper o Phantombuster.',
+      },
+      evaluate_posts: {
+        brief: 'Puntúa posts por engagement y alineamiento',
+        detailed:
+          'Evalúa posts por: interacciones totales (mín ≥40), recencia (<90 días), tema alineado y calidad de comentarios. Score 1-10.',
+        tips: [
+          '8-10: Excelente, scrapear primero',
+          '6-7: Bueno, scrapear si hay capacidad',
+          '1-5: Descartar',
+        ],
+      },
+      select_posts: {
+        brief: 'Selecciona posts para scrapear engagers',
+        detailed:
+          'Consolida posts seleccionados de todos los creadores. Para 500 leads ICP necesitas ~8-12 posts.',
+      },
+      scrape_engagers: {
+        brief: 'Extrae perfiles de quienes interactuaron',
+        detailed:
+          'Scrapea personas que interactuaron con los posts usando Apify LinkedIn Post Reactions Scraper. Incluye likes, comentarios y reposts.',
+      },
+      filter_icp: {
+        brief: 'Clasifica leads en ICP / Dudoso / Fuera',
+        detailed:
+          'Filtra leads por cargo, industria/empresa, geografía y señal de intención. Score mínimo ≥3 para contactar.',
+        tips: [
+          'Comentario con pregunta = +5 puntos',
+          'Comentario cualquiera = +3 puntos',
+          'Repost = +2 puntos',
+          'Like = +1 punto',
+        ],
+      },
+      lead_magnet_messages: {
+        brief: 'Crea lead magnet y mensajes personalizados',
+        detailed:
+          'Define/produce el lead magnet (checklist, template, mini-guía) y crea templates de mensajes personalizados para comentaristas, likes y reposts.',
+        tips: [
+          'Ofrece valor primero, no pidas reunión',
+          'Máximo 300 caracteres para connection request',
+          'Personaliza citando el post o comentario',
+        ],
+      },
+      export_launch: {
+        brief: 'Exporta CSV y lanza campaña',
+        detailed:
+          'Prepara CSV final con campos: linkedin_url, nombre, cargo, empresa, tipo de interacción, mensaje personalizado, score ICP. Lanza respetando límites de LinkedIn (20-25 requests/día).',
+      },
+    },
+    examples: [
+      {
+        title: 'Agencia de Growth',
+        description:
+          'Identificó creadores de contenido sobre Product-Led Growth, scrapeó engagers de posts virales y logró 22% tasa de respuesta con lead magnet de checklist.',
+      },
+      {
+        title: 'SaaS de Finanzas',
+        description:
+          'Encontró CFOs que comentaban posts de fintech influencers, ofreció template de métricas y convirtió 8% en demos.',
+      },
+    ],
+    faqs: [
+      {
+        question: '¿Cuántos creadores necesito?',
+        answer:
+          '5-10 creadores seleccionados es suficiente para generar 500+ leads ICP.',
+      },
+      {
+        question: '¿Qué tipo de lead magnet funciona mejor?',
+        answer:
+          'Checklists y templates tienen la mejor conversión. Deben ser consumibles en <10 minutos.',
+      },
+      {
+        question: '¿Cuál es la tasa de respuesta esperada?',
+        answer:
+          'Con signal-based outreach + lead magnet: 15-25% respuestas vs 3-8% en outreach frío tradicional.',
+      },
+    ],
+  },
 }
 
 /**
@@ -323,6 +481,7 @@ export const getPlaybookName = (type: string): string => {
     niche_finder: 'Niche Finder',
     ecp: 'ECP Positioning',
     competitor_analysis: 'Competitor Analysis',
+    signal_based_outreach: 'Signal-Based Outreach',
   }
   return names[type] || type
 }
