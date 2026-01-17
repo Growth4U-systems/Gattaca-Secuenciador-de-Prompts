@@ -122,6 +122,9 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
   const [costEstimate, setCostEstimate] = useState<CostEstimate | null>(null)
   const [estimatingCost, setEstimatingCost] = useState(false)
 
+  // Context type (B2C, B2B, or both)
+  const [contextType, setContextType] = useState<'personal' | 'business' | 'both'>('both')
+
   // AI suggestions
   const [suggestingContexts, setSuggestingContexts] = useState(false)
   const [suggestingWords, setSuggestingWords] = useState(false)
@@ -445,6 +448,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
           existing: lifeContexts,
           product_words: productWords,
           project_id: projectId,
+          context_type: contextType,
         }),
       })
 
@@ -482,6 +486,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
           existing: productWords,
           life_contexts: lifeContexts,
           project_id: projectId,
+          context_type: contextType,
         }),
       })
 
@@ -526,6 +531,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
           life_contexts: lifeContexts,
           product_words: productWords,
           project_id: projectId,
+          context_type: contextType,
         }),
       })
 
@@ -577,6 +583,7 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
           life_contexts: lifeContexts,
           product_words: productWords,
           project_id: projectId,
+          context_type: contextType,
         }),
       })
 
@@ -814,6 +821,53 @@ export default function NicheFinderPlaybook({ projectId }: NicheFinderPlaybookPr
         <h2 className="text-xl font-semibold text-gray-900">Buscador de Nichos 100x</h2>
         <p className="text-sm text-gray-500 mt-1">
           Encuentra nichos de mercado analizando conversaciones reales en foros y redes sociales
+        </p>
+      </div>
+
+      {/* Context Type Selector */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-900">Tipo de Cliente</h3>
+            <p className="text-xs text-gray-500">Define qué tipo de nichos quieres encontrar</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setContextType('personal')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                contextType === 'personal'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              🏠 B2C (Personal)
+            </button>
+            <button
+              onClick={() => setContextType('business')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                contextType === 'business'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              🏢 B2B (Empresas)
+            </button>
+            <button
+              onClick={() => setContextType('both')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                contextType === 'both'
+                  ? 'bg-orange-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              🔄 Ambos
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-gray-400 mt-2">
+          {contextType === 'personal' && '→ Buscará situaciones de vida personal: pareja, hijos, jubilación, mudanza...'}
+          {contextType === 'business' && '→ Buscará situaciones de negocio: startup, freelance, pyme, expansión...'}
+          {contextType === 'both' && '→ Buscará situaciones de vida personal Y de negocio'}
         </p>
       </div>
 
