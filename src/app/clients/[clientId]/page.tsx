@@ -738,6 +738,18 @@ function PlaybooksTab({
                               </div>
                             </div>
                           )}
+
+                          {/* Link to full documentation */}
+                          <div className="pt-3 border-t border-gray-100">
+                            <Link
+                              href={`/playbooks/${playbook.playbook_type}`}
+                              className="inline-flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                            >
+                              <Book size={16} />
+                              Ver documentación completa
+                              <ChevronRight size={16} />
+                            </Link>
+                          </div>
                         </div>
                       )
                     })()}
