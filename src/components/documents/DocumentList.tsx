@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Trash2, Link2, Search, Filter, FolderOpen, X, Edit2, Check, Loader2, Tag, ChevronDown, ChevronRight, Maximize2, History } from 'lucide-react'
+import { Trash2, Link2, Search, Filter, FolderOpen, X, Edit2, Check, Loader2, Tag, ChevronDown, ChevronRight, Maximize2, History, FolderInput, Plus } from 'lucide-react'
 import { DocCategory } from '@/types/database.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { useModal } from '@/components/ui'
@@ -28,6 +28,7 @@ interface Document {
   client_id?: string | null
   isShared?: boolean
   version_count?: number
+  folder?: string | null
 }
 
 interface Campaign {
@@ -44,6 +45,8 @@ interface DocumentListProps {
   onRename?: (docId: string, newName: string) => Promise<void>
   onUpdateDescription?: (docId: string, description: string) => Promise<void>
   onTierChange?: (docId: string, tier: DocumentTier) => Promise<void>
+  onMoveToFolder?: (docId: string, folder: string | null) => Promise<void>
+  availableFolders?: string[]
   showContextLakeFilters?: boolean
 }
 
@@ -79,6 +82,8 @@ export default function DocumentList({
   onRename,
   onUpdateDescription,
   onTierChange,
+  onMoveToFolder,
+  availableFolders = [],
   showContextLakeFilters = false,
 }: DocumentListProps) {
   const modal = useModal()
@@ -110,6 +115,12 @@ export default function DocumentList({
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const selectAllRef = useRef<HTMLInputElement>(null)
+
+  // State for folder menu
+  const [folderMenuDocId, setFolderMenuDocId] = useState<string | null>(null)
+  const [movingToFolder, setMovingToFolder] = useState(false)
+  const [newFolderInput, setNewFolderInput] = useState('')
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false)
 
   // Get unique categories
   const categories = useMemo(() => {
@@ -275,6 +286,28 @@ export default function DocumentList({
     } else if (e.key === 'Escape') {
       handleCancelDescEdit()
     }
+  }
+
+  // Handle moving document to folder
+  const handleMoveToFolder = async (docId: string, folder: string | null) => {
+    if (!onMoveToFolder) return
+    setMovingToFolder(true)
+    try {
+      await onMoveToFolder(docId, folder)
+      setFolderMenuDocId(null)
+      setShowNewFolderInput(false)
+      setNewFolderInput('')
+    } catch (error) {
+      console.error('Error moving to folder:', error)
+    } finally {
+      setMovingToFolder(false)
+    }
+  }
+
+  // Handle creating new folder and moving doc to it
+  const handleCreateFolderAndMove = async (docId: string) => {
+    if (!newFolderInput.trim()) return
+    await handleMoveToFolder(docId, newFolderInput.trim())
   }
 
   const getCategoryBadge = (category: DocCategory) => {
@@ -849,6 +882,111 @@ export default function DocumentList({
 
                   {/* Actions */}
                   <div className="flex items-center gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                    {/* Move to folder */}
+                    {onMoveToFolder && (
+                      <div className="relative">
+                        <button
+                          onClick={() => setFolderMenuDocId(folderMenuDocId === doc.id ? null : doc.id)}
+                          className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="Mover a carpeta"
+                        >
+                          <FolderInput size={16} />
+                        </button>
+                        {folderMenuDocId === doc.id && (
+                          <div className="absolute right-0 top-8 z-50 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2">
+                            <div className="px-3 py-1.5 text-xs font-medium text-gray-500 border-b border-gray-100 mb-1">
+                              Mover a carpeta
+                            </div>
+                            {/* Current folder indicator */}
+                            {doc.folder && (
+                              <div className="px-3 py-1 text-xs text-gray-400 italic">
+                                Actual: {doc.folder}
+                              </div>
+                            )}
+                            {/* Remove from folder option */}
+                            {doc.folder && (
+                              <button
+                                onClick={() => handleMoveToFolder(doc.id, null)}
+                                disabled={movingToFolder}
+                                className="w-full px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                              >
+                                <X size={14} className="text-gray-400" />
+                                Sin carpeta
+                              </button>
+                            )}
+                            {/* Existing folders */}
+                            {availableFolders.filter(f => f !== doc.folder).map(folder => (
+                              <button
+                                key={folder}
+                                onClick={() => handleMoveToFolder(doc.id, folder)}
+                                disabled={movingToFolder}
+                                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 flex items-center gap-2 disabled:opacity-50"
+                              >
+                                <FolderOpen size={14} className="text-indigo-500" />
+                                {folder}
+                              </button>
+                            ))}
+                            {/* New folder input */}
+                            {showNewFolderInput ? (
+                              <div className="px-2 py-2 border-t border-gray-100 mt-1">
+                                <input
+                                  type="text"
+                                  value={newFolderInput}
+                                  onChange={(e) => setNewFolderInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleCreateFolderAndMove(doc.id)
+                                    if (e.key === 'Escape') {
+                                      setShowNewFolderInput(false)
+                                      setNewFolderInput('')
+                                    }
+                                  }}
+                                  placeholder="Nombre de carpeta..."
+                                  className="w-full px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                  autoFocus
+                                />
+                                <div className="flex gap-1 mt-1.5">
+                                  <button
+                                    onClick={() => handleCreateFolderAndMove(doc.id)}
+                                    disabled={!newFolderInput.trim() || movingToFolder}
+                                    className="flex-1 px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+                                  >
+                                    {movingToFolder ? 'Moviendo...' : 'Crear y mover'}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setShowNewFolderInput(false)
+                                      setNewFolderInput('')
+                                    }}
+                                    className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setShowNewFolderInput(true)}
+                                className="w-full px-3 py-2 text-left text-sm text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 border-t border-gray-100 mt-1"
+                              >
+                                <Plus size={14} />
+                                Nueva carpeta...
+                              </button>
+                            )}
+                            {/* Close button */}
+                            <button
+                              onClick={() => {
+                                setFolderMenuDocId(null)
+                                setShowNewFolderInput(false)
+                                setNewFolderInput('')
+                              }}
+                              className="w-full px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-100 mt-1"
+                            >
+                              Cerrar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <button
                       onClick={() => onView(doc)}
                       className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"

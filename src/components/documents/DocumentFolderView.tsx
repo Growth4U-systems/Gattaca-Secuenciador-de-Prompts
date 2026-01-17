@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { ChevronDown, ChevronRight, FolderOpen, Folder, Plus, X, Link2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, FolderOpen, Folder, Plus, X, Link2, FolderInput } from 'lucide-react'
 import { Document, groupByFolder, getFolderDisplayName, getFolders } from '@/hooks/useDocuments'
 
 interface DocumentFolderViewProps {
@@ -9,6 +9,7 @@ interface DocumentFolderViewProps {
   onFolderClick?: (folder: string | null) => void
   onDocumentClick?: (doc: Document) => void
   onCreateFolder?: (folderName: string) => void
+  onMoveToFolder?: (docId: string, folder: string | null) => Promise<void>
   selectedDocIds?: Set<string>
   onToggleDocSelection?: (docId: string) => void
   showCreateFolder?: boolean
@@ -22,6 +23,7 @@ export default function DocumentFolderView({
   onFolderClick,
   onDocumentClick,
   onCreateFolder,
+  onMoveToFolder,
   selectedDocIds,
   onToggleDocSelection,
   showCreateFolder = false,
@@ -185,6 +187,8 @@ export default function DocumentFolderView({
                     onClick={onDocumentClick}
                     isSelected={selectedDocIds?.has(doc.id)}
                     onToggleSelect={onToggleDocSelection}
+                    onMoveToFolder={onMoveToFolder}
+                    availableFolders={sortedFolderKeys.filter(f => f !== '__uncategorized__' && f !== doc.folder)}
                   />
                 ))}
               </div>
@@ -219,10 +223,34 @@ interface DocumentRowProps {
   onClick?: (doc: Document) => void
   isSelected?: boolean
   onToggleSelect?: (docId: string) => void
+  onMoveToFolder?: (docId: string, folder: string | null) => Promise<void>
+  availableFolders?: string[]
 }
 
-function DocumentRow({ doc, onClick, isSelected, onToggleSelect }: DocumentRowProps) {
+function DocumentRow({ doc, onClick, isSelected, onToggleSelect, onMoveToFolder, availableFolders = [] }: DocumentRowProps) {
+  const [showFolderMenu, setShowFolderMenu] = useState(false)
+  const [moving, setMoving] = useState(false)
+  const [newFolderInput, setNewFolderInput] = useState('')
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false)
   const isReference = doc.is_reference && doc.source_doc_id
+
+  const handleMoveToFolder = async (folder: string | null) => {
+    if (!onMoveToFolder) return
+    setMoving(true)
+    try {
+      await onMoveToFolder(doc.id, folder)
+      setShowFolderMenu(false)
+      setShowNewFolderInput(false)
+      setNewFolderInput('')
+    } finally {
+      setMoving(false)
+    }
+  }
+
+  const handleCreateFolderAndMove = async () => {
+    if (!newFolderInput.trim()) return
+    await handleMoveToFolder(newFolderInput.trim())
+  }
 
   return (
     <div
@@ -286,6 +314,106 @@ function DocumentRow({ doc, onClick, isSelected, onToggleSelect }: DocumentRowPr
           </span>
         )}
       </div>
+
+      {/* Move to folder button */}
+      {onMoveToFolder && (
+        <div className="relative flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => setShowFolderMenu(!showFolderMenu)}
+            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+            title="Mover a carpeta"
+          >
+            <FolderInput size={14} />
+          </button>
+          {showFolderMenu && (
+            <div className="absolute right-0 top-8 z-50 w-52 bg-white rounded-xl shadow-lg border border-gray-200 py-2">
+              <div className="px-3 py-1.5 text-xs font-medium text-gray-500 border-b border-gray-100 mb-1">
+                Mover a carpeta
+              </div>
+              {/* Remove from folder option */}
+              {doc.folder && (
+                <button
+                  onClick={() => handleMoveToFolder(null)}
+                  disabled={moving}
+                  className="w-full px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                >
+                  <X size={14} className="text-gray-400" />
+                  Sin carpeta
+                </button>
+              )}
+              {/* Existing folders */}
+              {availableFolders.map(folder => (
+                <button
+                  key={folder}
+                  onClick={() => handleMoveToFolder(folder)}
+                  disabled={moving}
+                  className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 flex items-center gap-2 disabled:opacity-50"
+                >
+                  <FolderOpen size={14} className="text-indigo-500" />
+                  {folder}
+                </button>
+              ))}
+              {/* New folder input */}
+              {showNewFolderInput ? (
+                <div className="px-2 py-2 border-t border-gray-100 mt-1">
+                  <input
+                    type="text"
+                    value={newFolderInput}
+                    onChange={(e) => setNewFolderInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleCreateFolderAndMove()
+                      if (e.key === 'Escape') {
+                        setShowNewFolderInput(false)
+                        setNewFolderInput('')
+                      }
+                    }}
+                    placeholder="Nombre de carpeta..."
+                    className="w-full px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    autoFocus
+                  />
+                  <div className="flex gap-1 mt-1.5">
+                    <button
+                      onClick={handleCreateFolderAndMove}
+                      disabled={!newFolderInput.trim() || moving}
+                      className="flex-1 px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {moving ? 'Moviendo...' : 'Crear y mover'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowNewFolderInput(false)
+                        setNewFolderInput('')
+                      }}
+                      className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowNewFolderInput(true)}
+                  className="w-full px-3 py-2 text-left text-sm text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 border-t border-gray-100 mt-1"
+                >
+                  <Plus size={14} />
+                  Nueva carpeta...
+                </button>
+              )}
+              {/* Close button */}
+              <button
+                onClick={() => {
+                  setShowFolderMenu(false)
+                  setShowNewFolderInput(false)
+                  setNewFolderInput('')
+                }}
+                className="w-full px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-100 mt-1"
+              >
+                Cerrar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
