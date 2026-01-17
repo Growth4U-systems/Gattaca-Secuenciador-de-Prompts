@@ -46,6 +46,11 @@ export interface Document {
   is_deleted?: boolean
   deleted_at?: string | null
   deleted_by?: string | null
+  // Folder organization
+  folder?: string | null
+  // Reference fields (for linking to Context Lake docs)
+  is_reference?: boolean
+  source_doc_id?: string | null
   // UI-only fields
   isShared?: boolean
   projectName?: string
@@ -102,6 +107,34 @@ export interface PlaybookStepSourceMetadata {
 export interface DocumentFilters {
   sourceType?: DocumentSourceType
   category?: string
+  folder?: string | null // null = uncategorized, undefined = all
+}
+
+// ============================================
+// FOLDER UTILITIES
+// ============================================
+
+/** Get unique folder names from documents */
+export function getFolders(docs: Document[]): string[] {
+  const folders = docs
+    .map(d => d.folder)
+    .filter((f): f is string => f !== null && f !== undefined)
+  return [...new Set(folders)].sort()
+}
+
+/** Group documents by folder */
+export function groupByFolder(docs: Document[]): Record<string, Document[]> {
+  return docs.reduce((acc, doc) => {
+    const folder = doc.folder || '__uncategorized__'
+    if (!acc[folder]) acc[folder] = []
+    acc[folder].push(doc)
+    return acc
+  }, {} as Record<string, Document[]>)
+}
+
+/** Get folder display name */
+export function getFolderDisplayName(folder: string): string {
+  return folder === '__uncategorized__' ? 'Sin carpeta' : folder
 }
 
 // ============================================
@@ -547,5 +580,203 @@ export async function getDocumentWithVersionCount(docId: string): Promise<Docume
   return {
     ...doc,
     version_count: count || 0
+  }
+}
+
+// ============================================
+// FOLDER OPERATIONS
+// ============================================
+
+/** Update document folder */
+export async function updateDocumentFolder(docId: string, folder: string | null) {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('knowledge_base_docs')
+    .update({ folder })
+    .eq('id', docId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/** Move multiple documents to a folder */
+export async function moveDocumentsToFolder(docIds: string[], folder: string | null) {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('knowledge_base_docs')
+    .update({ folder })
+    .in('id', docIds)
+
+  if (error) throw error
+}
+
+// ============================================
+// REFERENCE OPERATIONS
+// ============================================
+
+/** Create a reference to a Context Lake document in a project */
+export async function createDocumentReference(
+  sourceDocId: string,
+  projectId: string,
+  folder?: string | null
+): Promise<Document> {
+  const supabase = createClient()
+
+  // First, get the source document
+  const { data: sourceDoc, error: fetchError } = await supabase
+    .from('knowledge_base_docs')
+    .select('*')
+    .eq('id', sourceDocId)
+    .single()
+
+  if (fetchError) throw fetchError
+  if (!sourceDoc) throw new Error('Source document not found')
+
+  // Verify it's a Context Lake document (no project_id)
+  if (sourceDoc.project_id) {
+    throw new Error('Can only reference Context Lake documents (documents without a project)')
+  }
+
+  // Create the reference
+  const { data: refDoc, error: insertError } = await supabase
+    .from('knowledge_base_docs')
+    .insert({
+      filename: sourceDoc.filename,
+      project_id: projectId,
+      client_id: sourceDoc.client_id,
+      category: sourceDoc.category,
+      mime_type: sourceDoc.mime_type,
+      file_size_bytes: sourceDoc.file_size_bytes,
+      source_type: sourceDoc.source_type,
+      description: sourceDoc.description,
+      tags: sourceDoc.tags,
+      folder: folder || null,
+      is_reference: true,
+      source_doc_id: sourceDocId,
+      // Note: extracted_content is NOT copied - it's read from source
+    })
+    .select()
+    .single()
+
+  if (insertError) throw insertError
+  return refDoc
+}
+
+/** Get the actual content of a document, following references if needed */
+export async function getDocumentContent(doc: Document): Promise<string | null> {
+  if (!doc.is_reference || !doc.source_doc_id) {
+    return doc.extracted_content
+  }
+
+  // Fetch content from source document
+  const supabase = createClient()
+  const { data: sourceDoc, error } = await supabase
+    .from('knowledge_base_docs')
+    .select('extracted_content')
+    .eq('id', doc.source_doc_id)
+    .single()
+
+  if (error) throw error
+  return sourceDoc?.extracted_content || null
+}
+
+/** Promote a project document to Context Lake */
+export async function promoteToContextLake(
+  docId: string,
+  options: {
+    convertToReference?: boolean
+    targetFolder?: string | null
+  } = {}
+): Promise<Document> {
+  const supabase = createClient()
+
+  // Get the original document
+  const { data: originalDoc, error: fetchError } = await supabase
+    .from('knowledge_base_docs')
+    .select('*')
+    .eq('id', docId)
+    .single()
+
+  if (fetchError) throw fetchError
+  if (!originalDoc) throw new Error('Document not found')
+  if (!originalDoc.project_id) {
+    throw new Error('Document is already in Context Lake')
+  }
+  if (originalDoc.is_reference) {
+    throw new Error('Cannot promote a reference document')
+  }
+
+  // Create copy in Context Lake (no project_id)
+  const { data: newDoc, error: insertError } = await supabase
+    .from('knowledge_base_docs')
+    .insert({
+      filename: originalDoc.filename,
+      client_id: originalDoc.client_id,
+      project_id: null, // This makes it a Context Lake doc
+      category: originalDoc.category,
+      extracted_content: originalDoc.extracted_content,
+      mime_type: originalDoc.mime_type,
+      file_size_bytes: originalDoc.file_size_bytes,
+      storage_path: originalDoc.storage_path,
+      source_type: originalDoc.source_type,
+      description: originalDoc.description,
+      tags: originalDoc.tags,
+      token_count: originalDoc.token_count,
+      folder: options.targetFolder || null,
+      is_reference: false,
+      source_doc_id: null,
+    })
+    .select()
+    .single()
+
+  if (insertError) throw insertError
+
+  // Optionally convert original to a reference
+  if (options.convertToReference) {
+    const { error: updateError } = await supabase
+      .from('knowledge_base_docs')
+      .update({
+        is_reference: true,
+        source_doc_id: newDoc.id,
+        extracted_content: null, // Clear content since it's now a reference
+      })
+      .eq('id', docId)
+
+    if (updateError) throw updateError
+  }
+
+  return newDoc
+}
+
+/** Get documents that reference a given source document */
+export async function getDocumentReferences(sourceDocId: string): Promise<Document[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('knowledge_base_docs')
+    .select('*, projects(name)')
+    .eq('source_doc_id', sourceDocId)
+    .or('is_deleted.is.null,is_deleted.eq.false')
+
+  if (error) throw error
+  return data || []
+}
+
+/** Check if a document can be deleted (has no active references) */
+export async function canDeleteDocument(docId: string): Promise<{
+  canDelete: boolean
+  referenceCount: number
+  referencingProjects: string[]
+}> {
+  const refs = await getDocumentReferences(docId)
+  const projectNames = refs
+    .map(r => (r as Document & { projects?: { name: string } }).projects?.name)
+    .filter((name): name is string => !!name)
+
+  return {
+    canDelete: refs.length === 0,
+    referenceCount: refs.length,
+    referencingProjects: [...new Set(projectNames)]
   }
 }

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Building2,
   FolderOpen,
+  Folder,
   FileText,
   ChevronRight,
   ChevronLeft,
@@ -22,8 +23,17 @@ import {
   Eye,
 } from 'lucide-react'
 import { useClient } from '@/hooks/useClients'
-import { useAllClientDocuments, type Document } from '@/hooks/useDocuments'
+import {
+  useAllClientDocuments,
+  useClientDocuments,
+  type Document,
+  groupByFolder,
+  getFolderDisplayName,
+  updateDocumentFolder,
+  canDeleteDocument,
+} from '@/hooks/useDocuments'
 import DocumentList from '@/components/documents/DocumentList'
+import DocumentFolderView from '@/components/documents/DocumentFolderView'
 import { useToast } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { Growth4ULogo } from '@/components/ui/Growth4ULogo'
@@ -431,9 +441,23 @@ function ContextLakeTab({
 }) {
   const toast = useToast()
   const [projectFilter, setProjectFilter] = useState<string>('all')
+  const [viewMode, setViewMode] = useState<'list' | 'folders'>('folders')
+  const [movingToFolder, setMovingToFolder] = useState<string | null>(null)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false)
 
   const handleDelete = async (docId: string) => {
     try {
+      // Check for references first
+      const { canDelete, referenceCount, referencingProjects } = await canDeleteDocument(docId)
+      if (!canDelete) {
+        toast.error(
+          'No se puede eliminar',
+          `Este documento tiene ${referenceCount} referencia(s) en: ${referencingProjects.join(', ')}`
+        )
+        return
+      }
+
       const { error } = await supabase
         .from('knowledge_base_docs')
         .delete()
@@ -446,6 +470,27 @@ function ContextLakeTab({
     }
   }
 
+  const handleMoveToFolder = async (docId: string, folder: string | null) => {
+    try {
+      setMovingToFolder(docId)
+      await updateDocumentFolder(docId, folder)
+      toast.success('Movido', folder ? `Documento movido a "${folder}"` : 'Documento movido a Sin carpeta')
+      onReload()
+    } catch (err) {
+      toast.error('Error', 'No se pudo mover el documento')
+    } finally {
+      setMovingToFolder(null)
+    }
+  }
+
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) return
+    // Folders are created implicitly when we move a doc to them
+    setShowNewFolderInput(false)
+    toast.success('Carpeta creada', `La carpeta "${newFolderName}" está lista. Mueve documentos a ella.`)
+    setNewFolderName('')
+  }
+
   // Get unique projects from documents
   const uniqueProjects = [...new Set(documents.map(d => d.project_id).filter(Boolean))]
 
@@ -456,17 +501,51 @@ function ContextLakeTab({
       ? documents.filter(d => !d.project_id)
       : documents.filter(d => d.project_id === projectFilter)
 
+  // Get only Context Lake docs (shared, no project_id)
+  const contextLakeDocs = documents.filter(d => !d.project_id)
+
+  // Get folders from Context Lake docs
+  const folders = [...new Set(contextLakeDocs.map(d => d.folder).filter(Boolean) as string[])].sort()
+
   // Stats
   const sharedCount = documents.filter(d => !d.project_id).length
   const projectDocsCount = documents.filter(d => d.project_id).length
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Context Lake</h1>
-        <p className="text-gray-500 mt-1">
-          Todos los documentos del cliente: {sharedCount} compartidos + {projectDocsCount} en proyectos
-        </p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Context Lake</h1>
+          <p className="text-gray-500 mt-1">
+            {sharedCount} documentos compartidos + {projectDocsCount} en proyectos
+          </p>
+        </div>
+
+        {/* View Mode Toggle */}
+        <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
+          <button
+            onClick={() => setViewMode('folders')}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              viewMode === 'folders'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Folder size={16} className="inline mr-1.5" />
+            Carpetas
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              viewMode === 'list'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <FileText size={16} className="inline mr-1.5" />
+            Lista
+          </button>
+        </div>
       </div>
 
       {/* Project Filter */}
@@ -491,7 +570,7 @@ function ContextLakeTab({
                 : 'bg-white text-gray-600 hover:bg-purple-100'
             }`}
           >
-            🔗 Compartidos ({sharedCount})
+            🔗 Context Lake ({sharedCount})
           </button>
           {uniqueProjects.map(projectId => (
             <button
@@ -509,10 +588,69 @@ function ContextLakeTab({
         </div>
       </div>
 
+      {/* Create Folder for Context Lake docs */}
+      {projectFilter === 'shared' && viewMode === 'folders' && (
+        <div className="mb-4">
+          {showNewFolderInput ? (
+            <div className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-xl">
+              <Folder size={18} className="text-gray-400" />
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateFolder()
+                  if (e.key === 'Escape') {
+                    setShowNewFolderInput(false)
+                    setNewFolderName('')
+                  }
+                }}
+                placeholder="Nombre de la carpeta..."
+                className="flex-1 px-2 py-1 text-sm border-0 focus:ring-0"
+                autoFocus
+              />
+              <button
+                onClick={handleCreateFolder}
+                disabled={!newFolderName.trim()}
+                className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                Crear
+              </button>
+              <button
+                onClick={() => {
+                  setShowNewFolderInput(false)
+                  setNewFolderName('')
+                }}
+                className="p-1.5 text-gray-400 hover:text-gray-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowNewFolderInput(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+            >
+              <Plus size={16} />
+              Nueva carpeta
+            </button>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
         </div>
+      ) : viewMode === 'folders' && projectFilter === 'shared' ? (
+        <DocumentFolderView
+          documents={contextLakeDocs}
+          onDocumentClick={(doc) => {
+            // Could open document viewer
+          }}
+          showCreateFolder={false}
+          emptyMessage="No hay documentos en el Context Lake"
+        />
       ) : (
         <DocumentList
           documents={filteredDocuments as any[]}
