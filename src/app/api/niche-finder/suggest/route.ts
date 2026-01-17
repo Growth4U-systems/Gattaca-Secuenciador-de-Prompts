@@ -152,36 +152,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const prompt = `You are an expert market researcher. Based on the following product/industry, suggest search parameters for finding customer pain points in forums.
+    const prompt = `Eres un experto en investigación de mercado. Genera parámetros de búsqueda para encontrar pain points de clientes en foros.
 
-INDUSTRY: ${industry || 'general'}
-PRODUCT: ${productDescription || 'product/service'}
-COUNTRY: ${country}
-${existingLifeContexts.length > 0 ? `EXISTING LIFE CONTEXTS: ${existingLifeContexts.join(', ')}` : ''}
-${existingProductWords.length > 0 ? `EXISTING PRODUCT WORDS: ${existingProductWords.join(', ')}` : ''}
+INDUSTRIA: ${industry || 'general'}
+PRODUCTO: ${productDescription || 'producto/servicio'}
+PAÍS: ${country}
+${existingLifeContexts.length > 0 ? `CONTEXTOS DE VIDA EXISTENTES (no repetir): ${existingLifeContexts.join(', ')}` : ''}
+${existingProductWords.length > 0 ? `PALABRAS DE PRODUCTO EXISTENTES (no repetir): ${existingProductWords.join(', ')}` : ''}
 
-Respond in JSON format with this structure:
+Responde en JSON con esta estructura:
 {
   "life_contexts": [
-    {"value": "context word/phrase", "category": "personal|family|work|events|relationships", "reason": "why this context is relevant"}
+    {"value": "palabra", "category": "personal|family|work|events|relationships", "reason": "razón breve"}
   ],
   "product_words": [
-    {"value": "product-related word/phrase", "category": "category name", "reason": "why this word is relevant"}
+    {"value": "palabra", "category": "categoría", "reason": "razón breve"}
   ],
   "sources": [
-    {"source_type": "reddit|thematic_forum|general_forum", "value": "domain or subreddit name", "life_context": "related context if applicable", "reason": "why this source is relevant"}
+    {"source_type": "reddit|thematic_forum|general_forum", "value": "dominio o subreddit", "life_context": "contexto relacionado", "reason": "razón breve"}
   ]
 }
 
-IMPORTANT:
-- Suggest 5-10 life contexts that represent situations where people might need ${productDescription || 'the product'}
-- Suggest 5-10 product words that people would use when discussing problems ${productDescription || 'the product'} solves
-- Suggest 5-8 forums/subreddits where these people discuss their problems
-- Be specific to ${country} culture and language
-- Don't repeat existing contexts/words
-- Focus on finding frustrated users, not just any users
+REGLAS CRÍTICAS:
+1. CONTEXTOS DE VIDA: UNA SOLA PALABRA que represente situaciones de vida donde la gente necesita ${productDescription || 'el producto'}
+   - Ejemplos válidos: "pareja", "hijos", "casamiento", "mudanza", "divorcio", "jubilación", "embarazo", "universidad"
+   - Ejemplos INVÁLIDOS: "recién casados", "padres primerizos", "personas mayores" (son frases, no palabras)
 
-Respond ONLY with the JSON, no additional text.`
+2. PALABRAS DE PRODUCTO: UNA SOLA PALABRA relacionada al producto/problema
+   - Ejemplos válidos: "precio", "calidad", "garantía", "reparación", "instalación", "mantenimiento"
+   - Ejemplos INVÁLIDOS: "buen precio", "mala calidad", "sin garantía" (son frases, no palabras)
+
+3. Sugiere 5-10 de cada tipo
+4. En español (${country})
+5. No repitas las existentes
+6. Enfócate en usuarios frustrados
+
+Responde SOLO con el JSON, sin texto adicional.`
 
     console.log('Calling OpenRouter API...')
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
