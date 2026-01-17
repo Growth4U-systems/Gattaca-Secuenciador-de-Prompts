@@ -13,7 +13,7 @@ type ScraperStatus = 'enabled' | 'pending'
 interface ScraperConfig {
   type: ScraperType
   status: ScraperStatus
-  category: 'social' | 'reviews' | 'web' | 'other'
+  category: 'social' | 'reviews' | 'web' | 'seo' | 'other'
 }
 
 // All scrapers with their status
@@ -45,7 +45,13 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   { type: 'website', status: 'enabled', category: 'web' },
   { type: 'google_news', status: 'enabled', category: 'web' },
   { type: 'news_bing', status: 'enabled', category: 'web' },
-  { type: 'seo_keywords', status: 'enabled', category: 'web' },
+
+  // SEO & Backlinks
+  { type: 'seo_keywords', status: 'enabled', category: 'seo' },
+  { type: 'seo_serp_checker', status: 'enabled', category: 'seo' },
+  { type: 'seo_site_profiler', status: 'enabled', category: 'seo' },
+  { type: 'seo_link_miner', status: 'enabled', category: 'seo' },
+  { type: 'seo_competitor_keywords', status: 'enabled', category: 'seo' },
 ]
 
 // Category labels
@@ -53,6 +59,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   social: 'Redes Sociales',
   reviews: 'Reviews',
   web: 'Web & Noticias',
+  seo: 'SEO & Backlinks',
   other: 'Otros',
 }
 
@@ -88,6 +95,10 @@ const SCRAPER_ICONS: Record<string, React.ReactNode> = {
   google_news: <Newspaper size={20} />,
   news_bing: <Newspaper size={20} />,
   seo_keywords: <Search size={20} />,
+  seo_serp_checker: <Search size={20} />,
+  seo_site_profiler: <Globe size={20} />,
+  seo_link_miner: <Globe size={20} />,
+  seo_competitor_keywords: <Search size={20} />,
 }
 
 // Detailed descriptions for each scraper (shown on hover and in configure step)
@@ -121,7 +132,13 @@ const SCRAPER_DESCRIPTIONS: Record<string, string> = {
   website: 'Extrae contenido de páginas web. Modo scrape (1 página) o crawl (múltiples páginas del sitio).',
   google_news: 'Busca noticias recientes en Google News por keywords, empresa o tema específico.',
   news_bing: 'Busca noticias en Bing News con filtros avanzados de fecha, idioma y relevancia.',
-  seo_keywords: 'Análisis de keywords SEO con volumen de búsqueda, dificultad y competencia.',
+
+  // SEO & Backlinks
+  seo_keywords: 'Investiga keywords: volumen de búsqueda, CPC, dificultad y tendencia. Mangools KWFinder.',
+  seo_serp_checker: 'Analiza los resultados de Google: DA, PA, CF, TF y CTR de cada posición.',
+  seo_site_profiler: 'Métricas de dominio: DA, PA, backlinks, dominios referentes y tráfico orgánico.',
+  seo_link_miner: 'Analiza backlinks: URL fuente, anchor text, CF, TF y tipo de link.',
+  seo_competitor_keywords: 'Descubre las keywords orgánicas que posicionan tus competidores.',
 }
 
 const SCRAPER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -150,7 +167,12 @@ const SCRAPER_COLORS: Record<string, { bg: string; text: string; border: string 
   website: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200' },
   google_news: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
   news_bing: { bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-200' },
+  // SEO & Backlinks
   seo_keywords: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
+  seo_serp_checker: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
+  seo_site_profiler: { bg: 'bg-fuchsia-50', text: 'text-fuchsia-600', border: 'border-fuchsia-200' },
+  seo_link_miner: { bg: 'bg-fuchsia-50', text: 'text-fuchsia-600', border: 'border-fuchsia-200' },
+  seo_competitor_keywords: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
 }
 
 export default function ScraperLauncher({ projectId, onComplete, onClose }: ScraperLauncherProps) {

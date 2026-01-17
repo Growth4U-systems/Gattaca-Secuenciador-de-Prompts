@@ -1139,7 +1139,7 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   },
 
   // ==========================================
-  // SEO KEYWORDS (MANGOOLS)
+  // SEO KEYWORDS (MANGOOLS KWFINDER)
   // ==========================================
   seo_keywords: {
     type: 'seo_keywords',
@@ -1155,6 +1155,173 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
           'cuenta bancaria online',
           'mejor banco digital',
           'transferencias internacionales',
+        ],
+      },
+      location: {
+        key: 'location',
+        type: 'select',
+        label: 'Ubicaci\u00f3n',
+        description: 'Pa\u00eds para los datos de b\u00fasqueda',
+        options: [
+          { value: 'Spain', label: 'Espa\u00f1a' },
+          { value: 'United States', label: 'Estados Unidos' },
+          { value: 'United Kingdom', label: 'Reino Unido' },
+          { value: 'Mexico', label: 'M\u00e9xico' },
+          { value: 'Argentina', label: 'Argentina' },
+        ],
+        defaultValue: 'Spain',
+      },
+      language: {
+        key: 'language',
+        type: 'select',
+        label: 'Idioma',
+        description: 'Idioma de las b\u00fasquedas',
+        options: LANGUAGE_OPTIONS,
+        defaultValue: 'es',
+      },
+      includeSerpOverview: {
+        key: 'includeSerpOverview',
+        type: 'boolean',
+        label: 'Incluir SERP overview',
+        description: 'Obtiene tambi\u00e9n los primeros resultados de Google para la keyword',
+        helpText: 'Agrega datos de DA, PA, CF, TF de los resultados top',
+        defaultValue: false,
+      },
+    },
+  },
+
+  // ==========================================
+  // SEO SERP CHECKER (MANGOOLS)
+  // ==========================================
+  seo_serp_checker: {
+    type: 'seo_serp_checker',
+    fields: {
+      keyword: {
+        key: 'keyword',
+        type: 'text',
+        label: 'Palabra clave',
+        description: 'La keyword para analizar los resultados de Google',
+        placeholder: 'cuenta bancaria online',
+        required: true,
+        examples: [
+          'cuenta bancaria online',
+          'mejor banco digital',
+          'fintech espa\u00f1a',
+        ],
+      },
+      location: {
+        key: 'location',
+        type: 'select',
+        label: 'Ubicaci\u00f3n',
+        description: 'Pa\u00eds para los resultados de b\u00fasqueda',
+        options: [
+          { value: 'Spain', label: 'Espa\u00f1a' },
+          { value: 'United States', label: 'Estados Unidos' },
+          { value: 'United Kingdom', label: 'Reino Unido' },
+          { value: 'Mexico', label: 'M\u00e9xico' },
+          { value: 'Argentina', label: 'Argentina' },
+        ],
+        defaultValue: 'Spain',
+      },
+      language: {
+        key: 'language',
+        type: 'select',
+        label: 'Idioma',
+        description: 'Idioma de las b\u00fasquedas',
+        options: LANGUAGE_OPTIONS,
+        defaultValue: 'es',
+      },
+    },
+  },
+
+  // ==========================================
+  // SEO SITE PROFILER (MANGOOLS)
+  // ==========================================
+  seo_site_profiler: {
+    type: 'seo_site_profiler',
+    fields: {
+      url: {
+        key: 'url',
+        type: 'url',
+        label: 'URL del dominio',
+        description: 'El dominio que quieres analizar',
+        placeholder: 'https://revolut.com',
+        helpText: 'Ingresa la URL completa del dominio',
+        required: true,
+        validation: {
+          pattern: /^https?:\/\/.+/,
+          patternMessage: 'Debe ser una URL v\u00e1lida (https://...)',
+        },
+        examples: [
+          'https://revolut.com',
+          'https://n26.com',
+          'https://wise.com',
+        ],
+      },
+    },
+  },
+
+  // ==========================================
+  // SEO LINK MINER (MANGOOLS)
+  // ==========================================
+  seo_link_miner: {
+    type: 'seo_link_miner',
+    fields: {
+      url: {
+        key: 'url',
+        type: 'url',
+        label: 'URL a analizar',
+        description: 'La URL de la que quieres obtener backlinks',
+        placeholder: 'https://revolut.com/es-ES/',
+        helpText: 'Puede ser un dominio o una p\u00e1gina espec\u00edfica',
+        required: true,
+        validation: {
+          pattern: /^https?:\/\/.+/,
+          patternMessage: 'Debe ser una URL v\u00e1lida (https://...)',
+        },
+        examples: [
+          'https://revolut.com',
+          'https://n26.com/es-es',
+          'https://wise.com/es/',
+        ],
+      },
+      linksPerDomain: {
+        key: 'linksPerDomain',
+        type: 'number',
+        label: 'Links por dominio',
+        description: 'M\u00e1ximo de backlinks a mostrar por cada dominio referente',
+        helpText: 'Limita los resultados por dominio (1-10)',
+        defaultValue: 3,
+        validation: {
+          min: 1,
+          max: 10,
+        },
+      },
+    },
+  },
+
+  // ==========================================
+  // SEO COMPETITOR KEYWORDS (MANGOOLS)
+  // ==========================================
+  seo_competitor_keywords: {
+    type: 'seo_competitor_keywords',
+    fields: {
+      url: {
+        key: 'url',
+        type: 'url',
+        label: 'URL del competidor',
+        description: 'El dominio del que quieres ver las keywords org\u00e1nicas',
+        placeholder: 'https://revolut.com',
+        helpText: 'Analiza qu\u00e9 keywords posicionan tus competidores',
+        required: true,
+        validation: {
+          pattern: /^https?:\/\/.+/,
+          patternMessage: 'Debe ser una URL v\u00e1lida (https://...)',
+        },
+        examples: [
+          'https://revolut.com',
+          'https://n26.com',
+          'https://wise.com',
         ],
       },
       location: {
