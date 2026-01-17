@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database, Building2, Plus, X, Search, Zap, Target, Globe, Filter, Brain, BarChart3, Table } from 'lucide-react'
 import Link from 'next/link'
 import { createProject } from '@/hooks/useProjects'
@@ -12,8 +12,9 @@ type Client = {
   name: string
 }
 
-export default function NewProjectPage() {
+function NewProjectForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const toast = useToast()
   const [loading, setLoading] = useState(false)
   const [clients, setClients] = useState<Client[]>([])
@@ -27,6 +28,9 @@ export default function NewProjectPage() {
   const [showNewClientForm, setShowNewClientForm] = useState(false)
   const [newClientName, setNewClientName] = useState('')
   const [creatingClient, setCreatingClient] = useState(false)
+
+  // Get preselected client from URL query params
+  const preselectedClientId = searchParams.get('clientId')
 
   // Load clients function
   const loadClients = async (selectClientId?: string) => {
@@ -53,10 +57,10 @@ export default function NewProjectPage() {
     }
   }
 
-  // Load clients on mount
+  // Load clients on mount, preselect from URL if available
   useEffect(() => {
-    loadClients()
-  }, [])
+    loadClients(preselectedClientId || undefined)
+  }, [preselectedClientId])
 
   // Create new client
   const handleCreateClient = async () => {
@@ -200,7 +204,16 @@ export default function NewProjectPage() {
                     </span>
                   </label>
 
-                  {showNewClientForm ? (
+                  {/* Show preselected client when coming from client page */}
+                  {preselectedClientId && clients.find(c => c.id === preselectedClientId) ? (
+                    <div className="flex items-center gap-3 px-4 py-3 border border-green-200 rounded-xl bg-green-50">
+                      <Building2 size={18} className="text-green-600" />
+                      <span className="font-medium text-green-800">
+                        {clients.find(c => c.id === preselectedClientId)?.name}
+                      </span>
+                      <span className="text-xs text-green-600 ml-auto">Cliente preseleccionado</span>
+                    </div>
+                  ) : showNewClientForm ? (
                     <div className="space-y-3 p-4 border border-blue-200 rounded-xl bg-blue-50">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-blue-800">Nuevo Cliente</span>
@@ -527,5 +540,18 @@ export default function NewProjectPage() {
         </div>
       </div>
     </main>
+  )
+}
+
+// Wrap in Suspense for useSearchParams
+export default function NewProjectPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+      </main>
+    }>
+      <NewProjectForm />
+    </Suspense>
   )
 }

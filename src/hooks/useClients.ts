@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase-browser'
 
 // Tipos inline para clientes
 export type ClientStatus = 'active' | 'inactive' | 'archived'
@@ -52,6 +52,7 @@ export function useClients(agencyId?: string) {
       setLoading(true)
       setError(null)
 
+      const supabase = createClient()
       let query = supabase
         .from('clients')
         .select('*')
@@ -80,6 +81,8 @@ export function useClients(agencyId?: string) {
 
   // Create client function that uses the hook's context
   const createClientFn = useCallback(async (name: string): Promise<Client> => {
+    const supabase = createClient()
+
     // Get first agency or create a default one
     const { data: agencies } = await supabase
       .from('agencies')
@@ -122,6 +125,7 @@ export function useClients(agencyId?: string) {
 
   // Delete client function
   const deleteClientFn = useCallback(async (clientId: string): Promise<void> => {
+    const supabase = createClient()
     const { error } = await supabase.from('clients').delete().eq('id', clientId)
     if (error) throw error
     // Refresh the list
@@ -133,6 +137,7 @@ export function useClients(agencyId?: string) {
     clientId: string,
     updates: ClientUpdate
   ): Promise<Client> => {
+    const supabase = createClient()
     const { data, error } = await supabase
       .from('clients')
       .update(updates)
@@ -173,6 +178,7 @@ export function useClient(clientId: string) {
       setLoading(true)
       setError(null)
 
+      const supabase = createClient()
       const { data, error: queryError } = await supabase
         .from('clients')
         .select('*')
@@ -204,7 +210,8 @@ export function useClient(clientId: string) {
 /**
  * Crear un nuevo cliente en una agencia.
  */
-export async function createClient(data: ClientInsert): Promise<Client> {
+export async function createClientFn(data: ClientInsert): Promise<Client> {
+  const supabase = createClient()
   const slug =
     data.slug ||
     data.name
@@ -232,7 +239,8 @@ export async function createClient(data: ClientInsert): Promise<Client> {
 /**
  * Eliminar un cliente.
  */
-export async function deleteClient(clientId: string): Promise<void> {
+export async function deleteClientFn(clientId: string): Promise<void> {
+  const supabase = createClient()
   const { error } = await supabase.from('clients').delete().eq('id', clientId)
   if (error) throw error
 }

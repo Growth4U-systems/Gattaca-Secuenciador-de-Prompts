@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import {
-  STEP_1_CLEAN_FILTER_PROMPT,
-  STEP_2_SCORING_PROMPT,
-  STEP_3_CONSOLIDATE_PROMPT,
+  STEP_2_CLEAN_FILTER_PROMPT,
+  STEP_3_SCORING_PROMPT,
+  STEP_4_CONSOLIDATE_PROMPT,
 } from '@/lib/templates/niche-finder-playbook'
 
 export const dynamic = 'force-dynamic'
@@ -11,13 +11,13 @@ export const maxDuration = 300 // 5 minutes for LLM analysis
 
 type Params = { params: Promise<{ id: string }> }
 
-// Step configurations
+// Step configurations (Steps 2-4 from the template - Step 1 is Find Problems which happens during extraction)
 const ANALYSIS_STEPS = [
   {
     number: 1,
     name: 'clean_filter',
     displayName: 'Limpiar y Filtrar Nichos',
-    prompt: STEP_1_CLEAN_FILTER_PROMPT,
+    prompt: STEP_2_CLEAN_FILTER_PROMPT,
     model: 'openai/gpt-4o-mini',
     temperature: 0.5,
     maxTokens: 8192,
@@ -27,7 +27,7 @@ const ANALYSIS_STEPS = [
     number: 2,
     name: 'scoring',
     displayName: 'Scoring (Deep Research)',
-    prompt: STEP_2_SCORING_PROMPT,
+    prompt: STEP_3_SCORING_PROMPT,
     model: 'google/gemini-2.5-pro-preview',
     temperature: 0.8,
     maxTokens: 16384,
@@ -37,7 +37,7 @@ const ANALYSIS_STEPS = [
     number: 3,
     name: 'consolidate',
     displayName: 'Tabla Final Consolidada',
-    prompt: STEP_3_CONSOLIDATE_PROMPT,
+    prompt: STEP_4_CONSOLIDATE_PROMPT,
     model: 'openai/gpt-4o-mini',
     temperature: 0.3,
     maxTokens: 8192,
