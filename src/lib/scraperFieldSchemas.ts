@@ -1130,26 +1130,26 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   google_maps_reviews: {
     type: 'google_maps_reviews',
     fields: {
-      placeUrls: {
-        key: 'placeUrls',
+      startUrls: {
+        key: 'startUrls',
         type: 'url-array',
         label: 'URLs de lugares en Google Maps',
         description: 'URLs de los lugares de los que quieres extraer reviews',
         placeholder: 'https://www.google.com/maps/place/...',
-        helpText: 'Una URL por l\u00ednea. Copia la URL desde Google Maps.',
+        helpText: 'Una URL por línea. Copia la URL desde Google Maps.',
         required: true,
         examples: [
           'https://www.google.com/maps/place/Revolut+London/@51.5074,-0.1278,17z',
         ],
       },
-      maxReviews: {
-        key: 'maxReviews',
+      maxReviewsPerUrl: {
+        key: 'maxReviewsPerUrl',
         type: 'number',
-        label: 'Máximo de reviews',
-        description: 'Número máximo de reviews a extraer',
+        label: 'Máximo de reviews por URL',
+        description: 'Número máximo de reviews a extraer por cada lugar',
         defaultValue: 100,
         validation: {
-          min: 10,
+          min: 1,
           max: 500,
         },
       },

@@ -394,10 +394,10 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.GOOGLE_MAPS_REVIEWS,
     category: 'reviews',
     inputSchema: {
-      required: ['placeUrls'],
-      optional: ['maxReviews', 'language', 'reviewsSort'],
+      required: ['startUrls'],
+      optional: ['maxReviewsPerUrl', 'language', 'reviewsSort'],
       defaults: {
-        maxReviews: 100,
+        maxReviewsPerUrl: 100,
         language: 'es',
         reviewsSort: 'newest',
       },
