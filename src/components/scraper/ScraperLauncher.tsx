@@ -27,8 +27,8 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   { type: 'linkedin_company_profile', status: 'enabled', category: 'social' },
   { type: 'reddit_posts', status: 'enabled', category: 'social' },
   // linkedin_company_insights: disabled - requires paid Apify subscription
-  { type: 'facebook_posts', status: 'pending', category: 'social' },
-  { type: 'facebook_comments', status: 'pending', category: 'social' },
+  { type: 'facebook_posts', status: 'enabled', category: 'social' },
+  { type: 'facebook_comments', status: 'enabled', category: 'social' },
   { type: 'youtube_channel_videos', status: 'enabled', category: 'social' },
   { type: 'youtube_comments', status: 'enabled', category: 'social' },
   { type: 'youtube_transcripts', status: 'enabled', category: 'social' },
@@ -45,7 +45,7 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   { type: 'website', status: 'enabled', category: 'web' },
   { type: 'google_news', status: 'enabled', category: 'web' },
   { type: 'news_bing', status: 'enabled', category: 'web' },
-  { type: 'seo_keywords', status: 'pending', category: 'other' },
+  { type: 'seo_keywords', status: 'enabled', category: 'web' },
 ]
 
 // Category labels

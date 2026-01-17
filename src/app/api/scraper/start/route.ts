@@ -243,11 +243,9 @@ async function handleSingleScraper(
       case 'apify':
         return await launchApifyActor(supabase, job as ScraperJob, finalInput, webhookSecret, targetName, targetCategory, tags, userId);
       case 'mangools':
-        // TODO: Implement Mangools
-        return NextResponse.json({ success: false, error: 'Mangools not yet implemented' }, { status: 501 });
+        return await executeMangools(supabase, job as ScraperJob, finalInput, targetName, targetCategory, tags, userId);
       case 'custom':
-        // TODO: Implement custom scrapers
-        return NextResponse.json({ success: false, error: 'Custom scrapers not yet implemented' }, { status: 501 });
+        return await executeCustomScraper(supabase, job as ScraperJob, finalInput, targetName, targetCategory, tags, userId);
       default:
         return NextResponse.json({ success: false, error: `Unsupported provider: ${template.provider}` }, { status: 400 });
     }
@@ -962,4 +960,402 @@ async function launchApifyActor(
     job_id: job.id,
     completed: false, // Apify is async, not completed yet
   });
+}
+
+// ============================================
+// CUSTOM SCRAPER EXECUTOR (Edge Functions)
+// ============================================
+
+async function executeCustomScraper(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  job: ScraperJob,
+  input: Record<string, unknown>,
+  targetName?: string,
+  targetCategory?: string,
+  providedTags?: string[],
+  userId?: string
+): Promise<NextResponse<StartScraperResponse>> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase configuration missing');
+  }
+
+  // Update job to running
+  await supabase
+    .from('scraper_jobs')
+    .update({ status: 'running', started_at: new Date().toISOString() })
+    .eq('id', job.id);
+
+  try {
+    // Call the Edge Function
+    const response = await fetch(`${supabaseUrl}/functions/v1/${job.actor_id}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+      },
+      body: JSON.stringify(input),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Edge Function error: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+
+    // Format results based on scraper type
+    let documentContent: string;
+    let resultCount: number;
+
+    if (job.scraper_type === 'news_bing') {
+      documentContent = formatBingNewsResults(result, input);
+      resultCount = Array.isArray(result.articles) ? result.articles.length : 0;
+    } else {
+      documentContent = JSON.stringify(result, null, 2);
+      resultCount = 1;
+    }
+
+    const effectiveTargetName = targetName || (input.queries as string[])?.[0] || 'Custom Scraper';
+    const documentName = generateDocumentName(job.scraper_type, effectiveTargetName);
+    const documentTags = providedTags?.length
+      ? providedTags
+      : generateAutoTags(job.scraper_type, effectiveTargetName);
+    const documentBrief = await generateDocumentBrief(documentContent, job.scraper_type, effectiveTargetName);
+
+    // Save document
+    const adminClient = createAdminClient();
+    const { data: doc, error: docError } = await adminClient
+      .from('knowledge_base_docs')
+      .insert({
+        project_id: job.project_id,
+        filename: documentName,
+        extracted_content: documentContent,
+        description: documentBrief,
+        category: targetCategory || job.target_category || 'research',
+        tags: documentTags,
+        source_type: 'scraper',
+        source_job_id: job.id,
+        source_metadata: {
+          scraper_type: job.scraper_type,
+          scraped_at: new Date().toISOString(),
+          target_name: effectiveTargetName,
+          provider: 'custom',
+          edge_function: job.actor_id,
+        },
+      })
+      .select()
+      .single();
+
+    if (docError) {
+      throw new Error(`Failed to save document: ${docError.message}`);
+    }
+
+    // Update job as completed
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'completed',
+        result_count: resultCount,
+        completed_at: new Date().toISOString(),
+        provider_metadata: {
+          document_id: doc?.id,
+          edge_function: job.actor_id,
+        },
+      })
+      .eq('id', job.id);
+
+    return NextResponse.json({
+      success: true,
+      job_id: job.id,
+      completed: true,
+    });
+
+  } catch (error) {
+    // Update job as failed
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'failed',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', job.id);
+
+    throw error;
+  }
+}
+
+// Format Bing News results as markdown document
+function formatBingNewsResults(result: Record<string, unknown>, input: Record<string, unknown>): string {
+  const articles = (result.articles || []) as Array<{
+    title?: string;
+    url?: string;
+    source?: string;
+    snippet?: string;
+    publishedAt?: string;
+    content?: string;
+    imageUrl?: string;
+    query?: string;
+  }>;
+
+  const queries = (input.queries as string[]) || [];
+  const country = (input.country as string) || 'unknown';
+  const today = new Date().toLocaleDateString('es-ES');
+
+  let markdown = `# Noticias de Bing News\n\n`;
+  markdown += `**Búsquedas:** ${queries.join(', ')}\n`;
+  markdown += `**País/Idioma:** ${country}\n`;
+  markdown += `**Fecha de extracción:** ${today}\n`;
+  markdown += `**Total de artículos:** ${articles.length}\n\n`;
+  markdown += `---\n\n`;
+
+  for (const article of articles) {
+    markdown += `## ${article.title || 'Sin título'}\n\n`;
+    markdown += `**Fuente:** ${article.source || 'Desconocida'}\n`;
+    markdown += `**Fecha:** ${article.publishedAt || 'N/A'}\n`;
+    markdown += `**URL:** ${article.url || 'N/A'}\n`;
+    if (article.query) {
+      markdown += `**Búsqueda:** ${article.query}\n`;
+    }
+    markdown += `\n`;
+
+    if (article.snippet) {
+      markdown += `> ${article.snippet}\n\n`;
+    }
+
+    if (article.content) {
+      markdown += `${article.content}\n\n`;
+    }
+
+    markdown += `---\n\n`;
+  }
+
+  return markdown;
+}
+
+// ============================================
+// MANGOOLS SCRAPER EXECUTOR (KWFinder API)
+// ============================================
+
+async function executeMangools(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  job: ScraperJob,
+  input: Record<string, unknown>,
+  targetName?: string,
+  targetCategory?: string,
+  providedTags?: string[],
+  userId?: string
+): Promise<NextResponse<StartScraperResponse>> {
+  const mangoolsApiKey = process.env.MANGOOLS_API_KEY;
+
+  if (!mangoolsApiKey) {
+    throw new Error('Mangools API key not configured. Please add MANGOOLS_API_KEY to environment variables.');
+  }
+
+  // Update job to running
+  await supabase
+    .from('scraper_jobs')
+    .update({ status: 'running', started_at: new Date().toISOString() })
+    .eq('id', job.id);
+
+  try {
+    const keyword = input.keyword as string;
+    const location = (input.location as string) || 'Spain';
+    const language = (input.language as string) || 'es';
+
+    // KWFinder API endpoint
+    const apiUrl = new URL('https://api.mangools.com/v4/kwfinder/search');
+    apiUrl.searchParams.set('kw', keyword);
+    apiUrl.searchParams.set('location_id', getLocationId(location));
+    apiUrl.searchParams.set('language_id', getLanguageId(language));
+
+    const response = await fetch(apiUrl.toString(), {
+      method: 'GET',
+      headers: {
+        'X-Access-Token': mangoolsApiKey,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Mangools API error: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    const documentContent = formatMangoolsResults(result, keyword, location, language);
+    const resultCount = result.keywords?.length || 1;
+
+    const effectiveTargetName = targetName || keyword;
+    const documentName = generateDocumentName(job.scraper_type, effectiveTargetName);
+    const documentTags = providedTags?.length
+      ? providedTags
+      : generateAutoTags(job.scraper_type, effectiveTargetName);
+    const documentBrief = await generateDocumentBrief(documentContent, job.scraper_type, effectiveTargetName);
+
+    // Save document
+    const adminClient = createAdminClient();
+    const { data: doc, error: docError } = await adminClient
+      .from('knowledge_base_docs')
+      .insert({
+        project_id: job.project_id,
+        filename: documentName,
+        extracted_content: documentContent,
+        description: documentBrief,
+        category: targetCategory || job.target_category || 'research',
+        tags: documentTags,
+        source_type: 'scraper',
+        source_job_id: job.id,
+        source_metadata: {
+          scraper_type: job.scraper_type,
+          scraped_at: new Date().toISOString(),
+          target_name: effectiveTargetName,
+          provider: 'mangools',
+          keyword,
+          location,
+          language,
+        },
+      })
+      .select()
+      .single();
+
+    if (docError) {
+      throw new Error(`Failed to save document: ${docError.message}`);
+    }
+
+    // Update job as completed
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'completed',
+        result_count: resultCount,
+        completed_at: new Date().toISOString(),
+        provider_metadata: {
+          document_id: doc?.id,
+          keyword,
+          location,
+          language,
+        },
+      })
+      .eq('id', job.id);
+
+    return NextResponse.json({
+      success: true,
+      job_id: job.id,
+      completed: true,
+    });
+
+  } catch (error) {
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'failed',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', job.id);
+
+    throw error;
+  }
+}
+
+// Format Mangools/KWFinder results as markdown
+function formatMangoolsResults(
+  result: Record<string, unknown>,
+  keyword: string,
+  location: string,
+  language: string
+): string {
+  const keywords = (result.keywords || []) as Array<{
+    kw?: string;
+    sv?: number;        // Search volume
+    cpc?: number;       // Cost per click
+    ppc?: number;       // PPC competition
+    kd?: number;        // Keyword difficulty
+    m?: number[];       // Monthly trend
+  }>;
+
+  const mainKeyword = result.mainKeyword as {
+    kw?: string;
+    sv?: number;
+    cpc?: number;
+    ppc?: number;
+    kd?: number;
+    m?: number[];
+  } | undefined;
+
+  const today = new Date().toLocaleDateString('es-ES');
+
+  let markdown = `# Análisis SEO: ${keyword}\n\n`;
+  markdown += `**Ubicación:** ${location}\n`;
+  markdown += `**Idioma:** ${language}\n`;
+  markdown += `**Fecha de análisis:** ${today}\n\n`;
+
+  // Main keyword stats
+  if (mainKeyword) {
+    markdown += `## Keyword Principal\n\n`;
+    markdown += `| Métrica | Valor |\n`;
+    markdown += `|---------|-------|\n`;
+    markdown += `| Volumen de búsqueda | ${mainKeyword.sv?.toLocaleString() || 'N/A'} /mes |\n`;
+    markdown += `| Dificultad (KD) | ${mainKeyword.kd || 'N/A'} |\n`;
+    markdown += `| CPC | $${mainKeyword.cpc?.toFixed(2) || 'N/A'} |\n`;
+    markdown += `| Competencia PPC | ${mainKeyword.ppc || 'N/A'} |\n\n`;
+
+    if (mainKeyword.m && mainKeyword.m.length > 0) {
+      markdown += `**Tendencia mensual:** ${mainKeyword.m.join(' → ')}\n\n`;
+    }
+  }
+
+  // Related keywords table
+  if (keywords.length > 0) {
+    markdown += `## Keywords Relacionadas (${keywords.length})\n\n`;
+    markdown += `| Keyword | Volumen | KD | CPC |\n`;
+    markdown += `|---------|---------|-------|-----|\n`;
+
+    for (const kw of keywords.slice(0, 50)) { // Limit to 50 for readability
+      markdown += `| ${kw.kw || '-'} | ${kw.sv?.toLocaleString() || '-'} | ${kw.kd || '-'} | $${kw.cpc?.toFixed(2) || '-'} |\n`;
+    }
+
+    if (keywords.length > 50) {
+      markdown += `\n*... y ${keywords.length - 50} keywords más*\n`;
+    }
+  }
+
+  markdown += `\n---\n\n*Datos obtenidos de Mangools KWFinder*\n`;
+
+  return markdown;
+}
+
+// Mangools location IDs (most common)
+function getLocationId(location: string): string {
+  const locations: Record<string, string> = {
+    'Spain': '2724',
+    'United States': '2840',
+    'United Kingdom': '2826',
+    'Mexico': '2484',
+    'Argentina': '2032',
+    'Colombia': '2170',
+    'Chile': '2152',
+    'Peru': '2604',
+    'Germany': '2276',
+    'France': '2250',
+    'Brazil': '2076',
+  };
+  return locations[location] || '2724'; // Default to Spain
+}
+
+// Mangools language IDs
+function getLanguageId(language: string): string {
+  const languages: Record<string, string> = {
+    'es': '1003',
+    'en': '1000',
+    'pt': '1015',
+    'fr': '1002',
+    'de': '1001',
+    'it': '1004',
+  };
+  return languages[language] || '1003'; // Default to Spanish
 }
