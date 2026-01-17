@@ -179,14 +179,19 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
   linkedin_company_insights: {
     type: 'linkedin_company_insights',
     name: 'LinkedIn Company Insights',
-    description: 'Get company information and insights from LinkedIn',
+    description: 'Obtiene insights de empresas: alumni, nuevas contrataciones. Requiere cookies de LinkedIn Premium.',
     provider: 'apify',
     actorId: APIFY_ACTORS.LINKEDIN_COMPANY_INSIGHTS,
     category: 'social',
     inputSchema: {
-      required: ['companyUrls'],
-      optional: [],
-      defaults: {},
+      required: ['urls'],
+      optional: ['get_alumni', 'get_new_hires', 'max_alumni', 'max_new_hires'],
+      defaults: {
+        get_alumni: true,
+        get_new_hires: true,
+        max_alumni: 3,
+        max_new_hires: 3,
+      },
     },
     outputFields: ['name', 'description', 'industry', 'employeeCount', 'headquarters', 'website'],
   },
@@ -310,15 +315,16 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
   capterra_reviews: {
     type: 'capterra_reviews',
     name: 'Capterra Reviews',
-    description: 'Scrape reviews from Capterra',
+    description: 'Scrape reviews from Capterra product pages',
     provider: 'apify',
     actorId: APIFY_ACTORS.CAPTERRA_REVIEWS,
     category: 'reviews',
     inputSchema: {
-      required: ['company_name'],
-      optional: ['maxReviews'],
+      required: ['startUrls'],
+      optional: ['maxReviews', 'maxConcurrency'],
       defaults: {
         maxReviews: 100,
+        maxConcurrency: 20,
       },
     },
     outputFields: ['title', 'text', 'rating', 'author', 'date', 'pros', 'cons'],
