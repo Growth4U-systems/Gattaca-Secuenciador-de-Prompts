@@ -220,7 +220,7 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.LINKEDIN_COMPANY_PROFILE,
     category: 'social',
     inputSchema: {
-      required: ['urls'],
+      required: ['profileUrls'],
       optional: [],
       defaults: {},
     },
@@ -600,7 +600,7 @@ export function buildScraperInput(
   // Some fields need to be arrays even if user passes a string
   const arrayFields = ['username', 'profiles', 'postURLs', 'postIds', 'startUrls',
     'youtube_channels', 'languages', 'stars', 'videoUrls', 'channelUrls', 'companyUrls', 'queries',
-    'hashtags', 'searchQueries', 'placeUrls', 'searches', 'urls'];
+    'hashtags', 'searchQueries', 'placeUrls', 'searches', 'urls', 'profileUrls'];
 
   for (const field of arrayFields) {
     if (merged[field] !== undefined) {

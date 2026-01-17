@@ -1449,8 +1449,8 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   linkedin_company_profile: {
     type: 'linkedin_company_profile',
     fields: {
-      urls: {
-        key: 'urls',
+      profileUrls: {
+        key: 'profileUrls',
         type: 'url-array',
         label: 'URLs de Empresas',
         description: 'URLs de las páginas de empresa en LinkedIn',
