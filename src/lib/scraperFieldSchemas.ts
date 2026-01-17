@@ -1179,6 +1179,14 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         options: LANGUAGE_OPTIONS,
         defaultValue: 'es',
       },
+      includeSerpOverview: {
+        key: 'includeSerpOverview',
+        type: 'boolean',
+        label: 'Incluir SERP Overview',
+        description: 'Analizar los 10 primeros resultados de Google (DA, PA, CF, TF, links)',
+        helpText: 'Obtiene métricas de autoridad de cada URL posicionada para esta keyword',
+        defaultValue: true,
+      },
     },
   },
 

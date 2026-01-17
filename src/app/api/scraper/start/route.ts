@@ -243,8 +243,7 @@ async function handleSingleScraper(
       case 'apify':
         return await launchApifyActor(supabase, job as ScraperJob, finalInput, webhookSecret, targetName, targetCategory, tags, userId);
       case 'mangools':
-        // TODO: Implement Mangools
-        return NextResponse.json({ success: false, error: 'Mangools not yet implemented' }, { status: 501 });
+        return await executeMangools(supabase, job as ScraperJob, finalInput, targetName, targetCategory, tags, userId);
       case 'custom':
         return await executeCustomScraper(supabase, job as ScraperJob, finalInput, targetName, targetCategory, tags, userId);
       default:
@@ -971,6 +970,276 @@ async function launchApifyActor(
     job_id: job.id,
     completed: false, // Apify is async, not completed yet
   });
+}
+
+// ============================================
+// MANGOOLS SCRAPER EXECUTOR (KWFinder + SERPChecker)
+// ============================================
+
+interface MangoolsKeyword {
+  keyword: string;
+  searchVolume: number;
+  cpc: number;
+  competition: number;
+  difficulty: number;
+  trend?: number[];
+}
+
+interface SerpResult {
+  position: number;
+  url: string;
+  title: string;
+  da: number;  // Domain Authority
+  pa: number;  // Page Authority
+  cf: number;  // Citation Flow
+  tf: number;  // Trust Flow
+  links: number;
+}
+
+async function executeMangools(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  job: ScraperJob,
+  input: Record<string, unknown>,
+  targetName?: string,
+  targetCategory?: string,
+  providedTags?: string[],
+  userId?: string
+): Promise<NextResponse<StartScraperResponse>> {
+  const MANGOOLS_API_KEY = process.env.MANGOOLS_API_KEY;
+
+  if (!MANGOOLS_API_KEY) {
+    throw new Error('MANGOOLS_API_KEY not configured');
+  }
+
+  // Update job to running
+  await supabase
+    .from('scraper_jobs')
+    .update({
+      status: 'running',
+      started_at: new Date().toISOString(),
+      target_name: targetName,
+      target_category: targetCategory || 'research',
+    })
+    .eq('id', job.id);
+
+  const keywords = (input.keywords as string[]) || [];
+  const locationId = (input.locationId as number) || 2840; // Default: United States
+  const languageId = (input.languageId as number) || 1; // Default: English
+  const includeSerpOverview = (input.includeSerpOverview as boolean) ?? true;
+
+  const allKeywordData: MangoolsKeyword[] = [];
+  const serpData: Record<string, SerpResult[]> = {};
+
+  try {
+    // Call KWFinder API for each keyword
+    for (const keyword of keywords) {
+      const kwfinderUrl = `https://api.mangools.com/v4/kwfinder/related-keywords?kw=${encodeURIComponent(keyword)}&location_id=${locationId}&language_id=${languageId}`;
+
+      const response = await fetch(kwfinderUrl, {
+        method: 'GET',
+        headers: {
+          'X-Access-Token': MANGOOLS_API_KEY,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Mangools] KWFinder error for "${keyword}":`, errorText);
+        continue;
+      }
+
+      const data = await response.json();
+      const relatedKeywords = data.keywords || [];
+
+      for (const kw of relatedKeywords) {
+        allKeywordData.push({
+          keyword: kw.kw || keyword,
+          searchVolume: kw.sv || 0,
+          cpc: kw.cpc?.value || 0,
+          competition: kw.competition || 0,
+          difficulty: kw.seo_difficulty || kw.kd || 0,
+          trend: kw.trend || [],
+        });
+      }
+
+      // If SERP Overview is enabled, call SERPChecker API
+      if (includeSerpOverview) {
+        const serpUrl = `https://api.mangools.com/v4/serpchecker/serp?kw=${encodeURIComponent(keyword)}&location_id=${locationId}&language_id=${languageId}`;
+
+        const serpResponse = await fetch(serpUrl, {
+          method: 'GET',
+          headers: {
+            'X-Access-Token': MANGOOLS_API_KEY,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (serpResponse.ok) {
+          const serpDataResult = await serpResponse.json();
+          const results = serpDataResult.serp || [];
+
+          serpData[keyword] = results.slice(0, 10).map((item: Record<string, unknown>, index: number) => ({
+            position: index + 1,
+            url: item.url as string || '',
+            title: item.title as string || '',
+            da: item.da as number || 0,
+            pa: item.pa as number || 0,
+            cf: item.cf as number || 0,
+            tf: item.tf as number || 0,
+            links: item.links as number || 0,
+          }));
+        }
+      }
+    }
+
+    // Format results as markdown document
+    const effectiveTargetName = targetName || keywords.join(', ') || 'SEO Keywords';
+    const documentContent = formatMangoolsResults(allKeywordData, serpData, keywords, input);
+    const documentName = generateDocumentName(job.scraper_type, effectiveTargetName);
+    const documentTags = providedTags?.length
+      ? providedTags
+      : generateAutoTags(job.scraper_type, effectiveTargetName);
+    const documentBrief = await generateDocumentBrief(documentContent, job.scraper_type, effectiveTargetName);
+
+    // Save document using admin client
+    const adminClient = createAdminClient();
+
+    const { data: doc, error: docError } = await adminClient
+      .from('knowledge_base_docs')
+      .insert({
+        project_id: job.project_id,
+        filename: documentName,
+        extracted_content: documentContent,
+        description: documentBrief,
+        category: targetCategory || job.target_category || 'research',
+        tags: documentTags,
+        source_type: 'scraper',
+        source_job_id: job.id,
+        source_metadata: {
+          scraper_type: job.scraper_type,
+          scraped_at: new Date().toISOString(),
+          target_name: effectiveTargetName,
+          keywords_count: allKeywordData.length,
+          serp_analyzed: Object.keys(serpData).length,
+          location_id: locationId,
+          language_id: languageId,
+        },
+      })
+      .select()
+      .single();
+
+    if (docError) {
+      console.error('[scraper/start] Failed to save Mangools document:', docError);
+      throw new Error(`Failed to save document: ${docError.message}`);
+    }
+
+    // Update job as completed
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'completed',
+        result_count: allKeywordData.length,
+        result_preview: allKeywordData.slice(0, 5).map((kw) => ({
+          keyword: kw.keyword,
+          volume: kw.searchVolume,
+          difficulty: kw.difficulty,
+        })),
+        completed_at: new Date().toISOString(),
+        provider_metadata: {
+          document_id: doc?.id,
+          keywords_analyzed: keywords,
+          total_results: allKeywordData.length,
+          serp_analyzed: Object.keys(serpData).length,
+        },
+      })
+      .eq('id', job.id);
+
+    return NextResponse.json({
+      success: true,
+      job_id: job.id,
+      completed: true,
+    });
+  } catch (error) {
+    // Update job as failed
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'failed',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', job.id);
+
+    throw error;
+  }
+}
+
+function formatMangoolsResults(
+  keywords: MangoolsKeyword[],
+  serpData: Record<string, SerpResult[]>,
+  originalKeywords: string[],
+  input: Record<string, unknown>
+): string {
+  const today = new Date().toLocaleDateString('es-ES');
+
+  let markdown = `# Análisis SEO de Keywords\n\n`;
+  markdown += `**Keywords analizadas:** ${originalKeywords.join(', ')}\n`;
+  markdown += `**Fecha de extracción:** ${today}\n`;
+  markdown += `**Total de keywords encontradas:** ${keywords.length}\n\n`;
+  markdown += `---\n\n`;
+
+  // Keywords table
+  markdown += `## Keywords y Métricas\n\n`;
+  markdown += `| Keyword | Volumen | CPC | Competencia | Dificultad SEO |\n`;
+  markdown += `|---------|---------|-----|-------------|----------------|\n`;
+
+  // Sort by search volume descending
+  const sortedKeywords = [...keywords].sort((a, b) => b.searchVolume - a.searchVolume);
+
+  for (const kw of sortedKeywords) {
+    markdown += `| ${kw.keyword} | ${kw.searchVolume.toLocaleString()} | $${kw.cpc.toFixed(2)} | ${(kw.competition * 100).toFixed(0)}% | ${kw.difficulty}/100 |\n`;
+  }
+
+  markdown += `\n---\n\n`;
+
+  // SERP Overview (if available)
+  if (Object.keys(serpData).length > 0) {
+    markdown += `## SERP Overview\n\n`;
+    markdown += `Análisis de los 10 primeros resultados de Google para cada keyword:\n\n`;
+
+    for (const [keyword, results] of Object.entries(serpData)) {
+      markdown += `### "${keyword}"\n\n`;
+      markdown += `| Pos | URL | DA | PA | CF | TF | Links |\n`;
+      markdown += `|-----|-----|----|----|----|----|-------|\n`;
+
+      for (const result of results) {
+        const shortUrl = result.url.length > 50 ? result.url.substring(0, 47) + '...' : result.url;
+        markdown += `| ${result.position} | ${shortUrl} | ${result.da} | ${result.pa} | ${result.cf} | ${result.tf} | ${result.links.toLocaleString()} |\n`;
+      }
+
+      markdown += `\n`;
+    }
+  }
+
+  // Summary insights
+  markdown += `## Resumen\n\n`;
+
+  const avgVolume = keywords.length > 0
+    ? Math.round(keywords.reduce((sum, kw) => sum + kw.searchVolume, 0) / keywords.length)
+    : 0;
+  const avgDifficulty = keywords.length > 0
+    ? Math.round(keywords.reduce((sum, kw) => sum + kw.difficulty, 0) / keywords.length)
+    : 0;
+  const totalVolume = keywords.reduce((sum, kw) => sum + kw.searchVolume, 0);
+
+  markdown += `- **Volumen total estimado:** ${totalVolume.toLocaleString()} búsquedas/mes\n`;
+  markdown += `- **Volumen promedio:** ${avgVolume.toLocaleString()} búsquedas/mes\n`;
+  markdown += `- **Dificultad SEO promedio:** ${avgDifficulty}/100\n`;
+  markdown += `- **Keywords con bajo dificultad (< 30):** ${keywords.filter(k => k.difficulty < 30).length}\n`;
+  markdown += `- **Keywords de alto volumen (> 1000):** ${keywords.filter(k => k.searchVolume > 1000).length}\n`;
+
+  return markdown;
 }
 
 // ============================================

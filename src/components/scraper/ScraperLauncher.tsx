@@ -22,28 +22,28 @@ const ALL_SCRAPERS: ScraperConfig[] = [
   { type: 'instagram_posts_comments', status: 'enabled', category: 'social' },
   { type: 'tiktok_posts', status: 'enabled', category: 'social' },
   { type: 'tiktok_comments', status: 'enabled', category: 'social' },
-  { type: 'linkedin_company_posts', status: 'pending', category: 'social' },
-  { type: 'linkedin_comments', status: 'pending', category: 'social' },
-  { type: 'linkedin_company_insights', status: 'pending', category: 'social' },
-  { type: 'facebook_posts', status: 'pending', category: 'social' },
-  { type: 'facebook_comments', status: 'pending', category: 'social' },
+  { type: 'linkedin_company_posts', status: 'enabled', category: 'social' },
+  { type: 'linkedin_comments', status: 'enabled', category: 'social' },
+  { type: 'linkedin_company_insights', status: 'enabled', category: 'social' },
+  { type: 'facebook_posts', status: 'enabled', category: 'social' },
+  { type: 'facebook_comments', status: 'enabled', category: 'social' },
   { type: 'youtube_channel_videos', status: 'enabled', category: 'social' },
   { type: 'youtube_comments', status: 'enabled', category: 'social' },
   { type: 'youtube_transcripts', status: 'enabled', category: 'social' },
 
   // Reviews
   { type: 'trustpilot_reviews', status: 'enabled', category: 'reviews' },
-  { type: 'g2_reviews', status: 'pending', category: 'reviews' },
-  { type: 'capterra_reviews', status: 'pending', category: 'reviews' },
+  { type: 'g2_reviews', status: 'enabled', category: 'reviews' },
+  { type: 'capterra_reviews', status: 'enabled', category: 'reviews' },
   { type: 'appstore_reviews', status: 'enabled', category: 'reviews' },
   { type: 'playstore_reviews', status: 'enabled', category: 'reviews' },
-  { type: 'google_maps_reviews', status: 'pending', category: 'reviews' },
+  { type: 'google_maps_reviews', status: 'enabled', category: 'reviews' },
 
   // Web & News
   { type: 'website', status: 'enabled', category: 'web' },
   { type: 'google_news', status: 'enabled', category: 'web' },
   { type: 'news_bing', status: 'enabled', category: 'web' },
-  { type: 'seo_keywords', status: 'pending', category: 'other' },
+  { type: 'seo_keywords', status: 'enabled', category: 'other' },
 ]
 
 // Category labels
