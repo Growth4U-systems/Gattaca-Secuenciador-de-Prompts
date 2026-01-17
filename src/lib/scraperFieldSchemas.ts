@@ -749,13 +749,13 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   linkedin_company_insights: {
     type: 'linkedin_company_insights',
     fields: {
-      companyUrls: {
-        key: 'companyUrls',
+      urls: {
+        key: 'urls',
         type: 'url-array',
         label: 'URLs de empresas en LinkedIn',
-        description: 'URLs completas de las p\u00e1ginas de empresa en LinkedIn',
+        description: 'URLs completas de las páginas de empresa en LinkedIn. Requiere cookies de LinkedIn Premium.',
         placeholder: 'https://www.linkedin.com/company/revolut/',
-        helpText: 'Una URL por l\u00ednea',
+        helpText: 'Una URL por línea. Este scraper requiere una cuenta LinkedIn Premium.',
         required: true,
         validation: {
           pattern: /^https:\/\/(www\.)?linkedin\.com\/company\/[^/]+\/?$/,
@@ -974,26 +974,29 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   capterra_reviews: {
     type: 'capterra_reviews',
     fields: {
-      company_name: {
-        key: 'company_name',
-        type: 'text',
-        label: 'Nombre del producto en Capterra',
-        description: 'El nombre del producto tal como aparece en Capterra',
-        placeholder: 'slack',
-        helpText: 'Es la parte de la URL: capterra.com/p/123456/NOMBRE/',
+      startUrls: {
+        key: 'startUrls',
+        type: 'url-array',
+        label: 'URLs de productos en Capterra',
+        description: 'URLs completas de las páginas de reviews en Capterra',
+        placeholder: 'https://www.capterra.com/p/150854/Apify/reviews/',
+        helpText: 'Una URL por línea. Formato: https://www.capterra.com/p/ID/NOMBRE/reviews/',
         required: true,
+        validation: {
+          pattern: /^https:\/\/(www\.)?capterra\.com\/p\/\d+\/[^/]+\/(reviews\/?)?$/,
+          patternMessage: 'Formato: https://www.capterra.com/p/123456/nombre/reviews/',
+        },
         examples: [
-          'slack',
-          'notion',
-          'asana',
-          'monday-com',
+          'https://www.capterra.com/p/150854/Apify/reviews/',
+          'https://www.capterra.com/p/135003/Slack/reviews/',
+          'https://www.capterra.com/p/124024/Notion/reviews/',
         ],
       },
       maxReviews: {
         key: 'maxReviews',
         type: 'number',
         label: 'Máximo de reviews',
-        description: 'Número máximo de reviews a extraer',
+        description: 'Número máximo de reviews a extraer por producto',
         defaultValue: 100,
         validation: {
           min: 10,
