@@ -205,7 +205,7 @@ export default function StatusManager({ statuses, onSave, onClose }: StatusManag
                           type="text"
                           value={editingName}
                           onChange={(e) => setEditingName(e.target.value)}
-                          className="flex-1 px-3 py-1.5 text-sm border-2 border-orange-400 rounded-lg focus:outline-none focus:border-orange-500"
+                          className="flex-1 px-3 py-1.5 text-sm text-gray-900 border-2 border-orange-400 rounded-lg focus:outline-none focus:border-orange-500"
                           autoFocus
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') saveEditing(status.id)
@@ -301,7 +301,7 @@ export default function StatusManager({ statuses, onSave, onClose }: StatusManag
                   placeholder="Nombre del status"
                   value={newStatus.name || ''}
                   onChange={(e) => setNewStatus({ ...newStatus, name: e.target.value })}
-                  className="w-full px-3 py-2.5 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:border-orange-500 bg-white"
+                  className="w-full px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-orange-500 bg-white"
                   autoFocus
                 />
                 <div className="flex gap-3">

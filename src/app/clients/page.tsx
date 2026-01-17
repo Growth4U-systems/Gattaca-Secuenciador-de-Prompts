@@ -233,7 +233,7 @@ export default function ClientsPage() {
                 placeholder="Buscar clientes..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder:text-gray-400"
+                className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-gray-900 placeholder:text-gray-400"
               />
             </div>
           </div>
@@ -444,7 +444,7 @@ export default function ClientsPage() {
                 value={newClientName}
                 onChange={(e) => setNewClientName(e.target.value)}
                 placeholder="Ej: Acme Corp"
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleCreateClient()
@@ -554,7 +554,7 @@ export default function ClientsPage() {
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                   placeholder="Ej: Acme Corp"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                   autoFocus
                 />
               </div>
@@ -567,7 +567,7 @@ export default function ClientsPage() {
                   value={editForm.industry}
                   onChange={(e) => setEditForm({ ...editForm, industry: e.target.value })}
                   placeholder="Ej: Tecnología, Retail, Finanzas..."
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                 />
               </div>
               <div>

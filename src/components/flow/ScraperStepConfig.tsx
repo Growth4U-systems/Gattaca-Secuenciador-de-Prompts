@@ -211,7 +211,7 @@ export default function ScraperStepConfig({
                 }
               }}
               placeholder="familia, hijos, universidad..."
-              className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <button
               onClick={() => {
@@ -278,7 +278,7 @@ export default function ScraperStepConfig({
                 }
               }}
               placeholder="pagos, ahorro, gastos..."
-              className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <button
               onClick={() => {
@@ -361,7 +361,7 @@ export default function ScraperStepConfig({
                   }
                 }}
                 placeholder="forocoches.com"
-                className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               <button
                 onClick={addForum}
@@ -413,7 +413,7 @@ export default function ScraperStepConfig({
               <select
                 value={config.serp_pages || 5}
                 onChange={(e) => updateConfig('serp_pages', parseInt(e.target.value))}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value={1}>1 página (10 resultados)</option>
                 <option value={3}>3 páginas (30 resultados)</option>
@@ -430,7 +430,7 @@ export default function ScraperStepConfig({
               <select
                 value={config.batch_size || 10}
                 onChange={(e) => updateConfig('batch_size', parseInt(e.target.value))}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value={5}>5 URLs</option>
                 <option value={10}>10 URLs</option>
@@ -447,7 +447,7 @@ export default function ScraperStepConfig({
               <select
                 value={config.extraction_model || 'openai/gpt-4o-mini'}
                 onChange={(e) => updateConfig('extraction_model', e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="openai/gpt-4o-mini">GPT-4o Mini (Recomendado)</option>
                 <option value="openai/gpt-4o">GPT-4o</option>
