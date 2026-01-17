@@ -22,6 +22,9 @@ interface SuggestRequest {
   country?: string
   existing_life_contexts?: string[]
   existing_product_words?: string[]
+
+  // Context type configuration (B2B, B2C, or both)
+  context_type?: 'personal' | 'business' | 'both'
 }
 
 export async function POST(request: NextRequest) {
@@ -127,10 +130,11 @@ export async function POST(request: NextRequest) {
       existingLifeContexts = body.life_contexts || []
     }
 
-    // Get industry, product, country from body or from project settings
+    // Get industry, product, country, context_type from body or from project settings
     let industry = body.industry || ''
     let productDescription = body.product_description || ''
     let country = body.country || 'España'
+    let contextType = body.context_type || 'both' // 'personal' (B2C), 'business' (B2B), or 'both'
 
     // If project_id is provided, try to get settings from project
     if (body.project_id && supabaseUrl && supabaseServiceKey) {
@@ -146,42 +150,84 @@ export async function POST(request: NextRequest) {
           industry = industry || project.settings.industry || ''
           productDescription = productDescription || project.settings.product || project.description || ''
           country = country || project.settings.country || 'España'
+          contextType = body.context_type || project.settings.context_type || 'both'
         }
       } catch (e) {
         console.warn('Could not fetch project settings:', e)
       }
     }
 
-    const prompt = `You are an expert market researcher. Based on the following product/industry, suggest search parameters for finding customer pain points in forums.
+    // Build context examples based on context_type
+    const contextExamples = {
+      personal: {
+        label: 'SITUACIÓN DE VIDA PERSONAL (B2C)',
+        examples: '"pareja", "hijos", "casamiento", "mudanza", "divorcio", "jubilación", "embarazo", "universidad", "herencia"',
+        description: 'momentos o situaciones de la vida personal donde surge la necesidad'
+      },
+      business: {
+        label: 'SITUACIÓN DE NEGOCIO (B2B)',
+        examples: '"startup", "freelance", "pyme", "exportación", "expansión", "contratación", "fusión", "cierre", "inversores"',
+        description: 'momentos o situaciones del negocio donde surge la necesidad'
+      },
+      both: {
+        label: 'SITUACIÓN DE VIDA O NEGOCIO',
+        examples: '"pareja", "hijos", "jubilación", "startup", "freelance", "pyme", "expansión", "mudanza"',
+        description: 'momentos de vida personal O situaciones de negocio donde surge la necesidad'
+      }
+    }
 
-INDUSTRY: ${industry || 'general'}
-PRODUCT: ${productDescription || 'product/service'}
-COUNTRY: ${country}
-${existingLifeContexts.length > 0 ? `EXISTING LIFE CONTEXTS: ${existingLifeContexts.join(', ')}` : ''}
-${existingProductWords.length > 0 ? `EXISTING PRODUCT WORDS: ${existingProductWords.join(', ')}` : ''}
+    const contextConfig = contextExamples[contextType as keyof typeof contextExamples] || contextExamples.both
 
-Respond in JSON format with this structure:
+    const prompt = `Eres un experto en investigación de mercado y descubrimiento de nichos. Tu objetivo es generar parámetros de búsqueda para encontrar NICHOS ESPECÍFICOS de clientes con pain points en foros.
+
+CONTEXTO:
+- INDUSTRIA: ${industry || 'general'}
+- PRODUCTO/SERVICIO: ${productDescription || 'producto/servicio'}
+- PAÍS: ${country}
+- TIPO DE CLIENTE: ${contextType === 'personal' ? 'B2C (consumidor final)' : contextType === 'business' ? 'B2B (empresas/negocios)' : 'B2C y B2B'}
+
+${existingLifeContexts.length > 0 ? `CONTEXTOS EXISTENTES (no repetir): ${existingLifeContexts.join(', ')}` : ''}
+${existingProductWords.length > 0 ? `PALABRAS DE NECESIDAD EXISTENTES (no repetir): ${existingProductWords.join(', ')}` : ''}
+
+Responde en JSON con esta estructura:
 {
   "life_contexts": [
-    {"value": "context word/phrase", "category": "personal|family|work|events|relationships", "reason": "why this context is relevant"}
+    {"value": "palabra", "category": "personal|business|family|work|events", "reason": "razón breve"}
   ],
   "product_words": [
-    {"value": "product-related word/phrase", "category": "category name", "reason": "why this word is relevant"}
+    {"value": "palabra", "category": "categoría", "reason": "razón breve"}
   ],
   "sources": [
-    {"source_type": "reddit|thematic_forum|general_forum", "value": "domain or subreddit name", "life_context": "related context if applicable", "reason": "why this source is relevant"}
+    {"source_type": "reddit|thematic_forum|general_forum", "value": "dominio o subreddit", "life_context": "contexto relacionado", "reason": "razón breve"}
   ]
 }
 
-IMPORTANT:
-- Suggest 5-10 life contexts that represent situations where people might need ${productDescription || 'the product'}
-- Suggest 5-10 product words that people would use when discussing problems ${productDescription || 'the product'} solves
-- Suggest 5-8 forums/subreddits where these people discuss their problems
-- Be specific to ${country} culture and language
-- Don't repeat existing contexts/words
-- Focus on finding frustrated users, not just any users
+REGLAS CRÍTICAS:
 
-Respond ONLY with the JSON, no additional text.`
+1. CONTEXTOS (life_contexts) - ${contextConfig.label}:
+   - UNA SOLA PALABRA que represente ${contextConfig.description}
+   - Ejemplos válidos: ${contextConfig.examples}
+   - Ejemplos INVÁLIDOS: "recién casados", "pequeña empresa" (son frases, no palabras)
+   - La intersección CONTEXTO + NECESIDAD = NICHO ESPECÍFICO
+
+2. PALABRAS DE NECESIDAD (product_words) - PROBLEMA/NECESIDAD relacionada al producto:
+   - UNA SOLA PALABRA que represente la necesidad o problema que el producto resuelve
+   - Para ${productDescription || 'el producto'}, piensa en qué necesidades/problemas específicos resuelve
+   - Ejemplos para un banco: "pagos", "ahorro", "inversión", "facturas", "deudas", "transferencias", "impuestos"
+   - Ejemplos para software: "automatización", "integración", "reportes", "escalabilidad", "seguridad"
+   - Ejemplos INVÁLIDOS: "falta de dinero", "problemas de pago" (son frases, no palabras)
+
+3. La COMBINACIÓN de contexto + necesidad da nichos específicos:
+   - "jubilación" + "ahorro" → personas mayores preocupadas por sus ahorros
+   - "startup" + "facturación" → emprendedores con problemas de gestión
+   - "mudanza" + "financiación" → personas que necesitan crédito para mudarse
+
+4. Sugiere 5-10 de cada tipo
+5. En español (${country})
+6. No repitas las existentes
+7. Enfócate en encontrar usuarios frustrados con necesidades reales
+
+Responde SOLO con el JSON, sin texto adicional.`
 
     console.log('Calling OpenRouter API...')
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
