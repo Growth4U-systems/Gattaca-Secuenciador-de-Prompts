@@ -120,12 +120,21 @@ export function useClients(agencyId?: string) {
     return newClient
   }, [agencyId, loadClients])
 
+  // Delete client function
+  const deleteClientFn = useCallback(async (clientId: string): Promise<void> => {
+    const { error } = await supabase.from('clients').delete().eq('id', clientId)
+    if (error) throw error
+    // Refresh the list
+    await loadClients()
+  }, [loadClients])
+
   return {
     clients,
     loading,
     error,
     refetch: loadClients,
     createClient: createClientFn,
+    deleteClient: deleteClientFn,
   }
 }
 

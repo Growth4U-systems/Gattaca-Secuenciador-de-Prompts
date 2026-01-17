@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { X, Search, Loader2, Check, AlertCircle, Globe, MessageSquare, Star, Briefcase, Play, Tag, ArrowLeft, HelpCircle, Info, Youtube, Facebook, MapPin, Smartphone, Clock, Eye, ChevronDown, ChevronRight, CheckSquare, Square, Newspaper } from 'lucide-react'
+import { X, Search, Loader2, Check, AlertCircle, Globe, MessageSquare, Star, Briefcase, Play, Tag, ArrowLeft, HelpCircle, Info, Youtube, Facebook, MapPin, Smartphone, Clock, Eye, ChevronDown, ChevronRight, CheckSquare, Square, Newspaper, History } from 'lucide-react'
 import { ScraperType, ScraperTemplate, ScraperOutputFormat, ScraperOutputConfig } from '@/types/scraper.types'
 import { SCRAPER_TEMPLATES } from '@/lib/scraperTemplates'
 import { DocCategory } from '@/types/database.types'
 import { SCRAPER_FIELD_SCHEMAS, FieldSchema, validateField, validateAllFields } from '@/lib/scraperFieldSchemas'
+import { useScraperStats, formatRelativeTime } from '@/hooks/useScraperStats'
 
 // Scraper status: 'enabled' = working, 'pending' = not tested yet
 type ScraperStatus = 'enabled' | 'pending'
@@ -174,6 +175,9 @@ const SCRAPER_COLORS: Record<string, { bg: string; text: string; border: string 
 }
 
 export default function ScraperLauncher({ projectId, onComplete, onClose }: ScraperLauncherProps) {
+  // Load scraper execution stats
+  const { stats: scraperStats, loading: loadingStats } = useScraperStats(projectId)
+
   const [currentStep, setCurrentStep] = useState<StepType>('select')
   const [selectedScraper, setSelectedScraper] = useState<ScraperType | null>(null)
   const [targetName, setTargetName] = useState('')
