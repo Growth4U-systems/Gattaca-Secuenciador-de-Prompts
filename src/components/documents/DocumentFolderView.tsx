@@ -13,6 +13,8 @@ interface DocumentFolderViewProps {
   onToggleDocSelection?: (docId: string) => void
   showCreateFolder?: boolean
   emptyMessage?: string
+  /** Additional empty folders to display (created manually but not yet used) */
+  emptyFolders?: string[]
 }
 
 export default function DocumentFolderView({
@@ -24,13 +26,23 @@ export default function DocumentFolderView({
   onToggleDocSelection,
   showCreateFolder = false,
   emptyMessage = 'No hay documentos',
+  emptyFolders = [],
 }: DocumentFolderViewProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['__uncategorized__']))
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
 
   // Group documents by folder
-  const groupedDocs = useMemo(() => groupByFolder(documents), [documents])
+  const groupedDocs = useMemo(() => {
+    const grouped = groupByFolder(documents)
+    // Add empty folders that don't have documents yet
+    for (const folder of emptyFolders) {
+      if (!grouped[folder]) {
+        grouped[folder] = []
+      }
+    }
+    return grouped
+  }, [documents, emptyFolders])
   const folders = useMemo(() => getFolders(documents), [documents])
 
   // Sort folders: named folders first (alphabetically), then uncategorized
