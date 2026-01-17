@@ -80,7 +80,7 @@ export async function getOpenRouterKey(userId?: string): Promise<OpenRouterKeyRe
       .single()
 
     // Handle the joined data - agencies comes as an object, not array
-    const agencyData = membership?.agencies as { id: string; openrouter_api_key: string | null } | null
+    const agencyData = membership?.agencies as unknown as { id: string; openrouter_api_key: string | null } | null
 
     if (agencyData?.openrouter_api_key) {
       try {

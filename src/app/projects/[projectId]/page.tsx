@@ -19,7 +19,7 @@ import ContextLakeDashboard from '@/components/context-lake/ContextLakeDashboard
 import PlaybooksDashboard from '@/components/playbooks/PlaybooksDashboard'
 import APIConfigPanel from '@/components/settings/APIConfigPanel'
 
-type TabType = 'context-lake' | 'playbooks' | 'documents' | 'flow' | 'campaigns' | 'variables' | 'settings'
+type TabType = 'context-lake' | 'playbooks' | 'documents' | 'setup' | 'campaigns' | 'settings'
 
 // Loading Skeleton
 function LoadingSkeleton() {
@@ -76,9 +76,8 @@ export default function ProjectPage({
     { id: 'context-lake' as TabType, label: 'Context Lake', icon: Layers, description: 'Documentos con tiers' },
     { id: 'playbooks' as TabType, label: 'Playbooks', icon: BookOpen, description: 'Procesos reutilizables' },
     { id: 'documents' as TabType, label: 'Docs (Legacy)', icon: FileText, description: 'Base de conocimiento' },
-    { id: 'flow' as TabType, label: 'Flujo (Legacy)', icon: Workflow, description: 'Pasos y prompts' },
+    { id: 'setup' as TabType, label: 'Setup', icon: Sliders, description: 'Variables y Flujo' },
     { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
-    { id: 'variables' as TabType, label: 'Variables', icon: Sliders, description: 'Configuración' },
     { id: 'settings' as TabType, label: 'APIs', icon: Settings, description: 'Configuración de APIs' },
   ]
 
@@ -375,26 +374,12 @@ export default function ProjectPage({
                 totalTokens={totalTokens}
               />
             )}
-            {activeTab === 'variables' && (
-              <div className="space-y-6">
-                <ProjectVariables
-                  projectId={params.projectId}
-                  initialVariables={project.variable_definitions || []}
-                  onUpdate={() => {
-                    window.location.reload()
-                  }}
-                />
-                <ResearchPromptsEditor
-                  projectId={params.projectId}
-                  initialPrompts={project.deep_research_prompts || []}
-                  onUpdate={() => {
-                    window.location.reload()
-                  }}
-                />
-              </div>
-            )}
-            {activeTab === 'flow' && (
-              <FlowSetup projectId={params.projectId} documents={documents} />
+            {activeTab === 'setup' && (
+              <SetupTab
+                projectId={params.projectId}
+                project={project}
+                documents={documents}
+              />
             )}
             {activeTab === 'campaigns' && (
               <CampaignRunner projectId={params.projectId} project={project} />
@@ -588,6 +573,74 @@ function DocumentsTab({
             </div>
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+// Unified Setup Tab - Variables + Flow in one place
+function SetupTab({
+  projectId,
+  project,
+  documents,
+}: {
+  projectId: string
+  project: any
+  documents: any[]
+}) {
+  const [activeSection, setActiveSection] = useState<'variables' | 'flow'>('variables')
+
+  return (
+    <div>
+      {/* Section Tabs */}
+      <div className="flex gap-2 mb-6 border-b border-gray-200 pb-4">
+        <button
+          onClick={() => setActiveSection('variables')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeSection === 'variables'
+              ? 'bg-blue-100 text-blue-700'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Sliders size={16} className="inline mr-2" />
+          Variables
+        </button>
+        <button
+          onClick={() => setActiveSection('flow')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeSection === 'flow'
+              ? 'bg-blue-100 text-blue-700'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Workflow size={16} className="inline mr-2" />
+          Flujo de Pasos
+        </button>
+      </div>
+
+      {/* Variables Section */}
+      {activeSection === 'variables' && (
+        <div className="space-y-6">
+          <ProjectVariables
+            projectId={projectId}
+            initialVariables={project.variable_definitions || []}
+            onUpdate={() => {
+              window.location.reload()
+            }}
+          />
+          <ResearchPromptsEditor
+            projectId={projectId}
+            initialPrompts={project.deep_research_prompts || []}
+            onUpdate={() => {
+              window.location.reload()
+            }}
+          />
+        </div>
+      )}
+
+      {/* Flow Section */}
+      {activeSection === 'flow' && (
+        <FlowSetup projectId={projectId} documents={documents} />
       )}
     </div>
   )
