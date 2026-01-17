@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { Trash2, Link2, Search, Filter, FolderOpen, X, Edit2, Check, Loader2, Tag, ChevronDown, ChevronRight, Maximize2 } from 'lucide-react'
 import { DocCategory } from '@/types/database.types'
 import { formatTokenCount } from '@/lib/supabase'
@@ -74,6 +74,11 @@ export default function DocumentList({
 
   // State for expanded content
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null)
+
+  // State for bulk selection
+  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const selectAllRef = useRef<HTMLInputElement>(null)
 
   // Get unique categories
   const categories = useMemo(() => {
@@ -271,6 +276,60 @@ export default function DocumentList({
     setExpandedDocId(expandedDocId === docId ? null : docId)
   }
 
+  // Handle select all checkbox indeterminate state
+  useEffect(() => {
+    if (selectAllRef.current) {
+      const allSelected = selectedDocs.size === filteredDocs.length && filteredDocs.length > 0
+      const someSelected = selectedDocs.size > 0 && selectedDocs.size < filteredDocs.length
+      selectAllRef.current.indeterminate = someSelected
+      selectAllRef.current.checked = allSelected
+    }
+  }, [selectedDocs.size, filteredDocs.length])
+
+  // Toggle selection for a document
+  const toggleDocSelection = (docId: string, event: React.MouseEvent) => {
+    event.stopPropagation()
+    const newSelected = new Set(selectedDocs)
+    if (newSelected.has(docId)) {
+      newSelected.delete(docId)
+    } else {
+      newSelected.add(docId)
+    }
+    setSelectedDocs(newSelected)
+  }
+
+  // Toggle select all
+  const toggleSelectAll = () => {
+    if (selectedDocs.size === filteredDocs.length) {
+      setSelectedDocs(new Set())
+    } else {
+      setSelectedDocs(new Set(filteredDocs.map(d => d.id)))
+    }
+  }
+
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    const confirmed = await modal.confirm({
+      title: 'Eliminar documentos',
+      message: `¿Eliminar ${selectedDocs.size} documento(s)? Esta acción no se puede deshacer.`,
+      confirmText: 'Eliminar todos',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    })
+
+    if (confirmed) {
+      setBulkDeleting(true)
+      try {
+        for (const docId of selectedDocs) {
+          await onDelete(docId)
+        }
+        setSelectedDocs(new Set())
+      } finally {
+        setBulkDeleting(false)
+      }
+    }
+  }
+
   if (documents.length === 0) {
     return (
       <div className="text-center py-16">
@@ -417,6 +476,46 @@ export default function DocumentList({
         </div>
       )}
 
+      {/* Bulk Actions Toolbar */}
+      {selectedDocs.size > 0 && (
+        <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+          <span className="text-sm font-medium text-blue-700">
+            {selectedDocs.size} documento(s) seleccionado(s)
+          </span>
+          <button
+            onClick={handleBulkDelete}
+            disabled={bulkDeleting}
+            className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-1.5 font-medium"
+          >
+            {bulkDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            Eliminar seleccionados
+          </button>
+          <button
+            onClick={() => setSelectedDocs(new Set())}
+            className="px-3 py-1.5 text-xs text-gray-600 hover:bg-white/50 rounded-lg font-medium"
+          >
+            Cancelar selección
+          </button>
+        </div>
+      )}
+
+      {/* Select All Header */}
+      {filteredDocs.length > 0 && (
+        <div className="flex items-center gap-2 px-1">
+          <input
+            ref={selectAllRef}
+            type="checkbox"
+            onChange={toggleSelectAll}
+            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+          />
+          <span className="text-xs text-gray-500">
+            {selectedDocs.size > 0
+              ? `${selectedDocs.size} de ${filteredDocs.length} seleccionados`
+              : 'Seleccionar todos'}
+          </span>
+        </div>
+      )}
+
       {/* Document List */}
       {filteredDocs.length === 0 ? (
         <div className="text-center py-12">
@@ -452,6 +551,15 @@ export default function DocumentList({
                   className="flex items-center gap-3 px-3 py-2.5 cursor-pointer"
                   onClick={() => toggleExpand(doc.id)}
                 >
+                  {/* Selection checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={selectedDocs.has(doc.id)}
+                    onChange={() => {}}
+                    onClick={(e) => toggleDocSelection(doc.id, e)}
+                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 flex-shrink-0 cursor-pointer"
+                  />
+
                   {/* Expand chevron */}
                   <div className="flex-shrink-0 text-gray-400">
                     {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
