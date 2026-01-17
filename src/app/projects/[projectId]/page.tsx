@@ -743,6 +743,7 @@ function DocumentsTab({
         <DocumentFolderView
           documents={documents}
           onDocumentClick={setViewingDoc}
+          onMoveToFolder={handleMoveToFolder}
           showCreateFolder={false}
           emptyMessage="No hay documentos en este proyecto"
           emptyFolders={manualFolders}
@@ -755,6 +756,8 @@ function DocumentsTab({
           onView={setViewingDoc}
           onCampaignChange={handleCampaignChange}
           onRename={handleRename}
+          onMoveToFolder={handleMoveToFolder}
+          availableFolders={existingFolders}
         />
       )}
 
