@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database, Building2, Plus, X, Search, Zap, Target, Globe, Filter, Brain, BarChart3, Table } from 'lucide-react'
+import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database, Building2, Plus, X, Search, Zap, Target, Globe, Filter, Brain, BarChart3, Table, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 import { createProject } from '@/hooks/useProjects'
 import { useToast } from '@/components/ui'
@@ -12,6 +12,15 @@ type Client = {
   name: string
 }
 
+type Playbook = {
+  id: string
+  name: string
+  slug: string
+  description: string
+  type: string
+  playbook_type: string
+}
+
 function NewProjectForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -19,18 +28,21 @@ function NewProjectForm() {
   const [loading, setLoading] = useState(false)
   const [clients, setClients] = useState<Client[]>([])
   const [loadingClients, setLoadingClients] = useState(true)
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([])
+  const [loadingPlaybooks, setLoadingPlaybooks] = useState(true)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     client_id: '',
-    playbook_type: 'ecp' as 'ecp' | 'competitor_analysis' | 'niche_finder',
+    playbook_type: 'ecp' as string,
   })
   const [showNewClientForm, setShowNewClientForm] = useState(false)
   const [newClientName, setNewClientName] = useState('')
   const [creatingClient, setCreatingClient] = useState(false)
 
-  // Get preselected client from URL query params
+  // Get preselected client and playbook from URL query params
   const preselectedClientId = searchParams.get('clientId')
+  const preselectedPlaybookType = searchParams.get('playbookType')
 
   // Load clients function
   const loadClients = async (selectClientId?: string) => {
@@ -57,10 +69,36 @@ function NewProjectForm() {
     }
   }
 
+  // Load playbooks
+  const loadPlaybooks = async () => {
+    try {
+      setLoadingPlaybooks(true)
+      const response = await fetch('/api/v2/playbooks')
+      const result = await response.json()
+
+      if (!result.success) throw new Error(result.error || 'Failed to load playbooks')
+      const data = result.playbooks || []
+      setPlaybooks(data)
+
+      // Pre-select playbook from URL or default to first one
+      if (preselectedPlaybookType) {
+        setFormData(prev => ({ ...prev, playbook_type: preselectedPlaybookType }))
+      } else if (data.length > 0) {
+        setFormData(prev => ({ ...prev, playbook_type: data[0].playbook_type || data[0].type }))
+      }
+    } catch (err) {
+      console.error('Error loading playbooks:', err)
+      toast.error('Error', 'No se pudieron cargar los playbooks')
+    } finally {
+      setLoadingPlaybooks(false)
+    }
+  }
+
   // Load clients on mount, preselect from URL if available
   useEffect(() => {
     loadClients(preselectedClientId || undefined)
-  }, [preselectedClientId])
+    loadPlaybooks()
+  }, [preselectedClientId, preselectedPlaybookType])
 
   // Create new client
   const handleCreateClient = async () => {
@@ -151,11 +189,19 @@ function NewProjectForm() {
     { icon: Rocket, title: 'Exportar resultados', description: 'Descarga CSV o exporta a Google Sheets' },
   ]
 
-  const steps = formData.playbook_type === 'niche_finder'
-    ? nicheFinderSteps
-    : formData.playbook_type === 'competitor_analysis'
-    ? competitorAnalysisSteps
-    : ecpSteps
+  // Get steps based on playbook type
+  const getStepsForPlaybook = (playbookType: string) => {
+    switch (playbookType) {
+      case 'niche_finder':
+        return nicheFinderSteps
+      case 'competitor_analysis':
+        return competitorAnalysisSteps
+      case 'ecp':
+      default:
+        return ecpSteps
+    }
+  }
+  const steps = getStepsForPlaybook(formData.playbook_type)
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
@@ -163,11 +209,11 @@ function NewProjectForm() {
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <Link
-            href="/"
+            href={preselectedClientId ? `/clients/${preselectedClientId}?tab=playbooks` : '/clients'}
             className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors group"
           >
             <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-            Volver a proyectos
+            Volver a panel cliente
           </Link>
         </div>
       </div>
@@ -312,121 +358,48 @@ function NewProjectForm() {
                   )}
                 </div>
 
-                {/* Playbook Type Selector */}
+                {/* Playbook Type Selector - Dropdown */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">
-                    Tipo de Proyecto
-                    <span className="text-red-500 ml-1">*</span>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <span className="flex items-center gap-2">
+                      <Zap size={16} />
+                      Playbook
+                      <span className="text-red-500">*</span>
+                    </span>
                   </label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {/* ECP Option */}
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, playbook_type: 'ecp' })}
-                      className={`relative p-4 rounded-xl border-2 text-left transition-all ${
-                        formData.playbook_type === 'ecp'
-                          ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex flex-col items-center text-center gap-2">
-                        <div className={`p-2.5 rounded-lg ${
-                          formData.playbook_type === 'ecp' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          <Zap size={22} />
-                        </div>
-                        <div>
-                          <h4 className={`font-semibold text-sm ${
-                            formData.playbook_type === 'ecp' ? 'text-blue-900' : 'text-gray-900'
-                          }`}>
-                            ECP Positioning
-                          </h4>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Flujos de prompts
-                          </p>
-                        </div>
-                      </div>
-                      {formData.playbook_type === 'ecp' && (
-                        <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      )}
-                    </button>
-
-                    {/* Competitor Analysis Option */}
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, playbook_type: 'competitor_analysis' })}
-                      className={`relative p-4 rounded-xl border-2 text-left transition-all ${
-                        formData.playbook_type === 'competitor_analysis'
-                          ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex flex-col items-center text-center gap-2">
-                        <div className={`p-2.5 rounded-lg ${
-                          formData.playbook_type === 'competitor_analysis' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          <Target size={22} />
-                        </div>
-                        <div>
-                          <h4 className={`font-semibold text-sm ${
-                            formData.playbook_type === 'competitor_analysis' ? 'text-orange-900' : 'text-gray-900'
-                          }`}>
-                            Competidores
-                          </h4>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Análisis comparativo
-                          </p>
-                        </div>
-                      </div>
-                      {formData.playbook_type === 'competitor_analysis' && (
-                        <div className="absolute top-2 right-2 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
-                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      )}
-                    </button>
-
-                    {/* Niche Finder Option */}
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, playbook_type: 'niche_finder' })}
-                      className={`relative p-4 rounded-xl border-2 text-left transition-all ${
-                        formData.playbook_type === 'niche_finder'
-                          ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex flex-col items-center text-center gap-2">
-                        <div className={`p-2.5 rounded-lg ${
-                          formData.playbook_type === 'niche_finder' ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          <Search size={22} />
-                        </div>
-                        <div>
-                          <h4 className={`font-semibold text-sm ${
-                            formData.playbook_type === 'niche_finder' ? 'text-purple-900' : 'text-gray-900'
-                          }`}>
-                            Buscador Nichos
-                          </h4>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Reddit y foros
-                          </p>
-                        </div>
-                      </div>
-                      {formData.playbook_type === 'niche_finder' && (
-                        <div className="absolute top-2 right-2 w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
-                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      )}
-                    </button>
-                  </div>
+                  {loadingPlaybooks ? (
+                    <div className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-400">
+                      Cargando playbooks...
+                    </div>
+                  ) : playbooks.length === 0 ? (
+                    <div className="w-full px-4 py-3 border border-amber-200 rounded-xl bg-amber-50 text-amber-700 text-sm">
+                      No hay playbooks disponibles.
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <select
+                        required
+                        value={formData.playbook_type}
+                        onChange={(e) =>
+                          setFormData({ ...formData, playbook_type: e.target.value })
+                        }
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all appearance-none bg-white pr-10"
+                      >
+                        {playbooks.map((playbook) => (
+                          <option key={playbook.id} value={playbook.playbook_type || playbook.type}>
+                            {playbook.name}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    </div>
+                  )}
+                  {/* Show selected playbook description */}
+                  {!loadingPlaybooks && playbooks.length > 0 && (
+                    <p className="mt-2 text-sm text-gray-500">
+                      {playbooks.find(p => (p.playbook_type || p.type) === formData.playbook_type)?.description || ''}
+                    </p>
+                  )}
                 </div>
 
                 <div>

@@ -9,6 +9,7 @@ import {
   FileText,
   ChevronRight,
   ChevronLeft,
+  ChevronUp,
   Plus,
   Settings,
   Database,
@@ -18,6 +19,7 @@ import {
   Rocket,
   LayoutDashboard,
   Sparkles,
+  Eye,
 } from 'lucide-react'
 import { useClient } from '@/hooks/useClients'
 import { useAllClientDocuments, type Document } from '@/hooks/useDocuments'
@@ -43,6 +45,7 @@ interface Playbook {
   playbook_type: string
   is_public: boolean
   version: string
+  config?: { steps?: string[] }
 }
 
 export default function ClientPage({
@@ -522,6 +525,8 @@ function ContextLakeTab({
   )
 }
 
+import { playbookMetadata, getPlaybookName, formatStepName } from '@/lib/playbook-metadata'
+
 // Playbooks Tab
 function PlaybooksTab({
   clientId,
@@ -534,14 +539,15 @@ function PlaybooksTab({
   loading: boolean
   playbookTypesInUse: Set<string>
 }) {
+  const [expandedPlaybookId, setExpandedPlaybookId] = useState<string | null>(null)
   const playbooksInUse = playbooks.filter(p => playbookTypesInUse.has(p.playbook_type)).length
 
   // Map playbook_type to icon
   const getPlaybookIcon = (type: string) => {
     switch (type) {
-      case 'niche-finder':
+      case 'niche_finder':
         return '🔍'
-      case 'competitor-analysis':
+      case 'competitor_analysis':
         return '📊'
       case 'ecp':
         return '🎯'
@@ -567,12 +573,13 @@ function PlaybooksTab({
             {playbooks.length} disponibles • {playbooksInUse} en uso
           </p>
         </div>
-        <button
+        <Link
+          href={`/projects/new?clientId=${clientId}`}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm font-medium"
         >
           <Sparkles size={18} />
-          Crear Playbook
-        </button>
+          Nuevo Proyecto
+        </Link>
       </div>
 
       {playbooks.length === 0 ? (
@@ -587,10 +594,17 @@ function PlaybooksTab({
         <div className="space-y-4">
           {playbooks.map((playbook) => {
             const isInUse = playbookTypesInUse.has(playbook.playbook_type)
+            const isExpanded = expandedPlaybookId === playbook.id
+            const steps = (playbook.config as { steps?: string[] })?.steps || []
+
             return (
               <div
                 key={playbook.id}
-                className="bg-white rounded-xl border border-gray-200 p-5 hover:border-indigo-200 hover:shadow-md transition-all"
+                className={`bg-white rounded-xl border p-5 transition-all ${
+                  isExpanded
+                    ? 'border-indigo-300 shadow-md'
+                    : 'border-gray-200 hover:border-indigo-200 hover:shadow-md'
+                }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
@@ -621,14 +635,114 @@ function PlaybooksTab({
                       </div>
                     </div>
                   </div>
-                  <Link
-                    href={`/projects/new?clientId=${clientId}&playbookType=${playbook.playbook_type}`}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    <Rocket size={16} />
-                    Usar
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setExpandedPlaybookId(isExpanded ? null : playbook.id)}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-gray-600 text-sm font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                    >
+                      {isExpanded ? (
+                        <>
+                          <ChevronUp size={16} />
+                          Ocultar
+                        </>
+                      ) : (
+                        <>
+                          <Eye size={16} />
+                          Ver
+                        </>
+                      )}
+                    </button>
+                    <Link
+                      href={`/projects/new?clientId=${clientId}&playbookType=${playbook.playbook_type}`}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      <Rocket size={16} />
+                      Usar
+                    </Link>
+                  </div>
                 </div>
+
+                {/* Expanded section with metadata */}
+                {isExpanded && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    {(() => {
+                      const meta = playbookMetadata[playbook.playbook_type]
+                      if (!meta) return null
+
+                      return (
+                        <div className="space-y-4">
+                          {/* Purpose */}
+                          <div>
+                            <h4 className="text-sm font-semibold text-gray-700 mb-1">¿Para qué sirve?</h4>
+                            <p className="text-sm text-gray-600">{meta.purpose}</p>
+                          </div>
+
+                          {/* When to use */}
+                          <div>
+                            <h4 className="text-sm font-semibold text-gray-700 mb-1">¿Cuándo usarlo?</h4>
+                            <ul className="text-sm text-gray-600 space-y-1">
+                              {meta.whenToUse.map((item, i) => (
+                                <li key={i} className="flex items-start gap-2">
+                                  <span className="text-indigo-500 mt-0.5">•</span>
+                                  {item}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          {/* Outcome */}
+                          <div>
+                            <h4 className="text-sm font-semibold text-gray-700 mb-1">¿Qué consigues?</h4>
+                            <p className="text-sm text-gray-600">{meta.outcome}</p>
+                          </div>
+
+                          {/* Related playbooks */}
+                          {meta.relatedPlaybooks.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-700 mb-1">Relacionado con</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {meta.relatedPlaybooks.map((related) => (
+                                  <span
+                                    key={related}
+                                    className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full"
+                                  >
+                                    {getPlaybookName(related)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Steps */}
+                          {steps.length > 0 && (
+                            <div className="pt-3 border-t border-gray-100">
+                              <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                                Flujo de Trabajo ({steps.length} pasos)
+                              </h4>
+                              <div className="space-y-2">
+                                {steps.map((step: string, i: number) => (
+                                  <div key={i} className="flex gap-3">
+                                    <div className="flex-shrink-0 w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-semibold">
+                                      {i + 1}
+                                    </div>
+                                    <div>
+                                      <p className="font-medium text-gray-800 text-sm">
+                                        {formatStepName(step)}
+                                      </p>
+                                      <p className="text-xs text-gray-500">
+                                        {meta.steps[step] || 'Paso del flujo'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
               </div>
             )
           })}
