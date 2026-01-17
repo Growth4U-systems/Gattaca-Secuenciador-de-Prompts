@@ -1630,6 +1630,82 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
       },
     },
   },
+
+  // ==========================================
+  // PHANTOMBUSTER - LINKEDIN POST ENGAGERS
+  // ==========================================
+  linkedin_post_engagers: {
+    type: 'linkedin_post_engagers',
+    fields: {
+      postUrls: {
+        key: 'postUrls',
+        type: 'url-array',
+        label: 'URLs de Posts de LinkedIn',
+        description: 'URLs de los posts de LinkedIn de los que quieres extraer likers y commenters',
+        placeholder: 'https://www.linkedin.com/feed/update/urn:li:activity:1234567890',
+        helpText: 'Una URL por línea. Copia la URL del post desde LinkedIn.',
+        required: true,
+        examples: [
+          'https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678',
+          'https://www.linkedin.com/posts/username_topic-activity-7123456789012345678',
+        ],
+        validation: {
+          pattern: /^https?:\/\/(www\.)?linkedin\.com\/(feed\/update|posts)\/.+/i,
+          patternMessage: 'Debe ser una URL válida de post de LinkedIn',
+        },
+      },
+      numberOfLikersPerPost: {
+        key: 'numberOfLikersPerPost',
+        type: 'number',
+        label: 'Likers por post',
+        description: 'Número máximo de personas que dieron like a extraer por cada post',
+        helpText: 'Más likers = más tiempo de ejecución',
+        defaultValue: 100,
+        validation: {
+          min: 1,
+          max: 1000,
+        },
+      },
+      numberOfCommentersPerPost: {
+        key: 'numberOfCommentersPerPost',
+        type: 'number',
+        label: 'Commenters por post',
+        description: 'Número máximo de personas que comentaron a extraer por cada post',
+        helpText: 'Los commenters suelen ser leads más calificados que los likers',
+        defaultValue: 100,
+        validation: {
+          min: 1,
+          max: 1000,
+        },
+      },
+    },
+  },
+
+  // ==========================================
+  // PHANTOMBUSTER - LINKEDIN PROFILE SCRAPER
+  // ==========================================
+  linkedin_profile_scraper: {
+    type: 'linkedin_profile_scraper',
+    fields: {
+      profileUrls: {
+        key: 'profileUrls',
+        type: 'url-array',
+        label: 'URLs de Perfiles de LinkedIn',
+        description: 'URLs de los perfiles de LinkedIn que quieres scrapear',
+        placeholder: 'https://www.linkedin.com/in/username',
+        helpText: 'Una URL por línea. Requiere cookie de LinkedIn activa.',
+        required: true,
+        examples: [
+          'https://www.linkedin.com/in/john-doe',
+          'https://www.linkedin.com/in/jane-smith-12345678',
+        ],
+        validation: {
+          pattern: /^https?:\/\/(www\.)?linkedin\.com\/in\/.+/i,
+          patternMessage: 'Debe ser una URL válida de perfil de LinkedIn (linkedin.com/in/...)',
+        },
+      },
+    },
+  },
 };
 
 // ============================================

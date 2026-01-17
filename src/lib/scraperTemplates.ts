@@ -9,6 +9,15 @@ import { ScraperTemplate, ScraperType, ScraperProvider } from '@/types/scraper.t
 // APIFY ACTOR IDS
 // ============================================
 
+// ============================================
+// PHANTOMBUSTER AGENT IDS
+// ============================================
+
+export const PHANTOMBUSTER_AGENTS = {
+  LINKEDIN_POST_LIKERS_COMMENTERS: '2818596408813649', // LinkedIn Post Likers & Commenters
+  LINKEDIN_PROFILE_SCRAPER: '5765069205428224', // LinkedIn Profile Scraper
+} as const;
+
 export const APIFY_ACTORS = {
   // Social Media - Posts & Comments
   INSTAGRAM_POSTS_COMMENTS: 'dIKFJ95TN8YclK2no',
@@ -564,6 +573,43 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
       },
     },
     outputFields: ['title', 'url', 'source', 'snippet', 'publishedAt', 'content', 'imageUrl', 'query', 'country'],
+  },
+
+  // ==========================================
+  // PHANTOMBUSTER
+  // ==========================================
+
+  linkedin_post_engagers: {
+    type: 'linkedin_post_engagers',
+    name: 'LinkedIn Post Likers & Commenters',
+    description: 'Extrae perfiles de personas que dieron like o comentaron en posts de LinkedIn. Requiere cookie de LinkedIn.',
+    provider: 'phantombuster',
+    actorId: PHANTOMBUSTER_AGENTS.LINKEDIN_POST_LIKERS_COMMENTERS,
+    category: 'social',
+    inputSchema: {
+      required: ['postUrls'],
+      optional: ['sessionCookie', 'numberOfLikersPerPost', 'numberOfCommentersPerPost'],
+      defaults: {
+        numberOfLikersPerPost: 100,
+        numberOfCommentersPerPost: 100,
+      },
+    },
+    outputFields: ['profileUrl', 'fullName', 'firstName', 'lastName', 'headline', 'location', 'connectionDegree', 'interactionType', 'postUrl'],
+  },
+
+  linkedin_profile_scraper: {
+    type: 'linkedin_profile_scraper',
+    name: 'LinkedIn Profile Scraper',
+    description: 'Extrae información detallada de perfiles de LinkedIn. Requiere cookie de LinkedIn.',
+    provider: 'phantombuster',
+    actorId: PHANTOMBUSTER_AGENTS.LINKEDIN_PROFILE_SCRAPER,
+    category: 'social',
+    inputSchema: {
+      required: ['profileUrls'],
+      optional: ['sessionCookie'],
+      defaults: {},
+    },
+    outputFields: ['profileUrl', 'fullName', 'firstName', 'lastName', 'headline', 'location', 'summary', 'company', 'title', 'connectionDegree', 'mutualConnectionsCount'],
   },
 };
 
