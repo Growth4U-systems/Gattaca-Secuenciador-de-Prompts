@@ -13,6 +13,26 @@ import {
 import { getScraperTemplate, buildScraperInput, SCRAPER_TEMPLATES } from '@/lib/scraperTemplates';
 import { getUserApiKey } from '@/lib/getUserApiKey';
 
+// SERPChecker API result type
+interface SerpCheckerResult {
+  serp?: Array<{
+    position?: number;
+    url?: string;
+    title?: string;
+    da?: number;      // Domain Authority (Moz)
+    pa?: number;      // Page Authority (Moz)
+    cf?: number;      // Citation Flow (Majestic)
+    tf?: number;      // Trust Flow (Majestic)
+    links?: number;   // External backlinks count
+    fb?: number;      // Facebook shares
+    lrd?: number;     // Linking root domains
+  }>;
+  exact_keyword?: {
+    sv?: number;
+    kd?: number;
+  };
+}
+
 export const runtime = 'nodejs';
 export const maxDuration = 120; // 2 minutes for sync scrapers like Firecrawl
 
@@ -1165,6 +1185,7 @@ async function executeMangools(
     const keyword = input.keyword as string;
     const location = (input.location as string) || 'Spain';
     const language = (input.language as string) || 'es';
+    const includeSerpOverview = (input.includeSerpOverview as boolean) ?? true;
 
     // KWFinder API endpoint
     const apiUrl = new URL('https://api.mangools.com/v4/kwfinder/search');
@@ -1186,7 +1207,33 @@ async function executeMangools(
     }
 
     const result = await response.json();
-    const documentContent = formatMangoolsResults(result, keyword, location, language);
+
+    // Fetch SERP Overview if enabled (SERPChecker API)
+    let serpData: SerpCheckerResult | null = null;
+    if (includeSerpOverview) {
+      try {
+        const serpUrl = new URL('https://api.mangools.com/v4/serpchecker/serp');
+        serpUrl.searchParams.set('kw', keyword);
+        serpUrl.searchParams.set('location_id', getLocationId(location));
+        serpUrl.searchParams.set('language_id', getLanguageId(language));
+
+        const serpResponse = await fetch(serpUrl.toString(), {
+          method: 'GET',
+          headers: {
+            'X-Access-Token': mangoolsApiKey,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (serpResponse.ok) {
+          serpData = await serpResponse.json();
+        }
+      } catch (serpError) {
+        console.warn('SERPChecker API error (continuing without SERP data):', serpError);
+      }
+    }
+
+    const documentContent = formatMangoolsResults(result, keyword, location, language, serpData);
     const resultCount = result.keywords?.length || 1;
 
     const effectiveTargetName = targetName || keyword;
@@ -1217,6 +1264,8 @@ async function executeMangools(
           keyword,
           location,
           language,
+          serp_included: !!serpData?.serp,
+          serp_results_count: serpData?.serp?.length || 0,
         },
       })
       .select()
@@ -1238,6 +1287,7 @@ async function executeMangools(
           keyword,
           location,
           language,
+          serp_included: !!serpData?.serp,
         },
       })
       .eq('id', job.id);
@@ -1267,7 +1317,8 @@ function formatMangoolsResults(
   result: Record<string, unknown>,
   keyword: string,
   location: string,
-  language: string
+  language: string,
+  serpData?: SerpCheckerResult | null
 ): string {
   const keywords = (result.keywords || []) as Array<{
     kw?: string;
@@ -1309,6 +1360,37 @@ function formatMangoolsResults(
     }
   }
 
+  // SERP Overview (SERPChecker data)
+  if (serpData?.serp && serpData.serp.length > 0) {
+    markdown += `## SERP Overview - Top ${serpData.serp.length} Resultados\n\n`;
+    markdown += `Análisis de autoridad y métricas de los resultados posicionados en Google.\n\n`;
+    markdown += `| Pos | URL | DA | PA | CF | TF | Links |\n`;
+    markdown += `|-----|-----|----|----|----|----|-------|\n`;
+
+    for (const item of serpData.serp) {
+      const truncatedUrl = item.url && item.url.length > 40
+        ? item.url.substring(0, 40) + '...'
+        : item.url || '-';
+      markdown += `| ${item.position || '-'} | ${truncatedUrl} | ${item.da || '-'} | ${item.pa || '-'} | ${item.cf || '-'} | ${item.tf || '-'} | ${item.links?.toLocaleString() || '-'} |\n`;
+    }
+
+    markdown += `\n**Leyenda:**\n`;
+    markdown += `- **DA**: Domain Authority (Moz) - Autoridad del dominio (0-100)\n`;
+    markdown += `- **PA**: Page Authority (Moz) - Autoridad de la página (0-100)\n`;
+    markdown += `- **CF**: Citation Flow (Majestic) - Influencia por cantidad de enlaces\n`;
+    markdown += `- **TF**: Trust Flow (Majestic) - Calidad/confianza de enlaces\n`;
+    markdown += `- **Links**: Backlinks externos totales\n\n`;
+
+    // Calculate averages
+    const validDa = serpData.serp.filter(s => s.da).map(s => s.da!);
+    const validPa = serpData.serp.filter(s => s.pa).map(s => s.pa!);
+    if (validDa.length > 0 || validPa.length > 0) {
+      const avgDa = validDa.length > 0 ? (validDa.reduce((a, b) => a + b, 0) / validDa.length).toFixed(1) : 'N/A';
+      const avgPa = validPa.length > 0 ? (validPa.reduce((a, b) => a + b, 0) / validPa.length).toFixed(1) : 'N/A';
+      markdown += `**Promedios SERP:** DA: ${avgDa} | PA: ${avgPa}\n\n`;
+    }
+  }
+
   // Related keywords table
   if (keywords.length > 0) {
     markdown += `## Keywords Relacionadas (${keywords.length})\n\n`;
@@ -1324,7 +1406,11 @@ function formatMangoolsResults(
     }
   }
 
-  markdown += `\n---\n\n*Datos obtenidos de Mangools KWFinder*\n`;
+  markdown += `\n---\n\n*Datos obtenidos de Mangools KWFinder`;
+  if (serpData?.serp) {
+    markdown += ` + SERPChecker`;
+  }
+  markdown += `*\n`;
 
   return markdown;
 }
