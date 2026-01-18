@@ -211,7 +211,7 @@ export default function CampaignWizard({
                   value={campaignName}
                   onChange={(e) => setCampaignName(e.target.value)}
                   placeholder="Ej: Nicho Fitness Q1 2024"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
@@ -224,7 +224,7 @@ export default function CampaignWizard({
                   onChange={(e) => setCampaignDescription(e.target.value)}
                   placeholder="Describe brevemente el objetivo de esta campaña..."
                   rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
             </div>
@@ -258,7 +258,7 @@ export default function CampaignWizard({
                         value={variable.value}
                         onChange={(e) => updateVariable(variable.key, e.target.value)}
                         placeholder={`Valor para {{${variable.key}}}`}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                       <span className="text-xs text-gray-400 mt-1">
                         Variable: {'{{' + variable.key + '}}'}
@@ -298,7 +298,7 @@ export default function CampaignWizard({
                         <select
                           value={systemConfig[variable.key] ?? variable.defaultValue ?? ''}
                           onChange={(e) => updateSystemConfig(variable.key, e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
                           {variable.options.map((opt) => (
                             <option key={opt.value} value={opt.value}>
@@ -311,21 +311,21 @@ export default function CampaignWizard({
                           type="number"
                           value={systemConfig[variable.key] ?? variable.defaultValue ?? ''}
                           onChange={(e) => updateSystemConfig(variable.key, parseInt(e.target.value))}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       ) : variable.type === 'textarea' ? (
                         <textarea
                           value={systemConfig[variable.key] ?? variable.defaultValue ?? ''}
                           onChange={(e) => updateSystemConfig(variable.key, e.target.value)}
                           rows={3}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       ) : (
                         <input
                           type="text"
                           value={systemConfig[variable.key] ?? variable.defaultValue ?? ''}
                           onChange={(e) => updateSystemConfig(variable.key, e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       )}
                     </div>
