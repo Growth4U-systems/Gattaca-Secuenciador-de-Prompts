@@ -725,12 +725,12 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
 
                             {/* Imported Data Preview */}
                             {step.importedData && step.importedData.length > 0 && (
-                              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                <div className="flex items-center gap-2 text-sm text-blue-700 font-medium mb-2">
-                                  <Database className="w-4 h-4" />
+                              <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                                <div className="flex items-center gap-2 text-sm text-gray-700 font-medium mb-2">
+                                  <Database className="w-4 h-4 text-blue-600" />
                                   {step.importedData.length} registros importados
                                 </div>
-                                <div className="text-xs text-blue-600 max-h-24 overflow-y-auto">
+                                <div className="text-xs text-gray-700 max-h-24 overflow-y-auto">
                                   <pre className="whitespace-pre-wrap">
                                     {JSON.stringify(step.importedData.slice(0, 3), null, 2)}
                                     {step.importedData.length > 3 && `\n... y ${step.importedData.length - 3} más`}
@@ -742,7 +742,7 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
                             {/* Output */}
                             {step.output && (
                               <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
-                                <div className="prose prose-sm max-w-none">
+                                <div className="prose prose-sm prose-gray max-w-none [&_*]:text-gray-900 [&_a]:text-blue-600 [&_code]:text-gray-800 [&_strong]:text-gray-900">
                                   <ReactMarkdown>{step.output}</ReactMarkdown>
                                 </div>
                               </div>
