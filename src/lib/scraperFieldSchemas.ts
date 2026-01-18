@@ -1706,6 +1706,44 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
       },
     },
   },
+
+  // ==========================================
+  // APIFY - LINKEDIN PERSON POSTS
+  // ==========================================
+  linkedin_person_posts: {
+    type: 'linkedin_person_posts',
+    fields: {
+      profileUrls: {
+        key: 'profileUrls',
+        type: 'url-array',
+        label: 'URLs de Perfiles de LinkedIn',
+        description: 'URLs de los perfiles de LinkedIn de los que quieres extraer posts',
+        placeholder: 'https://www.linkedin.com/in/username',
+        helpText: 'Una URL por línea. Extrae los posts públicos de cada perfil.',
+        required: true,
+        examples: [
+          'https://www.linkedin.com/in/john-doe',
+          'https://www.linkedin.com/in/jane-smith-12345678',
+        ],
+        validation: {
+          pattern: /^https?:\/\/(www\.)?linkedin\.com\/in\/.+/i,
+          patternMessage: 'Debe ser una URL válida de perfil de LinkedIn (linkedin.com/in/...)',
+        },
+      },
+      maxPosts: {
+        key: 'maxPosts',
+        type: 'number',
+        label: 'Posts máximos por perfil',
+        description: 'Número máximo de posts a extraer por cada perfil',
+        helpText: 'Más posts = más tiempo de ejecución y más costo',
+        defaultValue: 30,
+        validation: {
+          min: 1,
+          max: 100,
+        },
+      },
+    },
+  },
 };
 
 // ============================================
