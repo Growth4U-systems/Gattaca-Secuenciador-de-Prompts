@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { PlaybookConfig, PhaseDefinition, StepDefinition } from './types'
 import { ChevronDown, ChevronRight, Save, Edit3, X, Check, Settings } from 'lucide-react'
+import { getDefaultPromptForStep } from './utils/getDefaultPrompts'
 
 interface ConfigurationModeProps {
   projectId: string
@@ -69,13 +70,20 @@ export default function ConfigurationMode({
     })
   }
 
-  // Get prompt for a step from flow config
+  // Get prompt for a step from flow config, with fallback to template defaults
   const getStepPrompt = (stepDef: StepDefinition): string => {
-    if (!flowConfig?.steps) return ''
-    const flowStep = flowConfig.steps.find(s =>
-      s.id === stepDef.id || s.name?.toLowerCase() === stepDef.name.toLowerCase()
-    )
-    return flowStep?.prompt || ''
+    // First try to get from database flow config
+    if (flowConfig?.steps) {
+      const flowStep = flowConfig.steps.find(s =>
+        s.id === stepDef.id || s.name?.toLowerCase() === stepDef.name.toLowerCase()
+      )
+      if (flowStep?.prompt) {
+        return flowStep.prompt
+      }
+    }
+
+    // Fallback to template defaults using promptKey or step id
+    return getDefaultPromptForStep(stepDef.id, stepDef.promptKey)
   }
 
   // Start editing a step
@@ -86,16 +94,32 @@ export default function ConfigurationMode({
 
   // Save prompt changes locally
   const savePromptLocal = (stepDef: StepDefinition) => {
-    if (!flowConfig) return
+    const currentConfig = flowConfig || { steps: [], version: '1.0.0' }
 
-    const newSteps = flowConfig.steps.map(s => {
-      if (s.id === stepDef.id || s.name?.toLowerCase() === stepDef.name.toLowerCase()) {
-        return { ...s, prompt: editedPrompt }
-      }
-      return s
-    })
+    // Check if step already exists in config
+    const existingStepIndex = currentConfig.steps.findIndex(s =>
+      s.id === stepDef.id || s.name?.toLowerCase() === stepDef.name.toLowerCase()
+    )
 
-    setFlowConfig({ ...flowConfig, steps: newSteps })
+    let newSteps: FlowStep[]
+    if (existingStepIndex >= 0) {
+      // Update existing step
+      newSteps = currentConfig.steps.map((s, idx) =>
+        idx === existingStepIndex ? { ...s, prompt: editedPrompt } : s
+      )
+    } else {
+      // Add new step entry
+      newSteps = [
+        ...currentConfig.steps,
+        {
+          id: stepDef.id,
+          name: stepDef.name,
+          prompt: editedPrompt,
+        },
+      ]
+    }
+
+    setFlowConfig({ ...currentConfig, steps: newSteps })
     setEditingStepId(null)
     setHasChanges(true)
   }
