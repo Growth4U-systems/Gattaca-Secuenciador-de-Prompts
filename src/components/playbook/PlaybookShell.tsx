@@ -11,6 +11,20 @@ import {
 } from './types'
 import NavigationPanel from './NavigationPanel'
 import WorkArea from './WorkArea'
+import ConfigurationMode from './ConfigurationMode'
+import CampaignWizard from './CampaignWizard'
+import { Settings, ChevronDown, Plus, Folder } from 'lucide-react'
+
+// Mode types for the unified view
+type PlaybookMode = 'config' | 'campaign'
+
+interface Campaign {
+  id: string
+  name: string
+  status: 'draft' | 'in_progress' | 'completed'
+  completedSteps: number
+  totalSteps: number
+}
 
 function initializeState(
   projectId: string,
@@ -71,6 +85,29 @@ export default function PlaybookShell({
   const [state, setState] = useState<PlaybookState>(() =>
     initializeState(projectId, playbookConfig, initialState)
   )
+
+  // Flag to distinguish between intentional navigation (Continue button)
+  // vs manual navigation (clicking on a step)
+  const [shouldAutoExecute, setShouldAutoExecute] = useState(false)
+
+  // Mode: 'config' for editing base prompts, 'campaign' for execution
+  const [mode, setMode] = useState<PlaybookMode>('campaign')
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [showCampaignDropdown, setShowCampaignDropdown] = useState(false)
+  const [showWizard, setShowWizard] = useState(false)
+
+  // TODO: Load campaigns from database
+  useEffect(() => {
+    // Fetch campaigns for this project
+    // For now, mock data
+    setCampaigns([
+      { id: '1', name: 'Nicho Fitness', status: 'in_progress', completedSteps: 3, totalSteps: 12 },
+      { id: '2', name: 'Nicho Tech', status: 'draft', completedSteps: 0, totalSteps: 12 },
+    ])
+  }, [projectId])
+
+  const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
 
   // Get current phase and step definitions
   const currentPhase = playbookConfig.phases[state.currentPhaseIndex]
@@ -279,23 +316,28 @@ export default function PlaybookShell({
       // Mark as completed if not already
       updateStepState(currentStep.id, { status: 'completed', completedAt: new Date() })
     }
+    // Enable auto-execution for the next step (if it's an auto step)
+    setShouldAutoExecute(true)
     goToNextStep()
   }, [currentStep?.id, currentStepState?.status, updateStepState, goToNextStep])
 
-  // Auto-start current step if it's an auto step and pending
+  // Auto-start current step if it's an auto step, pending, AND user clicked Continue
   useEffect(() => {
     if (
+      shouldAutoExecute &&
       currentStep &&
       currentStepState?.status === 'pending' &&
       ['auto'].includes(currentStep.type)
     ) {
+      // Reset the flag
+      setShouldAutoExecute(false)
       // Small delay to allow UI to render first
       const timer = setTimeout(() => {
         executeStep(currentStep.id)
       }, 300)
       return () => clearTimeout(timer)
     }
-  }, [currentStep, currentStepState?.status, executeStep])
+  }, [shouldAutoExecute, currentStep, currentStepState?.status, executeStep])
 
   if (!currentPhase || !currentStep || !currentStepState) {
     return (
@@ -306,31 +348,164 @@ export default function PlaybookShell({
   }
 
   return (
-    <div className="flex h-[calc(100vh-200px)] min-h-[600px] bg-gray-50 rounded-xl overflow-hidden border border-gray-200">
-      {/* Navigation Panel - Left side */}
-      <div className="w-80 flex-shrink-0">
-        <NavigationPanel
-          phases={playbookConfig.phases}
-          phaseStates={state.phases}
-          currentPhaseIndex={state.currentPhaseIndex}
-          currentStepIndex={state.currentStepIndex}
-          onStepClick={goToStep}
-        />
+    <div className="flex flex-col h-[calc(100vh-180px)] min-h-[600px] bg-gray-50 rounded-xl overflow-hidden border border-gray-200">
+      {/* Header with mode selector */}
+      <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
+        <div className="flex items-center gap-3">
+          <span className="text-xl">{playbookConfig.icon}</span>
+          <h2 className="text-lg font-semibold text-gray-900">{playbookConfig.name}</h2>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Config Base button */}
+          <button
+            onClick={() => setMode('config')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              mode === 'config'
+                ? 'bg-blue-100 text-blue-700'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Settings size={16} />
+            Configuración Base
+          </button>
+
+          {/* Campaign selector */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setMode('campaign')
+                setShowCampaignDropdown(!showCampaignDropdown)
+              }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                mode === 'campaign'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Folder size={16} />
+              {selectedCampaign ? selectedCampaign.name : 'Seleccionar Campaña'}
+              <ChevronDown size={16} />
+            </button>
+
+            {/* Dropdown */}
+            {showCampaignDropdown && (
+              <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                {campaigns.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-gray-500">No hay campañas</div>
+                ) : (
+                  campaigns.map(campaign => (
+                    <button
+                      key={campaign.id}
+                      onClick={() => {
+                        setSelectedCampaignId(campaign.id)
+                        setShowCampaignDropdown(false)
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 ${
+                        selectedCampaignId === campaign.id ? 'bg-blue-50' : ''
+                      }`}
+                    >
+                      <span className="font-medium text-gray-900">{campaign.name}</span>
+                      <span className="text-gray-500">
+                        {campaign.completedSteps}/{campaign.totalSteps}
+                      </span>
+                    </button>
+                  ))
+                )}
+                <div className="border-t border-gray-100 mt-1 pt-1">
+                  <button
+                    onClick={() => {
+                      setShowWizard(true)
+                      setShowCampaignDropdown(false)
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50"
+                  >
+                    <Plus size={16} />
+                    Nueva Campaña
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Work Area - Right side */}
-      <div className="flex-1 overflow-hidden">
-        <WorkArea
-          step={currentStep}
-          stepState={currentStepState}
-          onContinue={handleContinue}
-          onBack={goToPreviousStep}
-          onExecute={(input) => executeStep(currentStep.id, input)}
-          onUpdateState={(update) => updateStepState(currentStep.id, update)}
-          isFirst={isFirstStep}
-          isLast={isLastStep}
+      {/* Main content */}
+      {mode === 'config' ? (
+        /* Configuration Mode - Full width */
+        <div className="flex-1 overflow-hidden">
+          <ConfigurationMode
+            projectId={projectId}
+            playbookConfig={playbookConfig}
+            onSave={() => {
+              // Optionally refresh something after save
+            }}
+          />
+        </div>
+      ) : (
+        /* Campaign Mode - Dual panel */
+        <div className="flex flex-1 overflow-hidden">
+          {/* Navigation Panel - Left side */}
+          <div className="w-80 flex-shrink-0">
+            <NavigationPanel
+              phases={playbookConfig.phases}
+              phaseStates={state.phases}
+              currentPhaseIndex={state.currentPhaseIndex}
+              currentStepIndex={state.currentStepIndex}
+              onStepClick={goToStep}
+            />
+          </div>
+
+          {/* Work Area - Right side */}
+          <div className="flex-1 overflow-hidden">
+            {!selectedCampaignId ? (
+              /* No campaign selected - prompt to select or create */
+              <div className="flex flex-col items-center justify-center h-full bg-white p-8 text-center">
+                <Folder className="text-gray-300 mb-4" size={64} />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Selecciona o crea una campaña
+                </h3>
+                <p className="text-gray-500 mb-6 max-w-md">
+                  Para ejecutar el playbook, primero debes seleccionar una campaña existente o crear una nueva.
+                </p>
+                <button
+                  onClick={() => setShowWizard(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  <Plus size={16} />
+                  Nueva Campaña
+                </button>
+              </div>
+            ) : (
+              <WorkArea
+                step={currentStep}
+                stepState={currentStepState}
+                onContinue={handleContinue}
+                onBack={goToPreviousStep}
+                onExecute={(input) => executeStep(currentStep.id, input)}
+                onUpdateState={(update) => updateStepState(currentStep.id, update)}
+                isFirst={isFirstStep}
+                isLast={isLastStep}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Campaign Wizard Modal */}
+      {showWizard && (
+        <CampaignWizard
+          projectId={projectId}
+          playbookConfig={playbookConfig}
+          onClose={() => setShowWizard(false)}
+          onCreated={(campaignId) => {
+            setSelectedCampaignId(campaignId)
+            setShowWizard(false)
+            // Reload campaigns
+            // TODO: Proper reload logic
+          }}
         />
-      </div>
+      )}
     </div>
   )
 }
