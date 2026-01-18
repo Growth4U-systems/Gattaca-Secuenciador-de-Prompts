@@ -57,7 +57,7 @@ export interface StepDefinition {
 
   // For suggestion type
   suggestionConfig?: {
-    generateFrom: 'project' | 'previous_step' | 'api'
+    generateFrom: 'project' | 'previous_step' | 'api' | 'llm'
     apiEndpoint?: string
     allowAdd?: boolean
     allowEdit?: boolean

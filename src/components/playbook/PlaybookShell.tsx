@@ -130,6 +130,43 @@ export default function PlaybookShell({
     return undefined
   }
 
+  // Build context for LLM-based suggestion generation
+  const buildPlaybookContext = (): Record<string, unknown> => {
+    const context: Record<string, unknown> = {
+      product: state.config?.product || '',
+      target: state.config?.target || '',
+    }
+
+    // Collect values from completed steps
+    for (const phase of state.phases) {
+      for (const stepState of phase.steps) {
+        if (stepState.status === 'completed' || stepState.decision || stepState.suggestions) {
+          // Get decision value
+          if (stepState.decision) {
+            context[stepState.id] = stepState.decision
+          }
+
+          // Get selected suggestions as array of labels
+          if (stepState.suggestions?.length) {
+            const selectedLabels = stepState.suggestions
+              .filter(s => s.selected)
+              .map(s => s.label)
+            if (selectedLabels.length > 0) {
+              context[stepState.id] = selectedLabels
+            }
+          }
+
+          // Get output if available
+          if (stepState.output) {
+            context[`${stepState.id}_output`] = stepState.output
+          }
+        }
+      }
+    }
+
+    return context
+  }
+
   // Get current phase and step definitions
   const currentPhase = playbookConfig.phases[state.currentPhaseIndex]
   const currentStep = currentPhase?.steps[state.currentStepIndex]
@@ -509,6 +546,7 @@ export default function PlaybookShell({
                 isLast={isLastStep}
                 previousStepOutput={getPreviousStepOutput()}
                 projectId={projectId}
+                playbookContext={buildPlaybookContext()}
               />
             )}
           </div>
