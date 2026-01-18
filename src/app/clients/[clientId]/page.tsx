@@ -445,6 +445,7 @@ function ContextLakeTab({
   const [movingToFolder, setMovingToFolder] = useState<string | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
   const [showNewFolderInput, setShowNewFolderInput] = useState(false)
+  const [manualFolders, setManualFolders] = useState<string[]>([])
 
   const handleDelete = async (docId: string) => {
     try {
@@ -485,9 +486,13 @@ function ContextLakeTab({
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return
-    // Folders are created implicitly when we move a doc to them
+    const folderName = newFolderName.trim()
+    // Add to manual folders to show immediately
+    if (!folders.includes(folderName)) {
+      setManualFolders(prev => [...prev, folderName])
+    }
     setShowNewFolderInput(false)
-    toast.success('Carpeta creada', `La carpeta "${newFolderName}" está lista. Mueve documentos a ella.`)
+    toast.success('Carpeta creada', `La carpeta "${folderName}" está lista. Mueve documentos a ella.`)
     setNewFolderName('')
   }
 
@@ -504,8 +509,11 @@ function ContextLakeTab({
   // Get only Context Lake docs (shared, no project_id)
   const contextLakeDocs = documents.filter(d => !d.project_id)
 
-  // Get folders from Context Lake docs
-  const folders = [...new Set(contextLakeDocs.map(d => d.folder).filter(Boolean) as string[])].sort()
+  // Get folders from Context Lake docs (include manual folders)
+  const folders = [...new Set([
+    ...contextLakeDocs.map(d => d.folder).filter(Boolean) as string[],
+    ...manualFolders
+  ])].sort()
 
   // Stats
   const sharedCount = documents.filter(d => !d.project_id).length
@@ -648,8 +656,10 @@ function ContextLakeTab({
           onDocumentClick={(doc) => {
             // Could open document viewer
           }}
+          onMoveToFolder={handleMoveToFolder}
           showCreateFolder={false}
           emptyMessage="No hay documentos en el Context Lake"
+          emptyFolders={manualFolders}
         />
       ) : (
         <DocumentList
@@ -657,6 +667,8 @@ function ContextLakeTab({
           onDelete={handleDelete}
           onView={() => {}}
           showContextLakeFilters={true}
+          onMoveToFolder={handleMoveToFolder}
+          availableFolders={folders}
         />
       )}
     </div>
