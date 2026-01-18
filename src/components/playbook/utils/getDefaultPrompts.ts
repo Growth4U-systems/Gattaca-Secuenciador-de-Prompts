@@ -33,42 +33,7 @@ const PROMPT_KEY_MAP: Record<string, string> = {
   'deep_research_manual': STEP_3_SCORING_PROMPT,
   'consolidate': STEP_4_CONSOLIDATE_PROMPT,
 
-  // Suggestion prompts for configuration phase
-  'suggest_life_contexts': `Genera una lista de 10-15 contextos de vida relevantes para el target {{target}} en la industria {{industry}}.
-
-Contextos de vida son situaciones específicas donde el cliente potencial podría necesitar el producto {{product}}.
-
-Formato de salida (JSON array):
-[
-  { "id": "contexto-1", "label": "Descripción del contexto", "selected": true },
-  { "id": "contexto-2", "label": "Descripción del contexto", "selected": true },
-  ...
-]
-
-Ejemplos de contextos de vida para autónomos:
-- "Primer año como autónomo"
-- "Expansión a nuevos clientes"
-- "Gestión de impuestos trimestrales"
-- "Contratación del primer empleado"
-
-Genera contextos específicos y accionables, no genéricos.`,
-
-  'suggest_product_words': `Genera una lista de 15-20 palabras clave relacionadas con el producto {{product}} y las necesidades del target {{target}}.
-
-Estas palabras se usarán para buscar conversaciones en foros donde la gente habla de estos temas.
-
-Formato de salida (JSON array):
-[
-  { "id": "palabra-1", "label": "palabra clave", "selected": true },
-  { "id": "palabra-2", "label": "palabra clave", "selected": true },
-  ...
-]
-
-Las palabras deben ser:
-- Términos que la gente usa en conversaciones reales
-- Relacionadas con problemas que el producto resuelve
-- Una mezcla de términos técnicos y coloquiales`,
-
+  // Forum suggestion prompt (still uses LLM)
   'suggest_forums': `Sugiere fuentes de datos para buscar conversaciones relevantes sobre {{product}} para el target {{target}}.
 
 Incluye:

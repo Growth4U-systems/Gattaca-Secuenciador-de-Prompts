@@ -107,6 +107,9 @@ export interface PlaybookConfig {
     required?: boolean
     defaultValue?: any
     options?: Array<{ value: string; label: string }>
+    // For number type
+    min?: number
+    max?: number
   }>
 }
 

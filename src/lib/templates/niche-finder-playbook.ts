@@ -368,6 +368,63 @@ export const DEFAULT_SCRAPER_CONFIG: Omit<ScraperStepConfig, 'life_contexts' | '
 }
 
 /**
+ * Life contexts (situaciones de vida) - used for search query combinations
+ */
+export const LIFE_CONTEXTS = {
+  personal: [
+    'bebé', 'casamiento', 'divorcio', 'mudanza', 'viaje',
+    'herencia', 'ascenso', 'compra de casa', 'jubilación',
+    'vivir con amigos', 'hobbies', 'pareja', 'hijos',
+    'universidad', 'primer trabajo', 'emprender',
+  ],
+  business: [
+    'expansión', 'cliente', 'factura', 'hacienda',
+    'adquisición', 'compra', 'impuestos', 'contratación',
+    'startup', 'freelance', 'pyme', 'autónomo',
+    'socio', 'inversión', 'cierre', 'apertura',
+  ],
+}
+
+/**
+ * Need words (palabras de necesidad) - customer needs that the product solves
+ * These combine with life contexts to create search queries
+ */
+export const NEED_WORDS = {
+  financial: [
+    'cuenta', 'dinero', 'ahorro', 'préstamo', 'crédito',
+    'tarjeta', 'transferencia', 'pago', 'cobro', 'deuda',
+  ],
+  operational: [
+    'gestión', 'organización', 'control', 'seguimiento',
+    'automatización', 'simplificar', 'optimizar', 'planificar',
+  ],
+  compliance: [
+    'impuestos', 'facturación', 'contabilidad', 'declaración',
+    'IVA', 'IRPF', 'hacienda', 'seguridad social', 'autónomo',
+  ],
+  growth: [
+    'crecer', 'escalar', 'expandir', 'mejorar', 'aumentar',
+    'invertir', 'financiar', 'capitalizar',
+  ],
+}
+
+/**
+ * Get life contexts by type
+ */
+export function getLifeContexts(type: 'personal' | 'business' | 'both' = 'both'): string[] {
+  if (type === 'personal') return LIFE_CONTEXTS.personal
+  if (type === 'business') return LIFE_CONTEXTS.business
+  return [...LIFE_CONTEXTS.personal, ...LIFE_CONTEXTS.business]
+}
+
+/**
+ * Get all need words as flat array
+ */
+export function getAllNeedWords(): string[] {
+  return Object.values(NEED_WORDS).flat()
+}
+
+/**
  * Spanish indicators presets
  */
 export const SPANISH_INDICATORS = {
