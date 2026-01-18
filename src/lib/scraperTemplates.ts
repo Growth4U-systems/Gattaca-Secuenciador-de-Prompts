@@ -29,6 +29,7 @@ export const APIFY_ACTORS = {
   FACEBOOK_COMMENTS: 'us5srxAYnsrkgUv2v',
   LINKEDIN_COMPANY_INSIGHTS: '6mSoKnECRInl7QUb8',
   LINKEDIN_COMPANY_PROFILE: 'dev_fusion~linkedin-company-scraper',  // Pay-per-use: $8/1000 results
+  LINKEDIN_PERSON_POSTS: 'anchor/linkedin-person-posts-scraper',  // Person posts scraper
 
   // YouTube
   YOUTUBE_CHANNEL_VIDEOS: '67Q6fmd8iedTVcCwY',  // streamers/youtube-channel-scraper
@@ -239,6 +240,23 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
       defaults: {},
     },
     outputFields: ['companyName', 'websiteUrl', 'industry', 'employeeCount', 'followerCount', 'description', 'tagline', 'headquarter', 'foundedOn', 'specialities', 'logo', 'affiliatedOrganizations'],
+  },
+
+  linkedin_person_posts: {
+    type: 'linkedin_person_posts',
+    name: 'LinkedIn Person Posts',
+    description: 'Extrae posts de un perfil de LinkedIn personal con métricas de engagement (likes, comentarios, fecha)',
+    provider: 'apify',
+    actorId: APIFY_ACTORS.LINKEDIN_PERSON_POSTS,
+    category: 'social',
+    inputSchema: {
+      required: ['profileUrls'],
+      optional: ['maxPosts', 'proxy'],
+      defaults: {
+        maxPosts: 30,
+      },
+    },
+    outputFields: ['postUrl', 'text', 'likesCount', 'commentsCount', 'repostsCount', 'postedAt', 'postType', 'authorName', 'authorProfileUrl'],
   },
 
   // ==========================================
