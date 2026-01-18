@@ -22,6 +22,7 @@ import ShareProjectModal from '@/components/project/ShareProjectModal'
 import ExportDataTab from '@/components/project/ExportDataTab'
 import ApiKeysConfig from '@/components/settings/ApiKeysConfig'
 import NicheFinderPlaybook from '@/components/niche-finder/NicheFinderPlaybook'
+import NicheFinderPlaybookV2 from '@/components/niche-finder/NicheFinderPlaybookV2'
 import SignalBasedOutreachPlaybook from '@/components/signal-outreach/SignalBasedOutreachPlaybook'
 
 type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder' | 'signal-outreach'
@@ -474,7 +475,7 @@ export default function ProjectPage({
               <ExportDataTab projectId={params.projectId} />
             )}
             {activeTab === 'niche-finder' && (
-              <NicheFinderPlaybook projectId={params.projectId} />
+              <NicheFinderPlaybookV2 projectId={params.projectId} />
             )}
             {activeTab === 'signal-outreach' && (
               <SignalBasedOutreachPlaybook projectId={params.projectId} />
