@@ -231,7 +231,7 @@ export default function ConfigurationMode({
                               <textarea
                                 value={editedPrompt}
                                 onChange={(e) => setEditedPrompt(e.target.value)}
-                                className="w-full h-64 p-3 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full h-64 p-3 bg-white text-gray-900 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                 placeholder="Escribe el prompt..."
                               />
                               <div className="flex justify-end gap-2 mt-2">
