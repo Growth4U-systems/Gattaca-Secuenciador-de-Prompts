@@ -2,6 +2,85 @@
 
 Este documento define la estructura estándar de los templates de playbook y su estado de completitud.
 
+---
+
+## Arquitectura Visual Unificada
+
+### Modelo de Datos
+
+```
+PROYECTO (Playbook)
+├── Configuración Base (compartida por todas las campañas)
+│   ├── Prompts de cada paso (editables)
+│   └── Variables de configuración del sistema
+│
+└── CAMPAÑAS (instancias)
+    ├── Heredan prompts de Configuración Base al crearse
+    ├── Variables de prompt: valores específicos (ej: client_name = "Acme")
+    └── Ejecución paso a paso con Human in the Loop
+```
+
+### Vista Unificada (Panel Dual)
+
+Todos los playbooks usan una vista unificada con:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  🔍 Nombre del Playbook                                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│  [Configuración Base]  [Campaña: Nombre ▼]                              │
+├──────────────────────────────────┬──────────────────────────────────────┤
+│  NAVEGACIÓN (fases/pasos)        │  ÁREA DE TRABAJO                     │
+│  ● Fase 1: Config                │  Paso actual con:                    │
+│    ✓ Paso 1                      │  - Variables requeridas              │
+│    ● Paso 2 ◀                    │  - Prompt (en modo config)           │
+│    ○ Paso 3                      │  - Resultado (si ejecutado)          │
+│  ○ Fase 2: Ejecución             │  - Botón ejecutar/continuar          │
+│    ○ Paso 4                      │                                      │
+└──────────────────────────────────┴──────────────────────────────────────┘
+```
+
+### Dos Modos de Operación
+
+**Modo Configuración Base**:
+- Editar prompts de cada paso
+- Configurar parámetros del sistema
+- NO se ejecuta nada
+
+**Modo Campaña**:
+- Seleccionar/crear campaña desde header
+- Wizard de configuración al crear nueva campaña
+- Ejecución paso a paso con human in the loop
+
+### Tipos de Paso para UI
+
+```typescript
+type StepType =
+  | 'input'              // Usuario ingresa datos
+  | 'suggestion'         // Sistema sugiere, usuario selecciona/edita
+  | 'auto'               // Ejecuta automáticamente
+  | 'auto_with_preview'  // Preview antes de continuar
+  | 'auto_with_review'   // Ejecuta y muestra para revisión
+  | 'decision'           // Usuario toma decisión crítica
+  | 'display'            // Solo muestra información
+  | 'action'             // Acción del usuario (ej: exportar)
+
+type ExecutorType = 'llm' | 'job' | 'api' | 'custom' | 'none'
+```
+
+### Archivos de Configuración Visual
+
+| Archivo | Propósito |
+|---------|-----------|
+| `src/components/playbook/types.ts` | Tipos para la arquitectura visual |
+| `src/components/playbook/configs/index.ts` | Registry de configuraciones |
+| `src/components/playbook/configs/[playbook].config.ts` | Config visual por playbook |
+| `src/components/playbook/PlaybookShell.tsx` | Layout con panel dual |
+| `src/components/playbook/NavigationPanel.tsx` | Panel izquierdo |
+| `src/components/playbook/WorkArea.tsx` | Panel derecho |
+
+---
+
 ## Estructura de un PlaybookTemplate
 
 Cada template debe implementar la interface `PlaybookTemplate` definida en `src/lib/templates/types.ts`:
@@ -246,6 +325,8 @@ if (template) {
 |---------|-------------|
 | `src/lib/templates/[nombre]-playbook.ts` | Template con prompts y flow_config |
 | `src/lib/templates/index.ts` | Import y registro en getPlaybookTemplate() |
+| `src/components/playbook/configs/[nombre].config.ts` | **Config visual** (fases, pasos, tipos) |
+| `src/components/playbook/configs/index.ts` | Registro de la config visual |
 | `src/types/database.types.ts` | Tipo en PlaybookType |
 | `src/lib/playbook-metadata.ts` | Metadata para UI (icon, description, steps) |
 | `supabase/migrations/` | 2 migraciones: enum + insert |
@@ -323,7 +404,146 @@ export function getNuevoPlaybookTemplate(): PlaybookTemplate {
 
 ---
 
-### Paso 2: Registrar en index.ts
+### Paso 2: Crear Configuración Visual (PlaybookConfig)
+
+Crear archivo en `src/components/playbook/configs/[nombre].config.ts`:
+
+```typescript
+import { PlaybookConfig } from '../types'
+
+export const nuevoPlaybookConfig: PlaybookConfig = {
+  id: 'nuevo_playbook',
+  type: 'nuevo_playbook',
+  name: 'Nombre del Playbook',
+  description: 'Descripción breve',
+  icon: '🚀',
+
+  phases: [
+    {
+      id: 'configuracion',
+      name: 'Configuración',
+      description: 'Define los parámetros iniciales',
+      steps: [
+        {
+          id: 'definir_contexto',
+          name: 'Definir Contexto',
+          description: 'El sistema genera sugerencias, el usuario selecciona',
+          type: 'suggestion',  // suggestion | auto | decision | input | display | action
+          executor: 'llm',     // llm | job | api | none
+          promptKey: 'suggest_context', // Clave del prompt en flow_config
+          suggestionConfig: {
+            generateFrom: 'project',
+            allowAdd: true,
+            allowEdit: true,
+            minSelections: 1,
+          },
+        },
+        {
+          id: 'revisar_config',
+          name: 'Revisar Configuración',
+          type: 'auto_with_preview',
+          executor: 'llm',
+          promptKey: 'generate_config',
+          dependsOn: ['definir_contexto'],
+        },
+      ],
+    },
+    {
+      id: 'ejecucion',
+      name: 'Ejecución',
+      description: 'Procesa los datos',
+      steps: [
+        {
+          id: 'procesar_datos',
+          name: 'Procesar Datos',
+          type: 'auto',
+          executor: 'job',  // job = proceso largo con indicador de progreso
+          jobType: 'proceso_largo',
+          dependsOn: ['revisar_config'],
+        },
+        {
+          id: 'analizar_resultados',
+          name: 'Analizar Resultados',
+          type: 'auto',
+          executor: 'llm',
+          promptKey: 'analyze_results',
+          dependsOn: ['procesar_datos'],
+        },
+      ],
+    },
+    {
+      id: 'resultados',
+      name: 'Resultados',
+      description: 'Revisa y exporta',
+      steps: [
+        {
+          id: 'seleccionar',
+          name: 'Seleccionar Resultados',
+          type: 'decision',
+          executor: 'none',
+          dependsOn: ['analizar_resultados'],
+          decisionConfig: {
+            question: '¿Qué resultados quieres usar?',
+            optionsFrom: 'previous_step',
+            multiSelect: true,
+            minSelections: 1,
+          },
+        },
+        {
+          id: 'exportar',
+          name: 'Exportar',
+          type: 'action',
+          executor: 'none',
+          dependsOn: ['seleccionar'],
+          actionConfig: {
+            label: 'Exportar Resultados',
+            actionType: 'export',
+          },
+        },
+      ],
+    },
+  ],
+
+  // Variables que se piden en el wizard de nueva campaña
+  variables: [
+    {
+      key: 'client_name',
+      label: 'Nombre del Cliente',
+      type: 'text',
+      required: true,
+    },
+    {
+      key: 'context_type',
+      label: 'Tipo de Contexto',
+      type: 'select',
+      required: true,
+      defaultValue: 'both',
+      options: [
+        { value: 'personal', label: 'B2C (Personal)' },
+        { value: 'business', label: 'B2B (Empresas)' },
+        { value: 'both', label: 'Ambos' },
+      ],
+    },
+  ],
+}
+
+export default nuevoPlaybookConfig
+```
+
+**Registrar en** `src/components/playbook/configs/index.ts`:
+
+```typescript
+import nuevoPlaybookConfig from './nuevo.config'
+
+export const playbookConfigs: Record<string, PlaybookConfig> = {
+  niche_finder: nicheFinderConfig,
+  nuevo_playbook: nuevoPlaybookConfig, // ← Agregar
+}
+```
+
+---
+
+### Paso 3: Registrar en templates/index.ts
 
 En `src/lib/templates/index.ts`:
 
@@ -354,7 +574,7 @@ export function hasPlaybookTemplate(type: string): boolean {
 
 ---
 
-### Paso 3: Actualizar Tipos
+### Paso 4: Actualizar Tipos
 
 En `src/types/database.types.ts`:
 ```typescript
@@ -363,7 +583,7 @@ export type PlaybookType = 'ecp' | 'niche_finder' | 'competitor_analysis' | 'sig
 
 ---
 
-### Paso 4: Agregar Metadata para UI
+### Paso 5: Agregar Metadata para UI
 
 En `src/lib/playbook-metadata.ts`, agregar al objeto `playbookMetadata`:
 
@@ -435,7 +655,7 @@ export const getPlaybookName = (type: string): string => {
 
 ---
 
-### Paso 5: Migraciones de Base de Datos (IMPORTANTE)
+### Paso 6: Migraciones de Base de Datos (IMPORTANTE)
 
 Para que el playbook aparezca en la UI, se necesitan **DOS migraciones separadas**:
 
@@ -486,7 +706,7 @@ END $$;
 
 ---
 
-### Paso 6: Aplicar Migraciones
+### Paso 7: Aplicar Migraciones
 
 ```bash
 npx supabase db push
@@ -500,7 +720,7 @@ npx supabase db push
 
 ---
 
-### Paso 7: Documentar el Playbook
+### Paso 8: Documentar el Playbook
 
 1. Actualizar la tabla de verificación en este documento
 2. Agregar una sección con detalles del template
@@ -508,7 +728,7 @@ npx supabase db push
 
 ---
 
-### Paso 8 (Opcional): Agregar a PlaybooksDashboard
+### Paso 9 (Opcional): Agregar a PlaybooksDashboard
 
 Si quieres que aparezca también en la vista estática `PlaybooksDashboard.tsx`:
 
@@ -532,7 +752,9 @@ Si quieres que aparezca también en la vista estática `PlaybooksDashboard.tsx`:
 ### Checklist Final
 
 - [ ] Template creado en `src/lib/templates/`
-- [ ] Registrado en `index.ts` (import, switch, array)
+- [ ] Registrado en `templates/index.ts` (import, switch, array)
+- [ ] **Config visual** creada en `src/components/playbook/configs/`
+- [ ] **Config visual** registrada en `configs/index.ts`
 - [ ] Tipo agregado a `database.types.ts`
 - [ ] Metadata en `playbook-metadata.ts`
 - [ ] Migración 1: ALTER TYPE + constraint
@@ -550,4 +772,4 @@ Al completar cada template, actualizar la tabla de verificación:
 2. Actualizar la sección del template con detalles finales
 3. Agregar fecha de última actualización
 
-**Última actualización**: 2026-01-17
+**Última actualización**: 2026-01-18

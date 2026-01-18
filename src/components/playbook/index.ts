@@ -5,6 +5,8 @@
 export { default as PlaybookShell } from './PlaybookShell'
 export { default as NavigationPanel } from './NavigationPanel'
 export { default as WorkArea } from './WorkArea'
+export { default as ConfigurationMode } from './ConfigurationMode'
+export { default as CampaignWizard } from './CampaignWizard'
 
 // Types
 export type {

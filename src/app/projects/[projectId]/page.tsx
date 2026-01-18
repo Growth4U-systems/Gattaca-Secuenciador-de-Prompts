@@ -99,20 +99,16 @@ export default function ProjectPage({
     { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
   ]
 
-  // Niche Finder has the same tabs as other projects, plus the niche-finder tab
+  // Niche Finder: Uses unified view with config and campaigns integrated
   const nicheFinderTabs = [
     { id: 'niche-finder' as TabType, label: 'Buscador de Nichos', icon: Search, description: 'Configurar y ejecutar' },
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
-    { id: 'setup' as TabType, label: 'Setup', icon: Sliders, description: 'Variables y flujo' },
-    { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
   ]
 
-  // Signal-Based Outreach tabs
+  // Signal-Based Outreach: Uses unified view with config and campaigns integrated
   const signalOutreachTabs = [
     { id: 'signal-outreach' as TabType, label: 'Signal Outreach', icon: Users, description: 'Configurar y ejecutar' },
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
-    { id: 'setup' as TabType, label: 'Setup', icon: Sliders, description: 'Variables y flujo' },
-    { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
   ]
 
   // Add Export tab only for ECP projects
