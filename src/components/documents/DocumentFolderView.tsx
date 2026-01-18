@@ -146,7 +146,7 @@ export default function DocumentFolderView({
         const isUncategorized = folder === '__uncategorized__'
 
         return (
-          <div key={folder} className="border border-gray-100 rounded-xl overflow-hidden">
+          <div key={folder} className="border border-gray-100 rounded-xl">
             {/* Folder header */}
             <button
               onClick={() => toggleFolder(folder)}
