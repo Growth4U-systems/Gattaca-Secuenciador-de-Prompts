@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
+import { triggerEmbeddingGeneration } from '@/lib/embeddings'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes for large files
@@ -108,10 +109,18 @@ export async function POST(request: NextRequest) {
 
     console.log('Save successful!')
 
+    // Trigger embedding generation asynchronously
+    triggerEmbeddingGeneration(data.id).catch(err => {
+      console.error('Background embedding generation failed:', err)
+    })
+
     return NextResponse.json({
       success: true,
-      document: data,
-      message: 'Document processed successfully from Blob',
+      document: {
+        ...data,
+        embedding_status: 'processing'
+      },
+      message: 'Document processed successfully from Blob. Indexing in progress...',
     })
   } catch (error) {
     console.error('Process blob error:', error)

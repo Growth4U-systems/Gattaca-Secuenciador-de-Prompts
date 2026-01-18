@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { PlaybookStepSourceMetadata } from '@/hooks/useDocuments'
+import { triggerEmbeddingGeneration } from '@/lib/embeddings'
 
 // ============================================
 // POST: Create document from step output
@@ -107,9 +108,17 @@ export async function POST(request: NextRequest) {
     // The initial version is created automatically by the database trigger
     // (kb_docs_initial_version_trigger)
 
+    // Trigger embedding generation asynchronously
+    triggerEmbeddingGeneration(document.id).catch(err => {
+      console.error('Background embedding generation failed:', err)
+    })
+
     return NextResponse.json({
       success: true,
-      document,
+      document: {
+        ...document,
+        embedding_status: 'processing'
+      },
     })
 
   } catch (error) {

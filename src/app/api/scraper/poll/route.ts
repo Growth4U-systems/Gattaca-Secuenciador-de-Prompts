@@ -4,6 +4,7 @@ import { createClient as createAdminClient } from '@/lib/supabase-server-admin';
 import { ScraperPollResponse, ApifyRunStatus, ApifyDatasetItem, ScraperJob, ScraperOutputConfig } from '@/types/scraper.types';
 import { getUserApiKey } from '@/lib/getUserApiKey';
 import { formatScraperOutput } from '@/lib/scraperOutputFormatter';
+import { triggerEmbeddingGeneration } from '@/lib/embeddings';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -299,6 +300,13 @@ async function fetchAndSaveApifyResults(
   }
 
   console.log(`[scraper/poll] SUCCESS! Created document "${documentName}" (id: ${insertedDoc?.id}) with ${items.length} items`);
+
+  // Trigger embedding generation
+  if (insertedDoc?.id) {
+    triggerEmbeddingGeneration(insertedDoc.id).catch(err => {
+      console.error('[scraper/poll] Embedding generation failed:', err);
+    });
+  }
 
   // Update job as completed
   await supabase

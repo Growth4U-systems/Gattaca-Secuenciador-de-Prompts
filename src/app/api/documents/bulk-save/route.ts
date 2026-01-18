@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
+import { triggerEmbeddingGenerationBatch } from '@/lib/embeddings'
 
 // Configure API route to handle large JSON payloads
 export const runtime = 'nodejs'
@@ -89,11 +90,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Trigger embedding generation for all documents asynchronously
+    if (data && data.length > 0) {
+      const documentIds = data.map(doc => doc.id)
+      triggerEmbeddingGenerationBatch(documentIds).catch(err => {
+        console.error('Background batch embedding generation failed:', err)
+      })
+    }
+
     return NextResponse.json({
       success: true,
-      documents: data,
+      documents: data?.map(doc => ({ ...doc, embedding_status: 'processing' })),
       count: data?.length || 0,
-      message: `${data?.length || 0} documentos guardados exitosamente`,
+      message: `${data?.length || 0} documentos guardados exitosamente. Indexando...`,
     })
   } catch (error) {
     console.error('Bulk save error:', error)
