@@ -139,13 +139,14 @@ export default function CampaignWizard({
       const allVariables = { ...customVariables, ...systemConfig }
 
       // Create campaign via API
+      // Note: API expects 'ecp_name' not 'name'
       const response = await fetch('/api/campaign/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId,
-          name: campaignName,
-          description: campaignDescription,
+          ecp_name: campaignName,
+          problem_core: campaignDescription || null,
           custom_variables: allVariables,
         }),
       })
