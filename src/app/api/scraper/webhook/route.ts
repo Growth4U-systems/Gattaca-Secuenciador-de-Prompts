@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server-admin';
 import { ApifyWebhookPayload, ApifyDatasetItem, ScraperJob, ScraperOutputConfig } from '@/types/scraper.types';
 import { getApiKeyForService } from '@/lib/getUserApiKey';
 import { formatScraperOutput } from '@/lib/scraperOutputFormatter';
+import { triggerEmbeddingGeneration } from '@/lib/embeddings';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes to process large datasets
@@ -306,6 +307,13 @@ async function fetchAndSaveResults(
   }
 
   console.log(`[webhook] SUCCESS! Created document "${documentName}" (id: ${insertedDoc?.id}) with ${allItems.length} items for job ${job.id}`);
+
+  // Trigger embedding generation asynchronously
+  if (insertedDoc?.id) {
+    triggerEmbeddingGeneration(insertedDoc.id).catch(err => {
+      console.error('[webhook] Background embedding generation failed:', err);
+    });
+  }
 
   // Update job as completed
   await supabase

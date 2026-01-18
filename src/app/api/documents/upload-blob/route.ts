@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase-server'
+import { triggerEmbeddingGeneration } from '@/lib/embeddings'
 
 export const runtime = 'nodejs' // Nodejs for PDF/DOCX parsing
 export const maxDuration = 300 // 5 minutes for large files
@@ -116,10 +117,18 @@ export async function POST(request: NextRequest) {
     // Uncomment if you don't want to keep files in Blob storage
     // await del(blob.url)
 
+    // Trigger embedding generation asynchronously
+    triggerEmbeddingGeneration(data.id).catch(err => {
+      console.error('Background embedding generation failed:', err)
+    })
+
     return NextResponse.json({
       success: true,
-      document: data,
-      message: 'Document uploaded successfully (via Blob)',
+      document: {
+        ...data,
+        embedding_status: 'processing'
+      },
+      message: 'Document uploaded successfully (via Blob). Indexing in progress...',
       blobUrl: blob.url, // Keep URL in case needed
     })
   } catch (error) {

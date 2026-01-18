@@ -12,6 +12,7 @@ import {
 } from '@/types/scraper.types';
 import { getScraperTemplate, buildScraperInput, SCRAPER_TEMPLATES } from '@/lib/scraperTemplates';
 import { getUserApiKey } from '@/lib/getUserApiKey';
+import { triggerEmbeddingGeneration } from '@/lib/embeddings';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120; // 2 minutes for sync scrapers like Firecrawl
@@ -541,6 +542,13 @@ async function executeFirecrawlScrape(
     throw new Error(`Failed to save document: ${docError.message}`);
   }
 
+  // Trigger embedding generation
+  if (doc?.id) {
+    triggerEmbeddingGeneration(doc.id).catch(err => {
+      console.error('[scraper/start] Embedding generation failed:', err);
+    });
+  }
+
   await supabase
     .from('scraper_jobs')
     .update({
@@ -733,6 +741,13 @@ async function executeFirecrawlCrawl(
     throw new Error(`Failed to save document: ${docError.message}`);
   }
 
+  // Trigger embedding generation
+  if (doc?.id) {
+    triggerEmbeddingGeneration(doc.id).catch(err => {
+      console.error('[scraper/start] Embedding generation failed:', err);
+    });
+  }
+
   await supabase
     .from('scraper_jobs')
     .update({
@@ -856,6 +871,13 @@ async function executeFirecrawlMap(
   if (docError) {
     console.error('[scraper/start] Failed to save map document:', docError);
     throw new Error(`Failed to save document: ${docError.message}`);
+  }
+
+  // Trigger embedding generation
+  if (doc?.id) {
+    triggerEmbeddingGeneration(doc.id).catch(err => {
+      console.error('[scraper/start] Embedding generation failed:', err);
+    });
   }
 
   await supabase
@@ -1057,6 +1079,13 @@ async function executeCustomScraper(
 
     if (docError) {
       throw new Error(`Failed to save document: ${docError.message}`);
+    }
+
+    // Trigger embedding generation
+    if (doc?.id) {
+      triggerEmbeddingGeneration(doc.id).catch(err => {
+        console.error('[scraper/start] Embedding generation failed:', err);
+      });
     }
 
     // Update job as completed
@@ -1519,6 +1548,13 @@ async function saveMangoolsDocument(
 
   if (docError) {
     throw new Error(`Failed to save document: ${docError.message}`);
+  }
+
+  // Trigger embedding generation
+  if (doc?.id) {
+    triggerEmbeddingGeneration(doc.id).catch(err => {
+      console.error('[scraper/start] Embedding generation failed:', err);
+    });
   }
 
   await supabase
@@ -2021,6 +2057,13 @@ async function executePhantombuster(
 
     if (docError) {
       throw new Error(`Failed to save document: ${docError.message}`);
+    }
+
+    // Trigger embedding generation
+    if (doc?.id) {
+      triggerEmbeddingGeneration(doc.id).catch(err => {
+        console.error('[scraper/start] Embedding generation failed:', err);
+      });
     }
 
     // Update job as completed
