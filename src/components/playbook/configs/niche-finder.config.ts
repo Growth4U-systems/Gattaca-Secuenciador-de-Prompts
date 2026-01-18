@@ -7,10 +7,15 @@ import { PlaybookConfig } from '../types'
  * in forums and social networks. It combines life contexts with product words
  * to discover pain points and opportunities.
  *
- * The flow is designed for maximum automation with minimal user decisions:
- * - System generates suggestions, user selects/edits
- * - Auto-execute steps where possible
- * - Only pause for critical decisions (final niche selection)
+ * Flow:
+ * 1. CONFIGURACIÓN: Define cliente, contextos, palabras de producto, fuentes
+ * 2. BÚSQUEDA: SERP search + scraping de URLs
+ * 3. EXTRACCIÓN: Step 1 - Extraer problemas de cada URL (LLM)
+ * 4. ANÁLISIS:
+ *    - Step 2: Clean & Filter - Consolida a 30-50 nichos
+ *    - Deep Research MANUAL - Usuario hace research con ChatGPT/Perplexity
+ *    - Step 4: Consolidate - Combina tabla con scores
+ * 5. RESULTADOS: Selección, dashboard, exportación
  */
 export const nicheFinderConfig: PlaybookConfig = {
   id: 'niche_finder',
@@ -20,7 +25,9 @@ export const nicheFinderConfig: PlaybookConfig = {
   icon: '🔍',
 
   phases: [
-    // Phase 1: Configuration
+    // =========================================
+    // FASE 1: CONFIGURACIÓN
+    // =========================================
     {
       id: 'configuration',
       name: 'Configuración',
@@ -98,7 +105,9 @@ export const nicheFinderConfig: PlaybookConfig = {
       ],
     },
 
-    // Phase 2: Search
+    // =========================================
+    // FASE 2: BÚSQUEDA & SCRAPING
+    // =========================================
     {
       id: 'search',
       name: 'Búsqueda',
@@ -114,80 +123,95 @@ export const nicheFinderConfig: PlaybookConfig = {
           dependsOn: ['sources'],
         },
         {
-          id: 'validate_urls',
-          name: 'Validar URLs',
-          description: 'Revisa y filtra las URLs encontradas',
+          id: 'review_urls',
+          name: 'Revisar URLs',
+          description: 'Revisa y filtra las URLs encontradas antes de scrapear',
           type: 'auto_with_review',
           executor: 'none',
           dependsOn: ['serp_search'],
         },
-      ],
-    },
-
-    // Phase 3: Extraction
-    {
-      id: 'extraction',
-      name: 'Extracción',
-      description: 'Scrapea y extrae nichos del contenido',
-      steps: [
         {
-          id: 'scrape_content',
+          id: 'scrape',
           name: 'Scrapear Contenido',
           description: 'Descarga el contenido de las URLs validadas',
           type: 'auto',
           executor: 'job',
           jobType: 'niche_finder_scrape',
-          dependsOn: ['validate_urls'],
-        },
-        {
-          id: 'extract_niches',
-          name: 'Extraer Nichos',
-          description: 'Identifica nichos potenciales en el contenido',
-          type: 'auto',
-          executor: 'job',
-          jobType: 'niche_finder_extract',
-          dependsOn: ['scrape_content'],
+          dependsOn: ['review_urls'],
         },
       ],
     },
 
-    // Phase 4: Analysis
+    // =========================================
+    // FASE 3: EXTRACCIÓN
+    // =========================================
+    {
+      id: 'extraction',
+      name: 'Extracción',
+      description: 'Analiza cada URL y extrae pain points',
+      steps: [
+        {
+          id: 'extract_problems',
+          name: 'Extraer Problemas (Step 1)',
+          description: 'Analiza cada markdown del scraping y extrae pain points como CSV',
+          type: 'auto',
+          executor: 'job', // Procesa URL por URL
+          jobType: 'niche_finder_extract',
+          promptKey: 'step_1_find_problems',
+          dependsOn: ['scrape'],
+        },
+        {
+          id: 'review_extraction',
+          name: 'Revisar Extracción',
+          description: 'Revisa la tabla raw de problemas extraídos de todas las URLs',
+          type: 'auto_with_review',
+          executor: 'none',
+          dependsOn: ['extract_problems'],
+        },
+      ],
+    },
+
+    // =========================================
+    // FASE 4: ANÁLISIS
+    // =========================================
     {
       id: 'analysis',
       name: 'Análisis',
-      description: 'Evalúa y prioriza los nichos encontrados',
+      description: 'Limpia, evalúa y prioriza los nichos',
       steps: [
         {
           id: 'clean_filter',
-          name: 'Limpieza y Filtrado',
-          description: 'Step 1: Limpia duplicados y filtra nichos de baja calidad',
-          type: 'auto',
+          name: 'Limpiar y Filtrar (Step 2)',
+          description: 'Consolida duplicados, valida y genera tabla de 30-50 nichos',
+          type: 'auto_with_review',
           executor: 'llm',
-          promptKey: 'niche_finder_step1',
-          dependsOn: ['extract_niches'],
+          promptKey: 'step_2_clean_filter',
+          dependsOn: ['review_extraction'],
         },
         {
-          id: 'deep_scoring',
-          name: 'Scoring (Deep Research)',
-          description: 'Step 2: Evalúa viabilidad con investigación profunda',
-          type: 'auto',
-          executor: 'llm',
-          promptKey: 'niche_finder_step2',
+          id: 'deep_research_manual',
+          name: 'Deep Research (Manual)',
+          description: 'Haz Deep Research de cada nicho con ChatGPT/Perplexity y pega los resultados',
+          type: 'manual_research', // Nuevo tipo de paso
+          executor: 'none',
+          promptKey: 'step_3_scoring', // El prompt que el usuario debe copiar
           dependsOn: ['clean_filter'],
         },
         {
-          id: 'final_ranking',
-          name: 'Ranking Final',
-          description: 'Step 3: Consolida y genera tabla final de nichos',
+          id: 'consolidate',
+          name: 'Consolidar Tabla Final (Step 4)',
+          description: 'Combina tabla filtrada con resultados del Deep Research',
           type: 'auto_with_review',
           executor: 'llm',
-          promptKey: 'niche_finder_step3',
-          dependsOn: ['deep_scoring'],
+          promptKey: 'step_4_consolidate',
+          dependsOn: ['deep_research_manual'],
         },
       ],
     },
 
-    // Phase 5: Results
+    // =========================================
+    // FASE 5: RESULTADOS
+    // =========================================
     {
       id: 'results',
       name: 'Resultados',
@@ -199,7 +223,7 @@ export const nicheFinderConfig: PlaybookConfig = {
           description: 'Elige los nichos que quieres explorar',
           type: 'decision',
           executor: 'none',
-          dependsOn: ['final_ranking'],
+          dependsOn: ['consolidate'],
           decisionConfig: {
             question: '¿Qué nichos quieres seleccionar para explorar?',
             optionsFrom: 'previous_step',

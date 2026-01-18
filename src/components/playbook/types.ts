@@ -13,6 +13,7 @@ export type PhaseStatus = 'pending' | 'in_progress' | 'completed' | 'error'
  * - decision: User must make a decision (pause here)
  * - display: Only shows information
  * - action: User performs an action (e.g., export)
+ * - manual_research: User performs manual research with external tools (e.g., ChatGPT/Perplexity)
  */
 export type StepType =
   | 'input'
@@ -23,6 +24,7 @@ export type StepType =
   | 'decision'
   | 'display'
   | 'action'
+  | 'manual_research'
 
 /**
  * Executor type determines how the step is executed:
