@@ -16,6 +16,7 @@ import {
 import ReactMarkdown from 'react-markdown'
 import { WorkAreaProps, StepDefinition, StepState } from './types'
 import DeepResearchManualStep from './steps/DeepResearchManualStep'
+import { getDefaultPrompt } from './utils/getDefaultPrompts'
 
 // Sub-components for different step types
 
@@ -24,9 +25,17 @@ interface SuggestionStepProps {
   stepState: StepState
   onUpdateState: (update: Partial<StepState>) => void
   onContinue: () => void
+  // Context for LLM generation
+  playbookContext?: {
+    product?: string
+    target?: string
+    context_type?: string
+    life_contexts?: string[]
+    [key: string]: unknown
+  }
 }
 
-function SuggestionStep({ step, stepState, onUpdateState, onContinue }: SuggestionStepProps) {
+function SuggestionStep({ step, stepState, onUpdateState, onContinue, playbookContext }: SuggestionStepProps) {
   const [newItem, setNewItem] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,7 +46,7 @@ function SuggestionStep({ step, stepState, onUpdateState, onContinue }: Suggesti
 
   // Load suggestions from API if configured
   useEffect(() => {
-    const loadSuggestions = async () => {
+    const loadFromAPI = async () => {
       if (config?.generateFrom !== 'api' || !config.apiEndpoint) return
       if (suggestions.length > 0) return // Already loaded
 
@@ -59,8 +68,104 @@ function SuggestionStep({ step, stepState, onUpdateState, onContinue }: Suggesti
       }
     }
 
-    loadSuggestions()
+    loadFromAPI()
   }, [config?.generateFrom, config?.apiEndpoint, suggestions.length, onUpdateState])
+
+  // Generate suggestions via LLM if configured
+  useEffect(() => {
+    const generateFromLLM = async () => {
+      if (config?.generateFrom !== 'llm' || !step.promptKey) return
+      if (suggestions.length > 0) return // Already generated
+
+      setLoading(true)
+      setError(null)
+      try {
+        // Get the prompt template
+        let prompt = getDefaultPrompt(step.promptKey)
+        if (!prompt) {
+          throw new Error(`No prompt found for key: ${step.promptKey}`)
+        }
+
+        // Replace template variables with context values
+        if (playbookContext) {
+          prompt = prompt.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+            const value = playbookContext[key]
+            if (Array.isArray(value)) {
+              return value.join(', ')
+            }
+            return String(value || '')
+          })
+
+          // Handle conditional blocks (simplified)
+          prompt = prompt.replace(/\{\{#if ([^}]+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, condition, content) => {
+            // Simple condition evaluation for context_type
+            const contextType = playbookContext.context_type || 'both'
+            if (condition.includes('personal') && (contextType === 'personal' || contextType === 'both')) {
+              return content
+            }
+            if (condition.includes('business') && (contextType === 'business' || contextType === 'both')) {
+              return content
+            }
+            return ''
+          })
+        }
+
+        // Call the LLM API
+        const response = await fetch('/api/llm/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt,
+            responseFormat: 'json',
+            temperature: 0.7,
+          }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || 'Error generating suggestions')
+        }
+
+        const data = await response.json()
+
+        // Parse the LLM response - it should be a JSON array
+        let parsedSuggestions: Array<{ id: string; label: string; description?: string; selected?: boolean }> = []
+
+        if (typeof data.content === 'string') {
+          // Try to extract JSON from the response
+          const jsonMatch = data.content.match(/\[[\s\S]*\]/)
+          if (jsonMatch) {
+            parsedSuggestions = JSON.parse(jsonMatch[0])
+          }
+        } else if (Array.isArray(data.content)) {
+          parsedSuggestions = data.content
+        } else if (data.suggestions) {
+          parsedSuggestions = data.suggestions
+        }
+
+        // Ensure all suggestions have selected: false by default
+        const formattedSuggestions = parsedSuggestions.map((s, i) => ({
+          id: s.id || `suggestion_${i}`,
+          label: s.label,
+          description: s.description,
+          selected: false,
+        }))
+
+        if (formattedSuggestions.length > 0) {
+          onUpdateState({ suggestions: formattedSuggestions })
+        } else {
+          throw new Error('No suggestions generated')
+        }
+      } catch (err) {
+        console.error('Error generating LLM suggestions:', err)
+        setError(err instanceof Error ? err.message : 'Error generating suggestions')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    generateFromLLM()
+  }, [config?.generateFrom, step.promptKey, suggestions.length, onUpdateState, playbookContext])
 
   const toggleSuggestion = (id: string) => {
     const updated = suggestions.map(s =>
@@ -556,10 +661,17 @@ function CompletedStep({ step, stepState, onContinue, onRerun }: CompletedStepPr
 
 // Main WorkArea component
 
-// Props extendidas para soportar manual_research
+// Props extendidas para soportar manual_research y LLM suggestion generation
 interface ExtendedWorkAreaProps extends WorkAreaProps {
   previousStepOutput?: string // Output del paso anterior para manual_research
   projectId?: string
+  playbookContext?: {
+    product?: string
+    target?: string
+    context_type?: string
+    life_contexts?: string[]
+    [key: string]: unknown
+  }
 }
 
 export default function WorkArea({
@@ -573,6 +685,7 @@ export default function WorkArea({
   isLast,
   previousStepOutput,
   projectId,
+  playbookContext,
 }: ExtendedWorkAreaProps) {
   // Render based on step status and type
   const renderContent = () => {
@@ -607,6 +720,7 @@ export default function WorkArea({
             stepState={stepState}
             onUpdateState={onUpdateState}
             onContinue={onContinue}
+            playbookContext={playbookContext}
           />
         )
 

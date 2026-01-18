@@ -56,6 +56,67 @@ Formato de salida (JSON):
     "forums": ["forocoches.com", "mediavida.com"]
   }
 }`,
+
+  // Life contexts suggestion prompt
+  'suggest_life_contexts': `Eres un experto en identificación de nichos de mercado.
+
+Contexto del producto/servicio:
+- Producto: {{product}}
+- Target: {{target}}
+- Tipo de cliente: {{context_type}}
+
+Tu tarea es generar una lista de SITUACIONES DE VIDA o NEGOCIO donde una persona podría necesitar lo que este producto resuelve.
+
+{{#if context_type === 'personal' || context_type === 'both'}}
+Para B2C (Personal), piensa en momentos vitales como:
+- Cambios familiares (bebé, casamiento, divorcio)
+- Cambios de vivienda (mudanza, compra de casa)
+- Cambios financieros (herencia, jubilación)
+- Cambios laborales (ascenso, primer trabajo)
+- Etapas de vida (universidad, pareja, hijos)
+{{/if}}
+
+{{#if context_type === 'business' || context_type === 'both'}}
+Para B2B (Empresas), piensa en situaciones de negocio como:
+- Etapa del negocio (startup, pyme, expansión)
+- Tipo de profesional (freelance, autónomo, consultor)
+- Eventos de negocio (contratación, inversión, adquisición)
+- Desafíos operativos (facturación, impuestos, clientes)
+{{/if}}
+
+Genera entre 10-15 contextos relevantes para el producto "{{product}}" y el target "{{target}}".
+
+IMPORTANTE: Responde SOLO con un JSON array de objetos, sin texto adicional:
+[
+  {"id": "contexto_1", "label": "Nombre del contexto", "description": "Breve descripción de por qué es relevante"},
+  {"id": "contexto_2", "label": "Otro contexto", "description": "Por qué aplica"}
+]`,
+
+  // Need words suggestion prompt
+  'suggest_need_words': `Eres un experto en copywriting y análisis de necesidades del cliente.
+
+Contexto:
+- Producto: {{product}}
+- Target: {{target}}
+- Contextos de vida seleccionados: {{life_contexts}}
+
+Tu tarea es generar PALABRAS DE NECESIDAD que representan los problemas, deseos o frustraciones que el producto "{{product}}" resuelve.
+
+Estas palabras se usarán para buscar conversaciones en foros donde la gente expresa estos problemas.
+
+Categorías de palabras a considerar:
+1. **Palabras de dolor**: frustración, problema, no sé cómo, necesito ayuda con...
+2. **Palabras de deseo**: quiero, busco, me gustaría, ojalá pudiera...
+3. **Palabras de acción**: cómo hacer, consejos para, recomendaciones de...
+4. **Palabras de urgencia**: urgente, cuanto antes, ya no aguanto...
+
+Genera entre 10-20 palabras o frases cortas relevantes para las necesidades que "{{product}}" resuelve en el contexto de "{{target}}".
+
+IMPORTANTE: Responde SOLO con un JSON array de objetos, sin texto adicional:
+[
+  {"id": "need_1", "label": "palabra o frase", "description": "Tipo de necesidad que representa"},
+  {"id": "need_2", "label": "otra palabra", "description": "Qué problema indica"}
+]`,
 }
 
 /**
