@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ChevronLeft,
   ChevronRight,
@@ -28,10 +28,39 @@ interface SuggestionStepProps {
 
 function SuggestionStep({ step, stepState, onUpdateState, onContinue }: SuggestionStepProps) {
   const [newItem, setNewItem] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const suggestions = stepState.suggestions || []
   const config = step.suggestionConfig
   const selectedCount = suggestions.filter(s => s.selected).length
   const canContinue = !config?.minSelections || selectedCount >= config.minSelections
+
+  // Load suggestions from API if configured
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      if (config?.generateFrom !== 'api' || !config.apiEndpoint) return
+      if (suggestions.length > 0) return // Already loaded
+
+      setLoading(true)
+      setError(null)
+      try {
+        const response = await fetch(config.apiEndpoint)
+        if (!response.ok) throw new Error('Error loading suggestions')
+        const data = await response.json()
+
+        // The API returns { options: [...] } with pre-formatted suggestions
+        if (data.options && Array.isArray(data.options)) {
+          onUpdateState({ suggestions: data.options })
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error loading suggestions')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadSuggestions()
+  }, [config?.generateFrom, config?.apiEndpoint, suggestions.length, onUpdateState])
 
   const toggleSuggestion = (id: string) => {
     const updated = suggestions.map(s =>
@@ -48,6 +77,38 @@ function SuggestionStep({ step, stepState, onUpdateState, onContinue }: Suggesti
     ]
     onUpdateState({ suggestions: updated })
     setNewItem('')
+  }
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <p className="text-gray-600 text-sm">
+          {step.description || 'Selecciona las opciones que aplican a tu caso.'}
+        </p>
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+          <span className="ml-2 text-gray-600">Cargando sugerencias...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-800">Error cargando sugerencias</p>
+              <p className="text-sm text-red-700 mt-1">{error}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
