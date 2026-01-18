@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { WorkAreaProps, StepDefinition, StepState } from './types'
+import DeepResearchManualStep from './steps/DeepResearchManualStep'
 
 // Sub-components for different step types
 
@@ -494,6 +495,12 @@ function CompletedStep({ step, stepState, onContinue, onRerun }: CompletedStepPr
 
 // Main WorkArea component
 
+// Props extendidas para soportar manual_research
+interface ExtendedWorkAreaProps extends WorkAreaProps {
+  previousStepOutput?: string // Output del paso anterior para manual_research
+  projectId?: string
+}
+
 export default function WorkArea({
   step,
   stepState,
@@ -503,7 +510,9 @@ export default function WorkArea({
   onUpdateState,
   isFirst,
   isLast,
-}: WorkAreaProps) {
+  previousStepOutput,
+  projectId,
+}: ExtendedWorkAreaProps) {
   // Render based on step status and type
   const renderContent = () => {
     // Error state takes precedence
@@ -566,6 +575,18 @@ export default function WorkArea({
             stepState={stepState}
             onUpdateState={onUpdateState}
             onContinue={onContinue}
+          />
+        )
+
+      case 'manual_research':
+        return (
+          <DeepResearchManualStep
+            step={step}
+            stepState={stepState}
+            onContinue={onContinue}
+            onUpdateState={onUpdateState}
+            previousStepOutput={previousStepOutput}
+            projectId={projectId || ''}
           />
         )
 

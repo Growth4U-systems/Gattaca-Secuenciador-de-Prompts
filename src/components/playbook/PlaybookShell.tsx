@@ -109,6 +109,27 @@ export default function PlaybookShell({
 
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
 
+  // Helper function to get the output from the previous step
+  const getPreviousStepOutput = (): string | undefined => {
+    // Find the current step's dependencies
+    if (!currentStep?.dependsOn?.length) return undefined
+
+    // Get the first dependency's output
+    const dependencyId = currentStep.dependsOn[0]
+
+    // Search for this step across all phases
+    for (const phase of state.phases) {
+      const stepState = phase.steps.find(s => s.id === dependencyId)
+      if (stepState?.output) {
+        return typeof stepState.output === 'string'
+          ? stepState.output
+          : JSON.stringify(stepState.output, null, 2)
+      }
+    }
+
+    return undefined
+  }
+
   // Get current phase and step definitions
   const currentPhase = playbookConfig.phases[state.currentPhaseIndex]
   const currentStep = currentPhase?.steps[state.currentStepIndex]
@@ -486,6 +507,8 @@ export default function PlaybookShell({
                 onUpdateState={(update) => updateStepState(currentStep.id, update)}
                 isFirst={isFirstStep}
                 isLast={isLastStep}
+                previousStepOutput={getPreviousStepOutput()}
+                projectId={projectId}
               />
             )}
           </div>
