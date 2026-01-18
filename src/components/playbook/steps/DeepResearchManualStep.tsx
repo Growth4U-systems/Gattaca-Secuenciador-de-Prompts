@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Copy, Check, ExternalLink, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { StepDefinition, StepState } from '../types'
+import { STEP_3_SCORING_PROMPT } from '@/lib/templates/niche-finder-playbook'
 
 interface DeepResearchManualStepProps {
   step: StepDefinition
@@ -13,77 +14,8 @@ interface DeepResearchManualStepProps {
   projectId: string
 }
 
-// El prompt de Deep Research del template
-const DEEP_RESEARCH_PROMPT = `Rol: Eres un analista de estrategia de mercado de élite, con especialización en go to market en la industria {{industry}} y tienes un conocimiento granular del mercado de {{country}}. Tu metodología combina el análisis de datos riguroso con una profunda comprensión de la psicología del consumidor.
-
-Objetivo: Realizar una investigación exhaustiva y multidimensional de cada nicho de mercado presentado. El objetivo final es generar un informe de viabilidad individual e independiente para cada nicho.
-
-Regla Mandatoria: El análisis debe ser estrictamente individual. Está terminantemente prohibido agrupar, resumir o comparar nichos. Cada nicho debe ser tratado como un informe de viabilidad completamente autónomo.
-
-Input de Datos:
-Columna a filtrar: "Valid" (analiza solamente los nichos donde sea igual a "TRUE")
-Columna a Analizar: "Niche (Consolidated)"
-
-PARA CADA NICHO, GENERA EL SIGUIENTE ANÁLISIS:
-
-## [Nombre del Nicho]
-
-### 1. Intensidad del Dolor (Pain Score)
-**Calificación: [2-99] / 100**
-
-Evaluación basada en Jobs to be Done (Push, Pull, Habit, Anxiety):
-- **Push (El Problema):**
-  - Utility Job: ¿Cuál es la gravedad funcional?
-  - Emotional Job: ¿Cuál es la gravedad emocional?
-- **Product Fit (La Solución):**
-  - Pull y Anxiety
-
-Variables Cuantitativas:
-- Pérdida Económica Directa (€/año)
-- Coste de Oportunidad
-- Pérdida de Tiempo (horas/mes)
-
-Variables Cualitativas:
-- Carga Cognitiva y Estrés
-- Fricción y Complejidad
-- Obstáculos a Objetivos Vitales
-- Impacto Social o Profesional
-- Frecuencia e Inevitabilidad
-
-### 2. Tamaño del Mercado (Market Size)
-**SAM Estimado: [número] personas en {{country}}**
-
-- Nivel de Confianza: [Alto/Medio/Bajo]
-- Método: Top-Down + Bottom-Up
-- Fuentes: INE, Eurostat, Seguridad Social, Statista, etc.
-- Tendencia: [Crecimiento Acelerado/Moderado/Estable/Decrecimiento]
-- Competencia: ¿Quién está resolviendo esto ahora?
-
-### 3. Reachability Score
-**Calificación: [2-99] / 100**
-
-Criterios:
-- Comunidades Online (foros, grupos, plataformas específicas)
-- Comunidades Físicas (eventos, lugares)
-- Creadores de Contenido (influencers del nicho)
-- Contenido y Palabras Clave
-- Complejidad del Producto
-- Competencia (afecta CACs)
-
-Canales específicos:
-- Subreddits/grupos exactos con nombre
-- Influencers específicos con handle
-- Táctica de ads detallada
-- Partnerships estratégicos
-
----
-Para cada nicho incluir:
-- Pain Score (2-99)
-- Reachability Score (2-99)
-- Market Size (número de personas)
-- Pain Explanation
-- Reachability Explanation
-- Market Size Explanation`
+// El prompt de Deep Research importado del template
+const DEEP_RESEARCH_PROMPT = STEP_3_SCORING_PROMPT
 
 export default function DeepResearchManualStep({
   step,
