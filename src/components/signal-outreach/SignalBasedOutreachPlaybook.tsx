@@ -20,6 +20,10 @@ import {
   Download,
   Upload,
   Database,
+  ExternalLink,
+  ThumbsUp,
+  MessageCircle,
+  Star,
 } from 'lucide-react'
 import { useToast } from '@/components/ui'
 import ReactMarkdown from 'react-markdown'
@@ -39,6 +43,34 @@ interface Step {
   output?: string
   importedData?: unknown[]
   allowsImport?: boolean // For scraping steps that accept CSV import
+}
+
+// ============================================
+// CREATOR SUGGESTION TYPES
+// ============================================
+interface SuggestedCreator {
+  name: string
+  linkedinUrl: string
+  topics: string[]
+  estimatedFollowers: string
+  relevanceReason: string
+}
+
+// ============================================
+// POST SELECTION TYPES
+// ============================================
+interface EvaluatedPost {
+  id: string
+  url: string
+  creatorName: string
+  text: string
+  likes: number
+  comments: number
+  date: string
+  type: string
+  topic?: string
+  fitScore: number
+  fitReason?: string
 }
 
 interface Phase {
@@ -189,6 +221,16 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
   const [importData, setImportData] = useState('')
   const [isImporting, setIsImporting] = useState(false)
 
+  // Creator suggestion state
+  const [suggestedCreators, setSuggestedCreators] = useState<SuggestedCreator[]>([])
+  const [selectedCreatorUrls, setSelectedCreatorUrls] = useState<Set<string>>(new Set())
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
+
+  // Post selection state
+  const [foundPosts, setFoundPosts] = useState<EvaluatedPost[]>([])
+  const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(new Set())
+  const [isScrapingEngagers, setIsScrapingEngagers] = useState(false)
+
   // Load saved config from project
   useEffect(() => {
     const loadProjectConfig = async () => {
@@ -255,6 +297,23 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
     }
     loadStepOutputs()
   }, [projectId])
+
+  // Parse posts from scrape_posts step output
+  useEffect(() => {
+    const scrapePostsStep = phases.flatMap(p => p.steps).find(s => s.id === 'scrape_posts')
+    if (scrapePostsStep?.status === 'completed' && scrapePostsStep.importedData) {
+      // Posts are stored in imported_data as evaluated posts
+      const posts = scrapePostsStep.importedData as unknown
+      if (Array.isArray(posts) && posts.length > 0) {
+        // Check if posts have the expected structure
+        if (typeof posts[0] === 'object' && 'posts' in (posts[0] as object)) {
+          setFoundPosts((posts[0] as { posts: EvaluatedPost[] }).posts)
+        } else if ('url' in (posts[0] as object) || 'id' in (posts[0] as object)) {
+          setFoundPosts(posts as EvaluatedPost[])
+        }
+      }
+    }
+  }, [phases])
 
   const togglePhase = (phaseId: string) => {
     setPhases(prev => prev.map(p =>
@@ -483,6 +542,148 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
     return undefined
   }
 
+  // ============================================
+  // CREATOR SUGGESTION FUNCTIONS
+  // ============================================
+
+  const handleSuggestCreators = async () => {
+    if (!industry && !icpDescription) {
+      toast.warning('Configuración requerida', 'Completa la Industria o el ICP antes de buscar creadores')
+      return
+    }
+
+    setIsLoadingSuggestions(true)
+    setSuggestedCreators([])
+
+    try {
+      const response = await fetch('/api/playbook/suggest-creators', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          playbookType: 'signal_based_outreach',
+          topics: [industry, valueProposition?.split(' ').slice(0, 5).join(' ')].filter(Boolean),
+          icp: icpDescription,
+          country,
+          industry,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success && data.creators?.length > 0) {
+        setSuggestedCreators(data.creators)
+        toast.success('Creadores encontrados', `${data.creators.length} creadores sugeridos`)
+      } else if (data.error) {
+        throw new Error(data.error)
+      } else {
+        toast.warning('Sin resultados', 'No se encontraron creadores. Intenta con otros términos.')
+      }
+    } catch (error) {
+      console.error('Error suggesting creators:', error)
+      toast.error('Error', error instanceof Error ? error.message : 'Error al buscar creadores')
+    } finally {
+      setIsLoadingSuggestions(false)
+    }
+  }
+
+  const toggleCreatorSelection = (url: string) => {
+    setSelectedCreatorUrls(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(url)) {
+        newSet.delete(url)
+      } else {
+        newSet.add(url)
+      }
+      return newSet
+    })
+  }
+
+  const handleAddSelectedCreators = () => {
+    if (selectedCreatorUrls.size === 0) return
+
+    const currentCreators = knownCreators.trim()
+    const newCreators = Array.from(selectedCreatorUrls).join('\n')
+    const combined = currentCreators
+      ? `${currentCreators}\n${newCreators}`
+      : newCreators
+
+    setKnownCreators(combined)
+    setSuggestedCreators([])
+    setSelectedCreatorUrls(new Set())
+    toast.success('Creadores agregados', `${selectedCreatorUrls.size} URLs agregadas`)
+  }
+
+  // ============================================
+  // POST SELECTION FUNCTIONS
+  // ============================================
+
+  const togglePostSelection = (postId: string) => {
+    setSelectedPostIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(postId)) {
+        newSet.delete(postId)
+      } else {
+        newSet.add(postId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAllPosts = () => {
+    if (selectedPostIds.size === foundPosts.length) {
+      setSelectedPostIds(new Set())
+    } else {
+      setSelectedPostIds(new Set(foundPosts.map(p => p.id)))
+    }
+  }
+
+  const handleScrapeSelectedEngagers = async () => {
+    if (selectedPostIds.size === 0) {
+      toast.warning('Selección requerida', 'Selecciona al menos un post')
+      return
+    }
+
+    const selectedPosts = foundPosts.filter(p => selectedPostIds.has(p.id))
+    const postUrls = selectedPosts.map(p => p.url)
+
+    setIsScrapingEngagers(true)
+
+    try {
+      const response = await fetch('/api/playbook/scrape-engagers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          playbookType: 'signal_based_outreach',
+          postUrls,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast.success('Scraping iniciado', `Scrapeando engagers de ${postUrls.length} posts`)
+        // Refresh step outputs
+        window.location.reload()
+      } else {
+        throw new Error(data.error || 'Error al scrapear engagers')
+      }
+    } catch (error) {
+      console.error('Error scraping engagers:', error)
+      toast.error('Error', error instanceof Error ? error.message : 'Error al scrapear engagers')
+    } finally {
+      setIsScrapingEngagers(false)
+    }
+  }
+
+  // Get total engagement from selected posts
+  const getSelectedPostsEngagement = (): number => {
+    return foundPosts
+      .filter(p => selectedPostIds.has(p.id))
+      .reduce((sum, p) => sum + (p.likes || 0) + (p.comments || 0), 0)
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -603,6 +804,122 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900 placeholder:text-gray-400"
               placeholder="URLs de LinkedIn de creadores que ya conoces (uno por linea)"
             />
+
+            {/* Suggest Creators Button */}
+            <div className="mt-3">
+              <button
+                onClick={handleSuggestCreators}
+                disabled={isLoadingSuggestions || (!industry && !icpDescription)}
+                className={`
+                  inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                  ${isLoadingSuggestions || (!industry && !icpDescription)
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }
+                `}
+              >
+                {isLoadingSuggestions ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Buscando creadores...
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4" />
+                    🔍 Sugerir Creadores con Perplexity
+                  </>
+                )}
+              </button>
+              <p className="text-xs text-gray-500 mt-1">
+                Usa IA para buscar creadores relevantes basados en tu industria e ICP
+              </p>
+            </div>
+
+            {/* Suggested Creators List */}
+            {suggestedCreators.length > 0 && (
+              <div className="mt-4 border border-blue-200 rounded-lg overflow-hidden">
+                <div className="bg-blue-50 px-4 py-3 border-b border-blue-200">
+                  <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-blue-600" />
+                    Creadores Sugeridos ({suggestedCreators.length})
+                  </h4>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Selecciona los creadores que quieres agregar a tu lista
+                  </p>
+                </div>
+                <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
+                  {suggestedCreators.map((creator) => (
+                    <div
+                      key={creator.linkedinUrl}
+                      onClick={() => toggleCreatorSelection(creator.linkedinUrl)}
+                      className={`
+                        p-4 cursor-pointer transition-colors
+                        ${selectedCreatorUrls.has(creator.linkedinUrl)
+                          ? 'bg-blue-50'
+                          : 'hover:bg-gray-50'
+                        }
+                      `}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedCreatorUrls.has(creator.linkedinUrl)}
+                          onChange={() => toggleCreatorSelection(creator.linkedinUrl)}
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900">{creator.name}</span>
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                              {creator.estimatedFollowers} followers
+                            </span>
+                          </div>
+                          <a
+                            href={creator.linkedinUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-sm text-blue-600 hover:underline flex items-center gap-1 mt-1"
+                          >
+                            {creator.linkedinUrl}
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {creator.topics.map((topic, i) => (
+                              <span key={i} className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
+                                {topic}
+                              </span>
+                            ))}
+                          </div>
+                          {creator.relevanceReason && (
+                            <p className="text-xs text-gray-600 mt-2">{creator.relevanceReason}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+                  <span className="text-sm text-gray-600">
+                    {selectedCreatorUrls.size} seleccionados
+                  </span>
+                  <button
+                    onClick={handleAddSelectedCreators}
+                    disabled={selectedCreatorUrls.size === 0}
+                    className={`
+                      inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                      ${selectedCreatorUrls.size > 0
+                        ? 'bg-green-600 text-white hover:bg-green-700'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      }
+                    `}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Agregar Seleccionados
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -744,6 +1061,145 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
                               <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
                                 <div className="prose prose-sm prose-gray max-w-none [&_*]:text-gray-900 [&_a]:text-blue-600 [&_code]:text-gray-800 [&_strong]:text-gray-900">
                                   <ReactMarkdown>{step.output}</ReactMarkdown>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Post Selection UI - Only for scrape_posts step */}
+                            {step.id === 'scrape_posts' && foundPosts.length > 0 && (
+                              <div className="mt-4 border border-green-200 rounded-lg overflow-hidden">
+                                <div className="bg-green-50 px-4 py-3 border-b border-green-200">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                                      <FileText className="w-4 h-4 text-green-600" />
+                                      Posts Encontrados ({foundPosts.length})
+                                    </h4>
+                                    <button
+                                      onClick={handleSelectAllPosts}
+                                      className="text-sm text-blue-600 hover:underline"
+                                    >
+                                      {selectedPostIds.size === foundPosts.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                                    </button>
+                                  </div>
+                                  <p className="text-xs text-gray-600 mt-1">
+                                    Selecciona los posts de los que quieres extraer engagers
+                                  </p>
+                                </div>
+
+                                <div className="max-h-96 overflow-y-auto divide-y divide-gray-100">
+                                  {foundPosts.map((post) => (
+                                    <div
+                                      key={post.id}
+                                      onClick={() => togglePostSelection(post.id)}
+                                      className={`
+                                        p-4 cursor-pointer transition-colors
+                                        ${selectedPostIds.has(post.id)
+                                          ? 'bg-green-50'
+                                          : 'hover:bg-gray-50'
+                                        }
+                                      `}
+                                    >
+                                      <div className="flex items-start gap-3">
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedPostIds.has(post.id)}
+                                          onChange={() => togglePostSelection(post.id)}
+                                          className="mt-1 h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-medium text-gray-900">{post.creatorName}</span>
+                                            {post.topic && (
+                                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                                                {post.topic}
+                                              </span>
+                                            )}
+                                            {post.fitScore > 0 && (
+                                              <span className="flex items-center gap-0.5">
+                                                {[...Array(5)].map((_, i) => (
+                                                  <Star
+                                                    key={i}
+                                                    className={`w-3 h-3 ${i < post.fitScore ? 'text-yellow-500 fill-yellow-500' : 'text-gray-300'}`}
+                                                  />
+                                                ))}
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          <p className="text-sm text-gray-700 mt-1 line-clamp-2">
+                                            {post.text}
+                                          </p>
+
+                                          <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
+                                            <span className="flex items-center gap-1">
+                                              <ThumbsUp className="w-4 h-4" />
+                                              {post.likes?.toLocaleString() || 0}
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                              <MessageCircle className="w-4 h-4" />
+                                              {post.comments?.toLocaleString() || 0}
+                                            </span>
+                                            <span className="text-gray-500">{post.date}</span>
+                                            {post.type && (
+                                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                                                {post.type}
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          {post.fitReason && (
+                                            <p className="text-xs text-gray-500 mt-2">{post.fitReason}</p>
+                                          )}
+
+                                          <a
+                                            href={post.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-2"
+                                          >
+                                            Ver en LinkedIn <ExternalLink className="w-3 h-3" />
+                                          </a>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                <div className="bg-gray-50 px-4 py-3 border-t border-gray-200">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="text-sm text-gray-700">
+                                      <span className="font-medium">{selectedPostIds.size}</span> posts seleccionados
+                                      {selectedPostIds.size > 0 && (
+                                        <span className="ml-2 text-gray-500">
+                                          (~{getSelectedPostsEngagement().toLocaleString()} engagers potenciales)
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={handleScrapeSelectedEngagers}
+                                    disabled={selectedPostIds.size === 0 || isScrapingEngagers}
+                                    className={`
+                                      w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-colors
+                                      ${selectedPostIds.size > 0 && !isScrapingEngagers
+                                        ? 'bg-green-600 text-white hover:bg-green-700'
+                                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                      }
+                                    `}
+                                  >
+                                    {isScrapingEngagers ? (
+                                      <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Scrapeando engagers...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Download className="w-4 h-4" />
+                                        Scrapear Engagers de {selectedPostIds.size} Posts
+                                      </>
+                                    )}
+                                  </button>
                                 </div>
                               </div>
                             )}

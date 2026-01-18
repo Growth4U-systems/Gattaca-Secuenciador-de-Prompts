@@ -4,10 +4,41 @@ import { createClient as createAdminClient } from '@/lib/supabase-server-admin'
 import { getUserApiKey } from '@/lib/getUserApiKey'
 import { decryptToken } from '@/lib/encryption'
 import { SIGNAL_OUTREACH_FLOW_STEPS } from '@/lib/templates/signal-based-outreach-playbook'
+import { APIFY_ACTORS } from '@/lib/scraperTemplates'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 120 // 2 minutes for LLM calls
+export const maxDuration = 300 // 5 minutes for scraping operations
+
+// ============================================
+// TYPES
+// ============================================
+
+interface LinkedInPost {
+  postUrl: string
+  text: string
+  likesCount: number
+  commentsCount: number
+  repostsCount?: number
+  postedAt: string
+  postType?: string
+  authorName: string
+  authorProfileUrl?: string
+}
+
+interface EvaluatedPost {
+  id: string
+  url: string
+  creatorName: string
+  text: string
+  likes: number
+  comments: number
+  date: string
+  type: string
+  topic?: string
+  fitScore: number
+  fitReason?: string
+}
 
 // Mapeo de step IDs de UI a template
 const STEP_ID_MAP: Record<string, string> = {
@@ -220,6 +251,24 @@ export async function POST(request: NextRequest) {
         onConflict: 'project_id,playbook_type,step_id'
       })
 
+    // ============================================
+    // SPECIAL HANDLING: scrape_posts
+    // Uses Apify to scrape posts, then LLM evaluates
+    // ============================================
+    if (stepId === 'scrape_posts') {
+      const result = await handleScrapePostsStep(
+        adminClient,
+        projectId,
+        playbookType,
+        stepId,
+        variables,
+        session.user.id,
+        supabase,
+        openrouterApiKey
+      )
+      return result
+    }
+
     // Execute LLM call
     const llmResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -304,4 +353,449 @@ export async function POST(request: NextRequest) {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
+}
+
+// ============================================
+// SCRAPE POSTS STEP HANDLER
+// ============================================
+
+async function handleScrapePostsStep(
+  adminClient: ReturnType<typeof createAdminClient>,
+  projectId: string,
+  playbookType: string,
+  stepId: string,
+  variables: Record<string, string>,
+  userId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  openrouterApiKey: string
+): Promise<NextResponse> {
+  try {
+    // 1. Parse creator URLs from known_creators variable
+    const creatorUrls = parseCreatorUrls(variables.known_creators || '')
+
+    if (creatorUrls.length === 0) {
+      throw new Error('No se encontraron URLs de creadores. Usa "Sugerir Creadores" o ingresa URLs manualmente.')
+    }
+
+    console.log(`[scrape_posts] Scraping posts from ${creatorUrls.length} creators`)
+
+    // 2. Get Apify API key
+    const apifyToken = await getUserApiKey({
+      userId,
+      serviceName: 'apify',
+      supabase,
+    }) || process.env.APIFY_TOKEN
+
+    if (!apifyToken) {
+      throw new Error('Apify API key not configured. Please add your API key in Settings > APIs.')
+    }
+
+    // 3. Scrape posts from each creator using Apify
+    const allPosts: LinkedInPost[] = []
+
+    for (const creatorUrl of creatorUrls) {
+      console.log(`[scrape_posts] Scraping: ${creatorUrl}`)
+
+      try {
+        const posts = await scrapeLinkedInPersonPosts(apifyToken, creatorUrl)
+        allPosts.push(...posts)
+        console.log(`[scrape_posts] Got ${posts.length} posts from ${creatorUrl}`)
+      } catch (error) {
+        console.error(`[scrape_posts] Error scraping ${creatorUrl}:`, error)
+        // Continue with other creators
+      }
+    }
+
+    if (allPosts.length === 0) {
+      throw new Error('No se pudieron scrapear posts de los creadores. Verifica las URLs.')
+    }
+
+    console.log(`[scrape_posts] Total posts scraped: ${allPosts.length}`)
+
+    // 4. Have LLM evaluate each post for ICP fit
+    const evaluatedPosts = await evaluatePostsWithLLM(
+      openrouterApiKey,
+      allPosts,
+      variables.icp_description || '',
+      variables.value_proposition || ''
+    )
+
+    // 5. Format output with markdown + JSON for UI
+    const output = formatPostsOutput(evaluatedPosts, creatorUrls.length)
+
+    // 6. Save output to database
+    await adminClient
+      .from('playbook_step_outputs')
+      .upsert({
+        project_id: projectId,
+        playbook_type: playbookType,
+        step_id: stepId,
+        output_content: output,
+        imported_data: evaluatedPosts, // Store structured data for UI
+        status: 'completed',
+        variables_used: variables,
+        executed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'project_id,playbook_type,step_id'
+      })
+
+    return NextResponse.json({
+      success: true,
+      output,
+      stepId,
+      postsCount: evaluatedPosts.length,
+      creatorsCount: creatorUrls.length,
+    })
+
+  } catch (error) {
+    console.error('[scrape_posts] Error:', error)
+
+    await adminClient
+      .from('playbook_step_outputs')
+      .upsert({
+        project_id: projectId,
+        playbook_type: playbookType,
+        step_id: stepId,
+        status: 'error',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'project_id,playbook_type,step_id'
+      })
+
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
+  }
+}
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+/**
+ * Parse creator URLs from multiline string
+ */
+function parseCreatorUrls(input: string): string[] {
+  if (!input) return []
+
+  return input
+    .split(/[\n,]/)
+    .map(url => url.trim())
+    .filter(url => url.includes('linkedin.com/in/'))
+    .map(url => {
+      // Normalize URL
+      let normalized = url.split('?')[0].replace(/\/$/, '')
+      if (!normalized.startsWith('http')) {
+        normalized = 'https://' + normalized
+      }
+      return normalized.replace('://www.', '://')
+    })
+}
+
+/**
+ * Scrape posts from a LinkedIn person using Apify
+ * Uses synchronous run with wait for results
+ */
+async function scrapeLinkedInPersonPosts(
+  apifyToken: string,
+  profileUrl: string,
+  maxPosts: number = 30
+): Promise<LinkedInPost[]> {
+  // Start the actor run
+  const runResponse = await fetch(
+    `https://api.apify.com/v2/acts/${APIFY_ACTORS.LINKEDIN_PERSON_POSTS}/runs?token=${apifyToken}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profileUrls: [profileUrl],
+        maxPosts,
+        proxy: {
+          useApifyProxy: true,
+          apifyProxyGroups: ['RESIDENTIAL'],
+        },
+      }),
+    }
+  )
+
+  if (!runResponse.ok) {
+    const errorText = await runResponse.text()
+    throw new Error(`Apify run failed: ${runResponse.status} - ${errorText}`)
+  }
+
+  const runData = await runResponse.json()
+  const runId = runData.data?.id
+
+  if (!runId) {
+    throw new Error('Apify did not return a run ID')
+  }
+
+  // Poll for completion (max 3 minutes)
+  const maxWaitMs = 180000
+  const pollIntervalMs = 5000
+  const startTime = Date.now()
+
+  while (Date.now() - startTime < maxWaitMs) {
+    const statusResponse = await fetch(
+      `https://api.apify.com/v2/actor-runs/${runId}?token=${apifyToken}`
+    )
+
+    if (!statusResponse.ok) {
+      throw new Error(`Failed to check run status: ${statusResponse.status}`)
+    }
+
+    const statusData = await statusResponse.json()
+    const status = statusData.data?.status
+
+    if (status === 'SUCCEEDED') {
+      // Get results from dataset
+      const datasetId = statusData.data?.defaultDatasetId
+      const resultsResponse = await fetch(
+        `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apifyToken}`
+      )
+
+      if (!resultsResponse.ok) {
+        throw new Error(`Failed to fetch results: ${resultsResponse.status}`)
+      }
+
+      const results = await resultsResponse.json()
+      return results.map((item: Record<string, unknown>) => ({
+        postUrl: item.postUrl || item.url || '',
+        text: item.text || item.content || '',
+        likesCount: Number(item.likesCount || item.likes || 0),
+        commentsCount: Number(item.commentsCount || item.comments || 0),
+        repostsCount: Number(item.repostsCount || item.reposts || 0),
+        postedAt: item.postedAt || item.date || '',
+        postType: item.postType || item.type || 'text',
+        authorName: item.authorName || item.author || '',
+        authorProfileUrl: item.authorProfileUrl || profileUrl,
+      }))
+    }
+
+    if (status === 'FAILED' || status === 'ABORTED' || status === 'TIMED-OUT') {
+      throw new Error(`Apify run ${status}: ${statusData.data?.statusMessage || 'Unknown error'}`)
+    }
+
+    // Wait before next poll
+    await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
+  }
+
+  throw new Error('Apify run timed out after 3 minutes')
+}
+
+/**
+ * Have LLM evaluate posts for ICP fit
+ */
+async function evaluatePostsWithLLM(
+  openrouterApiKey: string,
+  posts: LinkedInPost[],
+  icpDescription: string,
+  valueProposition: string
+): Promise<EvaluatedPost[]> {
+  // If no ICP description, just return posts without evaluation
+  if (!icpDescription) {
+    return posts.map((post, index) => ({
+      id: `post_${index + 1}`,
+      url: post.postUrl,
+      creatorName: post.authorName,
+      text: post.text.slice(0, 300),
+      likes: post.likesCount,
+      comments: post.commentsCount,
+      date: post.postedAt,
+      type: post.postType || 'text',
+      fitScore: 3,
+      fitReason: 'Sin ICP definido para evaluar',
+    }))
+  }
+
+  // Prepare posts summary for LLM (limit to avoid token limits)
+  const postsForEval = posts.slice(0, 50).map((post, index) => ({
+    id: `post_${index + 1}`,
+    url: post.postUrl,
+    creator: post.authorName,
+    text: post.text.slice(0, 200),
+    likes: post.likesCount,
+    comments: post.commentsCount,
+    date: post.postedAt,
+    type: post.postType,
+  }))
+
+  const prompt = `Eres un experto en análisis de contenido LinkedIn y segmentación B2B.
+
+**ICP (Ideal Customer Profile):**
+${icpDescription}
+
+**Propuesta de valor:**
+${valueProposition || 'No especificada'}
+
+**Posts a evaluar:**
+${JSON.stringify(postsForEval, null, 2)}
+
+**Tu tarea:**
+Para cada post, evalúa qué tan relevante es para atraer al ICP definido. Considera:
+1. ¿El tema del post atrae a personas del ICP?
+2. ¿El engagement (likes, comentarios) indica que el ICP interactúa?
+3. ¿El contenido genera debate o discusión donde el ICP participa?
+
+**Devuelve un JSON array con este formato exacto:**
+\`\`\`json
+[
+  {
+    "id": "post_1",
+    "url": "URL del post",
+    "creatorName": "Nombre del creador",
+    "text": "Resumen del texto (max 150 chars)",
+    "likes": 123,
+    "comments": 45,
+    "date": "fecha",
+    "type": "text|carousel|video",
+    "topic": "Tema detectado",
+    "fitScore": 1-5,
+    "fitReason": "Por qué este score (max 50 chars)"
+  }
+]
+\`\`\`
+
+**Scores:**
+- 5: Muy alto fit - Post directamente sobre tema del ICP, alto engagement
+- 4: Alto fit - Tema adyacente, buen engagement
+- 3: Medio - Tema tangencial o engagement moderado
+- 2: Bajo - Tema poco relevante
+- 1: Muy bajo - No relevante para el ICP
+
+Ordena los posts por fitScore descendente. Solo devuelve el JSON, sin texto adicional.`
+
+  const llmResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${openrouterApiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.0-flash-001',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 8192,
+      temperature: 0.3,
+    }),
+  })
+
+  if (!llmResponse.ok) {
+    console.error('[evaluatePostsWithLLM] LLM error, returning unevaluated posts')
+    return posts.map((post, index) => ({
+      id: `post_${index + 1}`,
+      url: post.postUrl,
+      creatorName: post.authorName,
+      text: post.text.slice(0, 300),
+      likes: post.likesCount,
+      comments: post.commentsCount,
+      date: post.postedAt,
+      type: post.postType || 'text',
+      fitScore: 3,
+    }))
+  }
+
+  const llmData = await llmResponse.json()
+  const content = llmData.choices?.[0]?.message?.content || ''
+
+  // Parse JSON from LLM response
+  try {
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/)
+    let jsonStr = jsonMatch ? jsonMatch[1].trim() : content
+    if (!jsonMatch) {
+      const arrayMatch = content.match(/\[[\s\S]*\]/)
+      if (arrayMatch) jsonStr = arrayMatch[0]
+    }
+
+    const evaluated = JSON.parse(jsonStr)
+    if (Array.isArray(evaluated)) {
+      return evaluated as EvaluatedPost[]
+    }
+  } catch (error) {
+    console.error('[evaluatePostsWithLLM] Failed to parse LLM response:', error)
+  }
+
+  // Fallback: return original posts without deep evaluation
+  return posts.map((post, index) => ({
+    id: `post_${index + 1}`,
+    url: post.postUrl,
+    creatorName: post.authorName,
+    text: post.text.slice(0, 300),
+    likes: post.likesCount,
+    comments: post.commentsCount,
+    date: post.postedAt,
+    type: post.postType || 'text',
+    fitScore: 3,
+  }))
+}
+
+/**
+ * Format posts output with markdown + JSON for UI parsing
+ */
+function formatPostsOutput(posts: EvaluatedPost[], creatorsCount: number): string {
+  // Group posts by creator
+  const byCreator = posts.reduce((acc, post) => {
+    const creator = post.creatorName || 'Unknown'
+    if (!acc[creator]) acc[creator] = []
+    acc[creator].push(post)
+    return acc
+  }, {} as Record<string, EvaluatedPost[]>)
+
+  // Calculate stats
+  const totalLikes = posts.reduce((sum, p) => sum + p.likes, 0)
+  const totalComments = posts.reduce((sum, p) => sum + p.comments, 0)
+  const avgEngagement = posts.length > 0 ? Math.round((totalLikes + totalComments) / posts.length) : 0
+
+  let output = `## Posts Scrapeados
+
+Se scrapearon **${posts.length} posts** de **${creatorsCount} creadores**.
+
+### Métricas Generales
+- Total likes: ${totalLikes.toLocaleString()}
+- Total comentarios: ${totalComments.toLocaleString()}
+- Engagement promedio: ${avgEngagement} interacciones/post
+
+### Resumen por Creador
+| Creador | Posts | Avg Likes | Top Post |
+|---------|-------|-----------|----------|
+`
+
+  for (const [creator, creatorPosts] of Object.entries(byCreator)) {
+    const avgLikes = Math.round(creatorPosts.reduce((sum, p) => sum + p.likes, 0) / creatorPosts.length)
+    const topPost = creatorPosts.reduce((max, p) => p.likes > max.likes ? p : max, creatorPosts[0])
+    output += `| ${creator} | ${creatorPosts.length} | ${avgLikes} | ${topPost.likes} likes |\n`
+  }
+
+  output += `
+### Top 10 Posts por Engagement
+
+| # | Creador | Likes | Comments | Fit | Tema |
+|---|---------|-------|----------|-----|------|
+`
+
+  const sortedPosts = [...posts].sort((a, b) => (b.likes + b.comments) - (a.likes + a.comments))
+  for (let i = 0; i < Math.min(10, sortedPosts.length); i++) {
+    const p = sortedPosts[i]
+    const stars = '⭐'.repeat(p.fitScore || 0)
+    output += `| ${i + 1} | ${p.creatorName} | ${p.likes} | ${p.comments} | ${stars} | ${p.topic || '-'} |\n`
+  }
+
+  output += `
+
+---
+
+## DATOS PARA SELECCIÓN
+
+Selecciona los posts que quieres usar para scrapear engagers. Los posts con mayor engagement y fitScore son los mejores candidatos.
+
+\`\`\`json
+${JSON.stringify({ posts }, null, 2)}
+\`\`\`
+`
+
+  return output
 }

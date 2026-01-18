@@ -66,7 +66,9 @@ export type ScraperType =
   | 'news_bing'
   // Phantombuster
   | 'linkedin_post_engagers'
-  | 'linkedin_profile_scraper';
+  | 'linkedin_profile_scraper'
+  // LinkedIn Person Posts (for Signal-Based Outreach)
+  | 'linkedin_person_posts';
 
 // ============================================
 // SCRAPER TEMPLATES
