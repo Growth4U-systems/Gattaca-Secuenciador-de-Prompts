@@ -5,6 +5,58 @@ export const runtime = 'nodejs'
 export const maxDuration = 30
 
 /**
+ * Get campaign by ID
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ campaignId: string }> }
+) {
+  try {
+    const { campaignId } = await params
+
+    if (!campaignId) {
+      return NextResponse.json(
+        { error: 'Missing campaignId' },
+        { status: 400 }
+      )
+    }
+
+    const supabase = await createClient()
+
+    // Check authentication
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { data, error } = await supabase
+      .from('ecp_campaigns')
+      .select('*')
+      .eq('id', campaignId)
+      .single()
+
+    if (error) {
+      console.error('Database error:', error)
+      return NextResponse.json(
+        { error: 'Failed to load campaign', details: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      campaign: data,
+    })
+  } catch (error) {
+    console.error('Get campaign error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
  * Update campaign
  * SECURITY FIX: Now uses user session instead of service role key
  */
