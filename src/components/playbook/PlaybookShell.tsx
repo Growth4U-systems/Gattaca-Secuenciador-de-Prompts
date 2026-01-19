@@ -13,7 +13,8 @@ import NavigationPanel from './NavigationPanel'
 import WorkArea from './WorkArea'
 import ConfigurationMode from './ConfigurationMode'
 import CampaignWizard from './CampaignWizard'
-import { Settings, ChevronDown, Plus, Folder } from 'lucide-react'
+import CampaignSettings from './CampaignSettings'
+import { Settings, ChevronDown, Plus, Folder, Pencil } from 'lucide-react'
 
 // Mode types for the unified view
 type PlaybookMode = 'config' | 'campaign'
@@ -96,16 +97,37 @@ export default function PlaybookShell({
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [showCampaignDropdown, setShowCampaignDropdown] = useState(false)
   const [showWizard, setShowWizard] = useState(false)
+  const [showCampaignSettings, setShowCampaignSettings] = useState(false)
 
-  // TODO: Load campaigns from database
+  // Load campaigns from database
+  const loadCampaigns = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/campaign/create?projectId=${projectId}`)
+      if (!response.ok) {
+        console.error('Failed to load campaigns')
+        return
+      }
+      const data = await response.json()
+      if (data.campaigns) {
+        const totalSteps = playbookConfig.phases.reduce((sum, phase) => sum + phase.steps.length, 0)
+        const mappedCampaigns: Campaign[] = data.campaigns.map((c: any) => ({
+          id: c.id,
+          name: c.ecp_name,
+          status: c.status || 'draft',
+          // Calculate completed steps from step_outputs or playbook_state
+          completedSteps: c.playbook_state?.completedSteps ?? 0,
+          totalSteps,
+        }))
+        setCampaigns(mappedCampaigns)
+      }
+    } catch (error) {
+      console.error('Error loading campaigns:', error)
+    }
+  }, [projectId, playbookConfig.phases])
+
   useEffect(() => {
-    // Fetch campaigns for this project
-    // For now, mock data
-    setCampaigns([
-      { id: '1', name: 'Nicho Fitness', status: 'in_progress', completedSteps: 3, totalSteps: 12 },
-      { id: '2', name: 'Nicho Tech', status: 'draft', completedSteps: 0, totalSteps: 12 },
-    ])
-  }, [projectId])
+    loadCampaigns()
+  }, [loadCampaigns])
 
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
 
@@ -429,7 +451,7 @@ export default function PlaybookShell({
           </button>
 
           {/* Campaign selector */}
-          <div className="relative">
+          <div className="relative flex items-center gap-1">
             <button
               onClick={() => {
                 setMode('campaign')
@@ -445,6 +467,17 @@ export default function PlaybookShell({
               {selectedCampaign ? selectedCampaign.name : 'Seleccionar Campaña'}
               <ChevronDown size={16} />
             </button>
+
+            {/* Edit campaign settings button */}
+            {selectedCampaignId && (
+              <button
+                onClick={() => setShowCampaignSettings(true)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                title="Editar configuración de campaña"
+              >
+                <Pencil size={14} />
+              </button>
+            )}
 
             {/* Dropdown */}
             {showCampaignDropdown && (
@@ -563,7 +596,19 @@ export default function PlaybookShell({
             setSelectedCampaignId(campaignId)
             setShowWizard(false)
             // Reload campaigns
-            // TODO: Proper reload logic
+            loadCampaigns()
+          }}
+        />
+      )}
+
+      {/* Campaign Settings Modal */}
+      {showCampaignSettings && selectedCampaignId && (
+        <CampaignSettings
+          campaignId={selectedCampaignId}
+          playbookConfig={playbookConfig}
+          onClose={() => setShowCampaignSettings(false)}
+          onSaved={() => {
+            loadCampaigns()
           }}
         />
       )}
