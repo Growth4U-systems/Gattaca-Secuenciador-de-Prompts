@@ -25,6 +25,7 @@ interface Campaign {
   status: 'draft' | 'in_progress' | 'completed'
   completedSteps: number
   totalSteps: number
+  customVariables?: Record<string, unknown> // Includes context_type, product, target, etc.
 }
 
 function initializeState(
@@ -117,6 +118,7 @@ export default function PlaybookShell({
           // Calculate completed steps from step_outputs or playbook_state
           completedSteps: c.playbook_state?.completedSteps ?? 0,
           totalSteps,
+          customVariables: c.custom_variables || {}, // Load campaign variables including context_type
         }))
         setCampaigns(mappedCampaigns)
       }
@@ -154,9 +156,14 @@ export default function PlaybookShell({
 
   // Build context for LLM-based suggestion generation
   const buildPlaybookContext = (): Record<string, unknown> => {
+    // Start with campaign's custom_variables (includes context_type, product, target, etc.)
+    const campaignVars = selectedCampaign?.customVariables || {}
+
     const context: Record<string, unknown> = {
-      product: state.config?.product || '',
-      target: state.config?.target || '',
+      ...campaignVars, // Include all campaign variables
+      product: campaignVars.product || state.config?.product || '',
+      target: campaignVars.target || state.config?.target || '',
+      context_type: campaignVars.context_type || 'both', // Explicitly include context_type
     }
 
     // Collect values from completed steps

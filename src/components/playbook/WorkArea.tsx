@@ -52,7 +52,7 @@ function SuggestionStep({ step, stepState, onUpdateState, onContinue, playbookCo
       if (suggestions.length > 0) return // Already loaded
 
       const contextType = playbookContext?.context_type || 'both'
-      let fixedOptions: Array<{ id: string; label: string; category?: string }> = []
+      let fixedOptions: Array<{ id: string; label: string; category?: string; contextType?: 'b2c' | 'b2b' }> = []
 
       // Load appropriate lists based on context_type
       if (contextType === 'personal' || contextType === 'both') {
@@ -62,11 +62,12 @@ function SuggestionStep({ step, stepState, onUpdateState, onContinue, playbookCo
         fixedOptions = [...fixedOptions, ...B2B_CONTEXTS]
       }
 
-      // Format for suggestions state
+      // Format for suggestions state (include contextType for visual grouping)
       const formattedSuggestions = fixedOptions.map(opt => ({
         id: opt.id,
         label: opt.label,
         category: opt.category,
+        contextType: opt.contextType,
         selected: false,
       }))
 
@@ -250,33 +251,117 @@ function SuggestionStep({ step, stepState, onUpdateState, onContinue, playbookCo
     )
   }
 
-  // Group suggestions by category for fixed options
+  // Group suggestions by contextType (B2C/B2B) first, then by category
+  const hasContextTypes = suggestions.some(s => s.contextType)
   const hasCategories = suggestions.some(s => s.category)
-  const groupedSuggestions = hasCategories
-    ? suggestions.reduce((acc, suggestion) => {
-        const category = suggestion.category || 'Otros'
-        if (!acc[category]) acc[category] = []
-        acc[category].push(suggestion)
-        return acc
-      }, {} as Record<string, typeof suggestions>)
+
+  // Group by contextType then category for visual separation
+  const groupedByContextType = hasContextTypes
+    ? {
+        b2c: suggestions.filter(s => s.contextType === 'b2c'),
+        b2b: suggestions.filter(s => s.contextType === 'b2b'),
+        other: suggestions.filter(s => !s.contextType), // Custom items
+      }
     : null
 
-  // Render chips/tags UI for fixed options with categories
-  if (config?.generateFrom === 'fixed' && groupedSuggestions) {
+  // Helper to group items by category
+  const groupByCategory = (items: typeof suggestions) =>
+    items.reduce((acc, suggestion) => {
+      const category = suggestion.category || 'Otros'
+      if (!acc[category]) acc[category] = []
+      acc[category].push(suggestion)
+      return acc
+    }, {} as Record<string, typeof suggestions>)
+
+  // Render chips/tags UI for fixed options with B2C/B2B sections
+  if (config?.generateFrom === 'fixed' && (hasContextTypes || hasCategories)) {
+    const showBothSections = groupedByContextType && groupedByContextType.b2c.length > 0 && groupedByContextType.b2b.length > 0
+
     return (
       <div className="space-y-4">
         <p className="text-gray-600 text-sm">
           {step.description || 'Selecciona las opciones que aplican a tu caso.'}
         </p>
 
-        <div className="space-y-4">
-          {Object.entries(groupedSuggestions).map(([category, items]) => (
-            <div key={category}>
+        <div className="space-y-6">
+          {/* B2C Section */}
+          {groupedByContextType && groupedByContextType.b2c.length > 0 && (
+            <div>
+              {showBothSections && (
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2 border-b border-gray-200 pb-2">
+                  <span>👤</span> Personal (B2C)
+                </h3>
+              )}
+              <div className="space-y-3">
+                {Object.entries(groupByCategory(groupedByContextType.b2c)).map(([category, items]) => (
+                  <div key={`b2c-${category}`}>
+                    <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                      {category}
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {items.map(suggestion => (
+                        <button
+                          key={suggestion.id}
+                          onClick={() => toggleSuggestion(suggestion.id)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                            suggestion.selected
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {suggestion.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* B2B Section */}
+          {groupedByContextType && groupedByContextType.b2b.length > 0 && (
+            <div>
+              {showBothSections && (
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2 border-b border-gray-200 pb-2">
+                  <span>🏢</span> Empresas (B2B)
+                </h3>
+              )}
+              <div className="space-y-3">
+                {Object.entries(groupByCategory(groupedByContextType.b2b)).map(([category, items]) => (
+                  <div key={`b2b-${category}`}>
+                    <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                      {category}
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {items.map(suggestion => (
+                        <button
+                          key={suggestion.id}
+                          onClick={() => toggleSuggestion(suggestion.id)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                            suggestion.selected
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {suggestion.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Custom items (no contextType) */}
+          {groupedByContextType && groupedByContextType.other.length > 0 && (
+            <div>
               <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                {category}
+                Personalizados
               </h4>
               <div className="flex flex-wrap gap-2">
-                {items.map(suggestion => (
+                {groupedByContextType.other.map(suggestion => (
                   <button
                     key={suggestion.id}
                     onClick={() => toggleSuggestion(suggestion.id)}
@@ -291,7 +376,7 @@ function SuggestionStep({ step, stepState, onUpdateState, onContinue, playbookCo
                 ))}
               </div>
             </div>
-          ))}
+          )}
         </div>
 
         {config?.allowAdd && (

@@ -24,38 +24,38 @@ import { PlaybookConfig } from '../types'
  */
 export const B2C_CONTEXTS = [
   // Familia
-  { id: 'padres', label: 'padres', category: 'Familia' },
-  { id: 'hijo', label: 'hijo', category: 'Familia' },
-  { id: 'pareja', label: 'pareja', category: 'Familia' },
-  { id: 'divorciado', label: 'divorciado', category: 'Familia' },
-  { id: 'viudo', label: 'viudo', category: 'Familia' },
-  { id: 'abuelos', label: 'abuelos', category: 'Familia' },
+  { id: 'padres', label: 'padres', category: 'Familia', contextType: 'b2c' as const },
+  { id: 'hijo', label: 'hijo', category: 'Familia', contextType: 'b2c' as const },
+  { id: 'pareja', label: 'pareja', category: 'Familia', contextType: 'b2c' as const },
+  { id: 'divorciado', label: 'divorciado', category: 'Familia', contextType: 'b2c' as const },
+  { id: 'viudo', label: 'viudo', category: 'Familia', contextType: 'b2c' as const },
+  { id: 'abuelos', label: 'abuelos', category: 'Familia', contextType: 'b2c' as const },
 
   // Social
-  { id: 'amigos', label: 'amigos', category: 'Social' },
-  { id: 'companeros', label: 'compañeros', category: 'Social' },
-  { id: 'roommates', label: 'roommates', category: 'Social' },
+  { id: 'amigos', label: 'amigos', category: 'Social', contextType: 'b2c' as const },
+  { id: 'companeros', label: 'compañeros', category: 'Social', contextType: 'b2c' as const },
+  { id: 'roommates', label: 'roommates', category: 'Social', contextType: 'b2c' as const },
 
   // Etapa vital
-  { id: 'estudiante', label: 'estudiante', category: 'Etapa vital' },
-  { id: 'jubilado', label: 'jubilado', category: 'Etapa vital' },
-  { id: 'recien_casado', label: 'recién casado', category: 'Etapa vital' },
+  { id: 'estudiante', label: 'estudiante', category: 'Etapa vital', contextType: 'b2c' as const },
+  { id: 'jubilado', label: 'jubilado', category: 'Etapa vital', contextType: 'b2c' as const },
+  { id: 'recien_casado', label: 'recién casado', category: 'Etapa vital', contextType: 'b2c' as const },
 
   // Situaciones
-  { id: 'viaje', label: 'viaje', category: 'Situaciones' },
-  { id: 'intercambio', label: 'intercambio', category: 'Situaciones' },
-  { id: 'mudanza', label: 'mudanza', category: 'Situaciones' },
-  { id: 'expatriado', label: 'expatriado', category: 'Situaciones' },
+  { id: 'viaje', label: 'viaje', category: 'Situaciones', contextType: 'b2c' as const },
+  { id: 'intercambio', label: 'intercambio', category: 'Situaciones', contextType: 'b2c' as const },
+  { id: 'mudanza', label: 'mudanza', category: 'Situaciones', contextType: 'b2c' as const },
+  { id: 'expatriado', label: 'expatriado', category: 'Situaciones', contextType: 'b2c' as const },
 
   // Empleo
-  { id: 'primer_empleo', label: 'primer empleo', category: 'Empleo' },
-  { id: 'gerente', label: 'gerente', category: 'Empleo' },
-  { id: 'director', label: 'director', category: 'Empleo' },
-  { id: 'equipo', label: 'equipo', category: 'Empleo' },
-  { id: 'dueno', label: 'dueño', category: 'Empleo' },
-  { id: 'jefe', label: 'jefe', category: 'Empleo' },
-  { id: 'empleado', label: 'empleado', category: 'Empleo' },
-  { id: 'ascenso', label: 'ascenso', category: 'Empleo' },
+  { id: 'primer_empleo', label: 'primer empleo', category: 'Empleo', contextType: 'b2c' as const },
+  { id: 'gerente', label: 'gerente', category: 'Empleo', contextType: 'b2c' as const },
+  { id: 'director', label: 'director', category: 'Empleo', contextType: 'b2c' as const },
+  { id: 'equipo', label: 'equipo', category: 'Empleo', contextType: 'b2c' as const },
+  { id: 'dueno', label: 'dueño', category: 'Empleo', contextType: 'b2c' as const },
+  { id: 'jefe', label: 'jefe', category: 'Empleo', contextType: 'b2c' as const },
+  { id: 'empleado', label: 'empleado', category: 'Empleo', contextType: 'b2c' as const },
+  { id: 'ascenso', label: 'ascenso', category: 'Empleo', contextType: 'b2c' as const },
 ]
 
 /**
@@ -64,28 +64,28 @@ export const B2C_CONTEXTS = [
  */
 export const B2B_CONTEXTS = [
   // Tipo de negocio
-  { id: 'freelancer', label: 'freelancer', category: 'Tipo' },
-  { id: 'autonomo', label: 'autónomo', category: 'Tipo' },
-  { id: 'pyme', label: 'PYME', category: 'Tipo' },
-  { id: 'startup', label: 'startup', category: 'Tipo' },
-  { id: 'empresa_familiar', label: 'empresa familiar', category: 'Tipo' },
-  { id: 'agencia', label: 'agencia', category: 'Tipo' },
+  { id: 'freelancer', label: 'freelancer', category: 'Tipo', contextType: 'b2b' as const },
+  { id: 'autonomo', label: 'autónomo', category: 'Tipo', contextType: 'b2b' as const },
+  { id: 'pyme', label: 'PYME', category: 'Tipo', contextType: 'b2b' as const },
+  { id: 'startup', label: 'startup', category: 'Tipo', contextType: 'b2b' as const },
+  { id: 'empresa_familiar', label: 'empresa familiar', category: 'Tipo', contextType: 'b2b' as const },
+  { id: 'agencia', label: 'agencia', category: 'Tipo', contextType: 'b2b' as const },
 
   // Mercado
-  { id: 'exportador', label: 'exportador', category: 'Mercado' },
-  { id: 'importador', label: 'importador', category: 'Mercado' },
-  { id: 'ecommerce', label: 'e-commerce', category: 'Mercado' },
-  { id: 'saas', label: 'SaaS', category: 'Mercado' },
+  { id: 'exportador', label: 'exportador', category: 'Mercado', contextType: 'b2b' as const },
+  { id: 'importador', label: 'importador', category: 'Mercado', contextType: 'b2b' as const },
+  { id: 'ecommerce', label: 'e-commerce', category: 'Mercado', contextType: 'b2b' as const },
+  { id: 'saas', label: 'SaaS', category: 'Mercado', contextType: 'b2b' as const },
 
   // Etapa
-  { id: 'expansion', label: 'expansión', category: 'Etapa' },
-  { id: 'inversion', label: 'inversión', category: 'Etapa' },
-  { id: 'internacionalizacion', label: 'internacionalización', category: 'Etapa' },
+  { id: 'expansion', label: 'expansión', category: 'Etapa', contextType: 'b2b' as const },
+  { id: 'inversion', label: 'inversión', category: 'Etapa', contextType: 'b2b' as const },
+  { id: 'internacionalizacion', label: 'internacionalización', category: 'Etapa', contextType: 'b2b' as const },
 
   // Equipo
-  { id: 'socio', label: 'socio', category: 'Equipo' },
-  { id: 'empleados', label: 'empleados', category: 'Equipo' },
-  { id: 'remoto', label: 'remoto', category: 'Equipo' },
+  { id: 'socio', label: 'socio', category: 'Equipo', contextType: 'b2b' as const },
+  { id: 'empleados', label: 'empleados', category: 'Equipo', contextType: 'b2b' as const },
+  { id: 'remoto', label: 'remoto', category: 'Equipo', contextType: 'b2b' as const },
 ]
 export const nicheFinderConfig: PlaybookConfig = {
   id: 'niche_finder',
