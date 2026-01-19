@@ -14,7 +14,7 @@ import WorkArea from './WorkArea'
 import ConfigurationMode from './ConfigurationMode'
 import CampaignWizard from './CampaignWizard'
 import CampaignSettings from './CampaignSettings'
-import { Settings, ChevronDown, Plus, Folder, Pencil } from 'lucide-react'
+import { Settings, ChevronDown, Plus, Folder, Pencil, Trash2 } from 'lucide-react'
 
 // Mode types for the unified view
 type PlaybookMode = 'config' | 'campaign'
@@ -201,6 +201,34 @@ export default function PlaybookShell({
       }, 100)
     }
   }, [selectedCampaignId, campaigns, projectId, playbookConfig])
+
+  // Delete a campaign
+  const deleteCampaign = useCallback(async (campaignId: string) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar esta campaña? Esta acción no se puede deshacer.')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/campaign/${campaignId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error('Error al eliminar campaña')
+      }
+
+      // If we deleted the selected campaign, clear selection
+      if (selectedCampaignId === campaignId) {
+        setSelectedCampaignId(null)
+      }
+
+      // Reload campaigns
+      loadCampaigns()
+    } catch (error) {
+      console.error('Error deleting campaign:', error)
+      alert('Error al eliminar la campaña')
+    }
+  }, [selectedCampaignId, loadCampaigns])
 
   // Helper function to get the output from the previous step
   const getPreviousStepOutput = (): string | undefined => {
@@ -563,21 +591,35 @@ export default function PlaybookShell({
                   <div className="px-3 py-2 text-sm text-gray-500">No hay campañas</div>
                 ) : (
                   campaigns.map(campaign => (
-                    <button
+                    <div
                       key={campaign.id}
-                      onClick={() => {
-                        setSelectedCampaignId(campaign.id)
-                        setShowCampaignDropdown(false)
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 ${
+                      className={`flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 ${
                         selectedCampaignId === campaign.id ? 'bg-blue-50' : ''
                       }`}
                     >
-                      <span className="font-medium text-gray-900">{campaign.name}</span>
-                      <span className="text-gray-500">
-                        {campaign.completedSteps}/{campaign.totalSteps}
-                      </span>
-                    </button>
+                      <button
+                        onClick={() => {
+                          setSelectedCampaignId(campaign.id)
+                          setShowCampaignDropdown(false)
+                        }}
+                        className="flex-1 flex items-center justify-between text-left"
+                      >
+                        <span className="font-medium text-gray-900">{campaign.name}</span>
+                        <span className="text-gray-500 mr-2">
+                          {campaign.completedSteps}/{campaign.totalSteps}
+                        </span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteCampaign(campaign.id)
+                        }}
+                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                        title="Eliminar campaña"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   ))
                 )}
                 <div className="border-t border-gray-100 mt-1 pt-1">
