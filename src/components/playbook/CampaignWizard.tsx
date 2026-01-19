@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { X, ChevronRight, ChevronLeft, Check, Loader2 } from 'lucide-react'
 import { PlaybookConfig } from './types'
+import { getDefaultPromptForStep } from './utils/getDefaultPrompts'
 
 interface CampaignWizardProps {
   projectId: string
@@ -43,40 +44,64 @@ export default function CampaignWizard({
   useEffect(() => {
     const extractVariables = async () => {
       try {
-        // Fetch flow config to get prompts
+        // Fetch flow config to get custom prompts (if any)
         const response = await fetch(`/api/projects/${projectId}`)
         const data = await response.json()
         const flowConfig = data.project?.legacy_flow_config
 
-        if (flowConfig?.steps) {
-          const variableSet = new Set<string>()
+        const variableSet = new Set<string>()
 
-          // Extract {{variable}} patterns from all prompts
+        // Helper function to extract variables from a prompt string
+        const extractFromPrompt = (prompt: string) => {
+          // Match {{variable}} but not {{#if ...}} or {{/if}}
+          const matches = prompt.match(/\{\{(\w+)\}\}/g) || []
+          matches.forEach((match: string) => {
+            const varName = match.replace(/\{\{|\}\}/g, '')
+            // Skip template control keywords
+            if (!['if', 'else', 'endif'].includes(varName)) {
+              variableSet.add(varName)
+            }
+          })
+        }
+
+        // 1. Extract from custom prompts in flow config (if saved)
+        if (flowConfig?.steps) {
           flowConfig.steps.forEach((flowStep: any) => {
             if (flowStep.prompt) {
-              const matches = flowStep.prompt.match(/\{\{(\w+)\}\}/g) || []
-              matches.forEach((match: string) => {
-                const varName = match.replace(/\{\{|\}\}/g, '')
-                variableSet.add(varName)
-              })
+              extractFromPrompt(flowStep.prompt)
             }
           })
+        }
 
-          // Convert to array with labels
-          const variables = Array.from(variableSet).map(key => {
-            // Find if there's a variable definition for this
-            const varDef = playbookConfig.variables?.find(v => v.key === key)
+        // 2. Extract from default template prompts for all steps with promptKey
+        playbookConfig.phases.forEach(phase => {
+          phase.steps.forEach(step => {
+            if (step.promptKey) {
+              const defaultPrompt = getDefaultPromptForStep(step.id, step.promptKey)
+              if (defaultPrompt) {
+                extractFromPrompt(defaultPrompt)
+              }
+            }
+          })
+        })
+
+        // Filter out system variables (those defined in playbookConfig.variables)
+        const systemVarKeys = new Set(playbookConfig.variables?.map(v => v.key) || [])
+
+        // Convert to array with labels, excluding system variables
+        const variables = Array.from(variableSet)
+          .filter(key => !systemVarKeys.has(key))
+          .map(key => {
             return {
               key,
-              label: varDef?.label || formatLabel(key),
-              value: varDef?.defaultValue?.toString() || '',
+              label: formatLabel(key),
+              value: '',
               description: undefined,
-              required: varDef?.required ?? true,
+              required: true,
             }
           })
 
-          setPromptVariables(variables)
-        }
+        setPromptVariables(variables)
 
         // Initialize system config from playbook variables
         const initialConfig: Record<string, any> = {}
