@@ -17,6 +17,76 @@ import { PlaybookConfig } from '../types'
  *    - Step 4: Consolidate - Combina tabla con scores
  * 5. RESULTADOS: Selección, dashboard, exportación
  */
+
+/**
+ * Predefined life contexts for B2C (personal situations)
+ * Short keywords for search queries - combined with need words
+ */
+export const B2C_CONTEXTS = [
+  // Familia
+  { id: 'padres', label: 'padres', category: 'Familia' },
+  { id: 'hijo', label: 'hijo', category: 'Familia' },
+  { id: 'pareja', label: 'pareja', category: 'Familia' },
+  { id: 'divorciado', label: 'divorciado', category: 'Familia' },
+  { id: 'viudo', label: 'viudo', category: 'Familia' },
+  { id: 'abuelos', label: 'abuelos', category: 'Familia' },
+
+  // Social
+  { id: 'amigos', label: 'amigos', category: 'Social' },
+  { id: 'companeros', label: 'compañeros', category: 'Social' },
+  { id: 'roommates', label: 'roommates', category: 'Social' },
+
+  // Etapa vital
+  { id: 'estudiante', label: 'estudiante', category: 'Etapa vital' },
+  { id: 'jubilado', label: 'jubilado', category: 'Etapa vital' },
+  { id: 'recien_casado', label: 'recién casado', category: 'Etapa vital' },
+
+  // Situaciones
+  { id: 'viaje', label: 'viaje', category: 'Situaciones' },
+  { id: 'intercambio', label: 'intercambio', category: 'Situaciones' },
+  { id: 'mudanza', label: 'mudanza', category: 'Situaciones' },
+  { id: 'expatriado', label: 'expatriado', category: 'Situaciones' },
+
+  // Empleo
+  { id: 'primer_empleo', label: 'primer empleo', category: 'Empleo' },
+  { id: 'gerente', label: 'gerente', category: 'Empleo' },
+  { id: 'director', label: 'director', category: 'Empleo' },
+  { id: 'equipo', label: 'equipo', category: 'Empleo' },
+  { id: 'dueno', label: 'dueño', category: 'Empleo' },
+  { id: 'jefe', label: 'jefe', category: 'Empleo' },
+  { id: 'empleado', label: 'empleado', category: 'Empleo' },
+  { id: 'ascenso', label: 'ascenso', category: 'Empleo' },
+]
+
+/**
+ * Predefined business contexts for B2B
+ * Short keywords for search queries - combined with need words
+ */
+export const B2B_CONTEXTS = [
+  // Tipo de negocio
+  { id: 'freelancer', label: 'freelancer', category: 'Tipo' },
+  { id: 'autonomo', label: 'autónomo', category: 'Tipo' },
+  { id: 'pyme', label: 'PYME', category: 'Tipo' },
+  { id: 'startup', label: 'startup', category: 'Tipo' },
+  { id: 'empresa_familiar', label: 'empresa familiar', category: 'Tipo' },
+  { id: 'agencia', label: 'agencia', category: 'Tipo' },
+
+  // Mercado
+  { id: 'exportador', label: 'exportador', category: 'Mercado' },
+  { id: 'importador', label: 'importador', category: 'Mercado' },
+  { id: 'ecommerce', label: 'e-commerce', category: 'Mercado' },
+  { id: 'saas', label: 'SaaS', category: 'Mercado' },
+
+  // Etapa
+  { id: 'expansion', label: 'expansión', category: 'Etapa' },
+  { id: 'inversion', label: 'inversión', category: 'Etapa' },
+  { id: 'internacionalizacion', label: 'internacionalización', category: 'Etapa' },
+
+  // Equipo
+  { id: 'socio', label: 'socio', category: 'Equipo' },
+  { id: 'empleados', label: 'empleados', category: 'Equipo' },
+  { id: 'remoto', label: 'remoto', category: 'Equipo' },
+]
 export const nicheFinderConfig: PlaybookConfig = {
   id: 'niche_finder',
   type: 'niche_finder',
@@ -37,16 +107,16 @@ export const nicheFinderConfig: PlaybookConfig = {
         // No need for a separate step - value comes from campaign's custom_variables
         {
           id: 'life_contexts',
-          name: 'Contextos de Vida',
-          description: 'Situaciones donde tu cliente potencial podría necesitar lo que tu producto resuelve',
+          name: 'Contextos de Búsqueda',
+          description: 'Palabras clave que describen a tu cliente potencial. Se combinan con las palabras de necesidad para formar queries de búsqueda.',
           type: 'suggestion',
-          executor: 'llm',
-          promptKey: 'suggest_life_contexts',
+          executor: 'none', // No LLM, fixed lists
           // No dependsOn - context_type comes from campaign config, not a previous step
           suggestionConfig: {
-            generateFrom: 'llm',
+            generateFrom: 'fixed',
+            fixedOptionsKey: 'life_contexts', // Will load B2C_CONTEXTS and/or B2B_CONTEXTS based on context_type
             allowAdd: true,
-            allowEdit: true,
+            allowEdit: false,
             minSelections: 1,
           },
         },

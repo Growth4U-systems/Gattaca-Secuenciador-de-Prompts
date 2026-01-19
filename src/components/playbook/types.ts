@@ -57,8 +57,9 @@ export interface StepDefinition {
 
   // For suggestion type
   suggestionConfig?: {
-    generateFrom: 'project' | 'previous_step' | 'api' | 'llm'
+    generateFrom: 'project' | 'previous_step' | 'api' | 'llm' | 'fixed'
     apiEndpoint?: string
+    fixedOptionsKey?: string // For 'fixed' - key to identify which lists to load
     allowAdd?: boolean
     allowEdit?: boolean
     minSelections?: number
@@ -127,7 +128,7 @@ export interface StepState {
   output?: any
 
   // For suggestion steps
-  suggestions?: Array<{ id: string; label: string; selected: boolean; description?: string }>
+  suggestions?: Array<{ id: string; label: string; selected: boolean; description?: string; category?: string }>
 
   // For decision steps
   decision?: any
