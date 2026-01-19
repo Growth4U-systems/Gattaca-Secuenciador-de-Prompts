@@ -17,6 +17,7 @@ import ReactMarkdown from 'react-markdown'
 import { WorkAreaProps, StepDefinition, StepState } from './types'
 import DeepResearchManualStep from './steps/DeepResearchManualStep'
 import { getDefaultPrompt } from './utils/getDefaultPrompts'
+import { B2C_CONTEXTS, B2B_CONTEXTS } from './configs/niche-finder.config'
 
 // Sub-components for different step types
 
@@ -43,6 +44,39 @@ function SuggestionStep({ step, stepState, onUpdateState, onContinue, playbookCo
   const config = step.suggestionConfig
   const selectedCount = suggestions.filter(s => s.selected).length
   const canContinue = !config?.minSelections || selectedCount >= config.minSelections
+
+  // Load fixed options based on context_type
+  useEffect(() => {
+    const loadFixedOptions = () => {
+      if (config?.generateFrom !== 'fixed') return
+      if (suggestions.length > 0) return // Already loaded
+
+      const contextType = playbookContext?.context_type || 'both'
+      let fixedOptions: Array<{ id: string; label: string; category?: string }> = []
+
+      // Load appropriate lists based on context_type
+      if (contextType === 'personal' || contextType === 'both') {
+        fixedOptions = [...fixedOptions, ...B2C_CONTEXTS]
+      }
+      if (contextType === 'business' || contextType === 'both') {
+        fixedOptions = [...fixedOptions, ...B2B_CONTEXTS]
+      }
+
+      // Format for suggestions state
+      const formattedSuggestions = fixedOptions.map(opt => ({
+        id: opt.id,
+        label: opt.label,
+        category: opt.category,
+        selected: false,
+      }))
+
+      if (formattedSuggestions.length > 0) {
+        onUpdateState({ suggestions: formattedSuggestions })
+      }
+    }
+
+    loadFixedOptions()
+  }, [config?.generateFrom, suggestions.length, playbookContext?.context_type, onUpdateState])
 
   // Load suggestions from API if configured
   useEffect(() => {
@@ -216,6 +250,94 @@ function SuggestionStep({ step, stepState, onUpdateState, onContinue, playbookCo
     )
   }
 
+  // Group suggestions by category for fixed options
+  const hasCategories = suggestions.some(s => s.category)
+  const groupedSuggestions = hasCategories
+    ? suggestions.reduce((acc, suggestion) => {
+        const category = suggestion.category || 'Otros'
+        if (!acc[category]) acc[category] = []
+        acc[category].push(suggestion)
+        return acc
+      }, {} as Record<string, typeof suggestions>)
+    : null
+
+  // Render chips/tags UI for fixed options with categories
+  if (config?.generateFrom === 'fixed' && groupedSuggestions) {
+    return (
+      <div className="space-y-4">
+        <p className="text-gray-600 text-sm">
+          {step.description || 'Selecciona las opciones que aplican a tu caso.'}
+        </p>
+
+        <div className="space-y-4">
+          {Object.entries(groupedSuggestions).map(([category, items]) => (
+            <div key={category}>
+              <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                {category}
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {items.map(suggestion => (
+                  <button
+                    key={suggestion.id}
+                    onClick={() => toggleSuggestion(suggestion.id)}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                      suggestion.selected
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {suggestion.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {config?.allowAdd && (
+          <div className="flex gap-2 pt-2">
+            <input
+              type="text"
+              value={newItem}
+              onChange={e => setNewItem(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addCustomItem()}
+              placeholder="Agregar contexto personalizado..."
+              className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <button
+              onClick={addCustomItem}
+              disabled={!newItem.trim()}
+              className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+        )}
+
+        {config?.minSelections && (
+          <p className="text-xs text-gray-500">
+            Mínimo {config.minSelections} selección{config.minSelections > 1 ? 'es' : ''}
+            {selectedCount < config.minSelections && (
+              <span className="text-orange-600 ml-1">
+                (faltan {config.minSelections - selectedCount})
+              </span>
+            )}
+          </p>
+        )}
+
+        <button
+          onClick={onContinue}
+          disabled={!canContinue}
+          className="w-full mt-4 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          Continuar
+          <ChevronRight size={16} />
+        </button>
+      </div>
+    )
+  }
+
+  // Default list UI for API/LLM generated suggestions
   return (
     <div className="space-y-4">
       <p className="text-gray-600 text-sm">
