@@ -33,23 +33,8 @@ export const nicheFinderConfig: PlaybookConfig = {
       name: 'Configuración',
       description: 'Define el producto y contexto de búsqueda',
       steps: [
-        {
-          id: 'context_type',
-          name: 'Tipo de Cliente',
-          description: 'Define si buscas nichos B2C (personal), B2B (empresas) o ambos',
-          type: 'decision',
-          executor: 'none',
-          decisionConfig: {
-            question: '¿Qué tipo de clientes quieres encontrar?',
-            optionsFrom: 'fixed',
-            fixedOptions: [
-              { id: 'personal', label: '🏠 B2C (Personal)', description: 'Situaciones de vida personal: pareja, hijos, jubilación...' },
-              { id: 'business', label: '🏢 B2B (Empresas)', description: 'Situaciones de negocio: startup, freelance, pyme...' },
-              { id: 'both', label: '🔄 Ambos', description: 'Buscar situaciones de vida personal Y de negocio' },
-            ],
-            defaultSelection: 'both',
-          },
-        },
+        // context_type is configured in Campaign Wizard (variables section below)
+        // No need for a separate step - value comes from campaign's custom_variables
         {
           id: 'life_contexts',
           name: 'Contextos de Vida',
@@ -57,7 +42,7 @@ export const nicheFinderConfig: PlaybookConfig = {
           type: 'suggestion',
           executor: 'llm',
           promptKey: 'suggest_life_contexts',
-          dependsOn: ['context_type'],
+          // No dependsOn - context_type comes from campaign config, not a previous step
           suggestionConfig: {
             generateFrom: 'llm',
             allowAdd: true,

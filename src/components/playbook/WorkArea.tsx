@@ -352,7 +352,10 @@ interface DecisionStepProps {
 
 function DecisionStep({ step, stepState, onUpdateState, onContinue }: DecisionStepProps) {
   const config = step.decisionConfig
-  const options = stepState.suggestions || []
+  // Use fixedOptions from config if optionsFrom is 'fixed', otherwise fall back to stepState.suggestions
+  const options = config?.optionsFrom === 'fixed' && config?.fixedOptions
+    ? config.fixedOptions.map(opt => ({ ...opt, selected: false }))
+    : (stepState.suggestions || [])
   const selected = stepState.decision || (config?.multiSelect ? [] : null)
 
   const handleSelect = (optionId: string) => {
