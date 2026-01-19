@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   ChevronLeft,
   ChevronRight,
@@ -45,38 +45,43 @@ function SuggestionStep({ step, stepState, onUpdateState, onContinue, playbookCo
   const selectedCount = suggestions.filter(s => s.selected).length
   const canContinue = !config?.minSelections || selectedCount >= config.minSelections
 
+  // Ref to prevent infinite re-renders when loading fixed options
+  const hasLoadedFixedRef = useRef(false)
+
   // Load fixed options based on context_type
   useEffect(() => {
-    const loadFixedOptions = () => {
-      if (config?.generateFrom !== 'fixed') return
-      if (suggestions.length > 0) return // Already loaded
+    if (config?.generateFrom !== 'fixed') {
+      hasLoadedFixedRef.current = false
+      return
+    }
+    if (hasLoadedFixedRef.current) return
+    if (suggestions.length > 0) return // Already loaded from state
 
-      const contextType = playbookContext?.context_type || 'both'
-      let fixedOptions: Array<{ id: string; label: string; category?: string; contextType?: 'b2c' | 'b2b' }> = []
+    hasLoadedFixedRef.current = true
 
-      // Load appropriate lists based on context_type
-      if (contextType === 'personal' || contextType === 'both') {
-        fixedOptions = [...fixedOptions, ...B2C_CONTEXTS]
-      }
-      if (contextType === 'business' || contextType === 'both') {
-        fixedOptions = [...fixedOptions, ...B2B_CONTEXTS]
-      }
+    const contextType = playbookContext?.context_type || 'both'
+    let fixedOptions: Array<{ id: string; label: string; category?: string; contextType?: 'b2c' | 'b2b' }> = []
 
-      // Format for suggestions state (include contextType for visual grouping)
-      const formattedSuggestions = fixedOptions.map(opt => ({
-        id: opt.id,
-        label: opt.label,
-        category: opt.category,
-        contextType: opt.contextType,
-        selected: false,
-      }))
-
-      if (formattedSuggestions.length > 0) {
-        onUpdateState({ suggestions: formattedSuggestions })
-      }
+    // Load appropriate lists based on context_type
+    if (contextType === 'personal' || contextType === 'both') {
+      fixedOptions = [...fixedOptions, ...B2C_CONTEXTS]
+    }
+    if (contextType === 'business' || contextType === 'both') {
+      fixedOptions = [...fixedOptions, ...B2B_CONTEXTS]
     }
 
-    loadFixedOptions()
+    // Format for suggestions state (include contextType for visual grouping)
+    const formattedSuggestions = fixedOptions.map(opt => ({
+      id: opt.id,
+      label: opt.label,
+      category: opt.category,
+      contextType: opt.contextType,
+      selected: false,
+    }))
+
+    if (formattedSuggestions.length > 0) {
+      onUpdateState({ suggestions: formattedSuggestions })
+    }
   }, [config?.generateFrom, suggestions.length, playbookContext?.context_type, onUpdateState])
 
   // Load suggestions from API if configured

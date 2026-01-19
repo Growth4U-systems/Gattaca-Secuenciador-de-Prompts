@@ -95,6 +95,7 @@ export async function PATCH(
     if (body.step_outputs !== undefined) updateData.step_outputs = body.step_outputs
     if (body.status !== undefined) updateData.status = body.status
     if (body.current_step_id !== undefined) updateData.current_step_id = body.current_step_id
+    if (body.playbook_state !== undefined) updateData.playbook_state = body.playbook_state
 
     const { data, error } = await supabase
       .from('ecp_campaigns')
