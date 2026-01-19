@@ -28,7 +28,9 @@
       "Bash(supabase status:*)",
       "Bash(npx tsc:*)",
       "Bash(echo:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Skill(merge-and-deploy)",
+      "Skill(merge-and-deploy:*)"
     ]
   }
 }
