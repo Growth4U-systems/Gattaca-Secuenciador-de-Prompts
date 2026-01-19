@@ -233,10 +233,17 @@ export default function ConfigurationMode({
                             <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
                               {step.type}
                             </span>
+                            {/* Show LLM badge for job steps that use prompts */}
+                            {step.executor === 'job' && step.promptKey && (
+                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                                + LLM
+                              </span>
+                            )}
                           </div>
                         </div>
 
-                        {step.executor === 'llm' && editingStepId !== step.id && (
+                        {/* Show edit button for steps with prompts (LLM executor OR has promptKey) */}
+                        {(step.executor === 'llm' || step.promptKey) && editingStepId !== step.id && (
                           <button
                             onClick={() => startEditing(step)}
                             className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
@@ -247,8 +254,8 @@ export default function ConfigurationMode({
                         )}
                       </div>
 
-                      {/* Prompt display or editor */}
-                      {step.executor === 'llm' && (
+                      {/* Prompt display or editor - show for LLM executor OR any step with promptKey */}
+                      {(step.executor === 'llm' || step.promptKey) && (
                         <>
                           {editingStepId === step.id ? (
                             <div className="mt-3">
