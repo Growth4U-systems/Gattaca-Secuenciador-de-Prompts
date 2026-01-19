@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   PlaybookShellProps,
   PlaybookState,
@@ -26,6 +26,7 @@ interface Campaign {
   completedSteps: number
   totalSteps: number
   customVariables?: Record<string, unknown> // Includes context_type, product, target, etc.
+  playbookState?: PlaybookState // Saved playbook state for persistence
 }
 
 function initializeState(
@@ -115,10 +116,11 @@ export default function PlaybookShell({
           id: c.id,
           name: c.ecp_name,
           status: c.status || 'draft',
-          // Calculate completed steps from step_outputs or playbook_state
+          // Calculate completed steps from playbook_state if available
           completedSteps: c.playbook_state?.completedSteps ?? 0,
           totalSteps,
           customVariables: c.custom_variables || {}, // Load campaign variables including context_type
+          playbookState: c.playbook_state || null, // Load saved playbook state
         }))
         setCampaigns(mappedCampaigns)
       }
@@ -132,6 +134,73 @@ export default function PlaybookShell({
   }, [loadCampaigns])
 
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
+
+  // Ref to track if we should save (avoid saving on initial load)
+  const shouldSaveRef = useRef(false)
+  // Ref to prevent duplicate saves
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Save playbook state to database (debounced)
+  const savePlaybookState = useCallback(async (stateToSave: PlaybookState) => {
+    if (!selectedCampaignId) return
+
+    try {
+      await fetch(`/api/campaign/${selectedCampaignId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playbook_state: stateToSave }),
+      })
+    } catch (error) {
+      console.error('Error saving playbook state:', error)
+    }
+  }, [selectedCampaignId])
+
+  // Auto-save state when it changes (debounced)
+  useEffect(() => {
+    if (!shouldSaveRef.current || !selectedCampaignId) return
+
+    // Clear any pending save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    // Debounce saves by 500ms to avoid too many API calls
+    saveTimeoutRef.current = setTimeout(() => {
+      savePlaybookState(state)
+    }, 500)
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [state, selectedCampaignId, savePlaybookState])
+
+  // Load saved state when selecting a campaign
+  useEffect(() => {
+    if (!selectedCampaignId) {
+      shouldSaveRef.current = false
+      return
+    }
+
+    const campaign = campaigns.find(c => c.id === selectedCampaignId)
+    if (campaign?.playbookState) {
+      // Load saved state
+      shouldSaveRef.current = false // Don't save while loading
+      setState(initializeState(projectId, playbookConfig, campaign.playbookState))
+      // Enable saving after a short delay
+      setTimeout(() => {
+        shouldSaveRef.current = true
+      }, 100)
+    } else {
+      // Fresh state for new campaign
+      shouldSaveRef.current = false
+      setState(initializeState(projectId, playbookConfig))
+      setTimeout(() => {
+        shouldSaveRef.current = true
+      }, 100)
+    }
+  }, [selectedCampaignId, campaigns, projectId, playbookConfig])
 
   // Helper function to get the output from the previous step
   const getPreviousStepOutput = (): string | undefined => {
