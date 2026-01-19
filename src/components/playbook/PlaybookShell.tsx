@@ -341,6 +341,7 @@ export default function PlaybookShell({
               body: JSON.stringify({
                 projectId,
                 stepId,
+                playbookType: playbookConfig.type,
                 promptKey: step.promptKey,
                 input,
               }),
@@ -394,7 +395,7 @@ export default function PlaybookShell({
         })
       }
     },
-    [projectId, playbookConfig.phases, updateStepState, goToNextStep]
+    [projectId, playbookConfig.type, playbookConfig.phases, updateStepState, goToNextStep]
   )
 
   // Handle continue from current step
