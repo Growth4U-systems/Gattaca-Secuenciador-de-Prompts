@@ -92,30 +92,48 @@ IMPORTANTE: Responde SOLO con un JSON array de objetos, sin texto adicional:
   {"id": "contexto_2", "label": "Otro contexto", "description": "Por qué aplica"}
 ]`,
 
-  // Need words suggestion prompt
-  'suggest_need_words': `Eres un experto en copywriting y análisis de necesidades del cliente.
+  // Need words suggestion prompt - generates single-word need keywords
+  'suggest_need_words': `Eres un experto en análisis de necesidades del cliente.
 
 Contexto:
 - Producto: {{product}}
 - Target: {{target}}
-- Contextos de vida seleccionados: {{life_contexts}}
 
-Tu tarea es generar PALABRAS DE NECESIDAD que representan los problemas, deseos o frustraciones que el producto "{{product}}" resuelve.
+Tu tarea es identificar las NECESIDADES DE VIDA que el producto "{{product}}" resuelve para "{{target}}".
 
-Estas palabras se usarán para buscar conversaciones en foros donde la gente expresa estos problemas.
+NO pienses en funcionalidades del producto. Piensa en las necesidades humanas o de negocio que satisface.
 
-Categorías de palabras a considerar:
-1. **Palabras de dolor**: frustración, problema, no sé cómo, necesito ayuda con...
-2. **Palabras de deseo**: quiero, busco, me gustaría, ojalá pudiera...
-3. **Palabras de acción**: cómo hacer, consejos para, recomendaciones de...
-4. **Palabras de urgencia**: urgente, cuanto antes, ya no aguanto...
+**Ejemplo - Banco digital:**
+- Necesidad: gestionar su dinero → Palabra: "dinero"
+- Necesidad: ahorrar para el futuro → Palabra: "ahorro"
+- Necesidad: pagar cuentas → Palabra: "pago"
+- Necesidad: transferir a otros → Palabra: "transferencia"
+- Necesidad: invertir ahorros → Palabra: "inversión"
+- Necesidad: cobrar salario → Palabra: "sueldo"
+- Necesidad: financiar compra → Palabra: "préstamo"
 
-Genera entre 10-20 palabras o frases cortas relevantes para las necesidades que "{{product}}" resuelve en el contexto de "{{target}}".
+**Instrucciones:**
+1. Analiza qué necesidades de la vida cotidiana o del negocio resuelve "{{product}}"
+2. Para cada necesidad, extrae UNA SOLA PALABRA que la represente
+3. Las palabras deben ser sustantivos comunes que la gente usa al hablar de esas necesidades
+4. Genera entre 10-20 palabras
 
 IMPORTANTE: Responde SOLO con un JSON array de objetos, sin texto adicional:
 [
-  {"id": "need_1", "label": "palabra o frase", "description": "Tipo de necesidad que representa"},
-  {"id": "need_2", "label": "otra palabra", "description": "Qué problema indica"}
+  {"id": "need_1", "label": "palabra", "description": "La necesidad que representa"},
+  {"id": "need_2", "label": "otra", "description": "Qué necesidad cubre"}
+]
+
+Ejemplo de respuesta para un banco digital:
+[
+  {"id": "need_1", "label": "ahorro", "description": "Necesidad de guardar dinero para el futuro"},
+  {"id": "need_2", "label": "pago", "description": "Necesidad de pagar cuentas y servicios"},
+  {"id": "need_3", "label": "transferencia", "description": "Necesidad de enviar dinero a otros"},
+  {"id": "need_4", "label": "inversión", "description": "Necesidad de hacer crecer el dinero"},
+  {"id": "need_5", "label": "sueldo", "description": "Necesidad de cobrar y gestionar ingresos"},
+  {"id": "need_6", "label": "préstamo", "description": "Necesidad de financiación"},
+  {"id": "need_7", "label": "tarjeta", "description": "Necesidad de medio de pago"},
+  {"id": "need_8", "label": "hipoteca", "description": "Necesidad de financiar vivienda"}
 ]`,
 }
 
