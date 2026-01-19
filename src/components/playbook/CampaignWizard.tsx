@@ -17,7 +17,44 @@ interface PromptVariable {
   label: string
   value: string
   description?: string
+  placeholder?: string
   required?: boolean
+}
+
+// Descriptions for common prompt variables based on their usage in prompts
+const VARIABLE_DESCRIPTIONS: Record<string, { description: string; placeholder: string }> = {
+  product: {
+    description: 'El producto o servicio que ofreces. Se usa para identificar problemas que tu solución resuelve.',
+    placeholder: 'Ej: Software de contabilidad para autónomos',
+  },
+  target: {
+    description: 'Tu público objetivo o cliente ideal. Define a quién va dirigido tu producto.',
+    placeholder: 'Ej: Autónomos y pequeñas empresas en España',
+  },
+  industry: {
+    description: 'El sector o industria de tu negocio. Se usa para buscar foros temáticos relevantes.',
+    placeholder: 'Ej: Fintech, Salud, Educación, E-commerce',
+  },
+  niche: {
+    description: 'El nicho específico de mercado al que te diriges.',
+    placeholder: 'Ej: Gestión fiscal para freelancers tech',
+  },
+  problem: {
+    description: 'El problema principal que tu producto resuelve.',
+    placeholder: 'Ej: Dificultad para gestionar facturas y declaraciones trimestrales',
+  },
+  solution: {
+    description: 'La solución que ofreces al problema identificado.',
+    placeholder: 'Ej: Automatización de facturación y declaraciones fiscales',
+  },
+  competitor: {
+    description: 'Competidores o alternativas existentes en el mercado.',
+    placeholder: 'Ej: Holded, Quaderno, Contasimple',
+  },
+  value_proposition: {
+    description: 'Lo que diferencia tu producto de la competencia.',
+    placeholder: 'Ej: Integración directa con hacienda y bancos',
+  },
 }
 
 export default function CampaignWizard({
@@ -88,15 +125,17 @@ export default function CampaignWizard({
         // Filter out system variables (those defined in playbookConfig.variables)
         const systemVarKeys = new Set(playbookConfig.variables?.map(v => v.key) || [])
 
-        // Convert to array with labels, excluding system variables
+        // Convert to array with labels and descriptions, excluding system variables
         const variables = Array.from(variableSet)
           .filter(key => !systemVarKeys.has(key))
           .map(key => {
+            const varInfo = VARIABLE_DESCRIPTIONS[key]
             return {
               key,
               label: formatLabel(key),
               value: '',
-              description: undefined,
+              description: varInfo?.description,
+              placeholder: varInfo?.placeholder,
               required: true,
             }
           })
@@ -279,14 +318,17 @@ export default function CampaignWizard({
                         {variable.label}
                         {variable.required && <span className="text-red-500 ml-1">*</span>}
                       </label>
+                      {variable.description && (
+                        <p className="text-xs text-gray-500 mb-2">{variable.description}</p>
+                      )}
                       <input
                         type="text"
                         value={variable.value}
                         onChange={(e) => updateVariable(variable.key, e.target.value)}
-                        placeholder={`Valor para {{${variable.key}}}`}
+                        placeholder={variable.placeholder || `Valor para {{${variable.key}}}`}
                         className="w-full px-4 py-2 !bg-white !text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
-                      <span className="text-xs text-gray-400 mt-1">
+                      <span className="text-xs text-gray-400 mt-1 block">
                         Variable: {'{{' + variable.key + '}}'}
                       </span>
                     </div>
