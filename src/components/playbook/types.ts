@@ -128,7 +128,7 @@ export interface StepState {
   output?: any
 
   // For suggestion steps
-  suggestions?: Array<{ id: string; label: string; selected: boolean; description?: string; category?: string }>
+  suggestions?: Array<{ id: string; label: string; selected: boolean; description?: string; category?: string; contextType?: 'b2c' | 'b2b' }>
 
   // For decision steps
   decision?: any
