@@ -124,13 +124,23 @@ export async function POST(request: NextRequest) {
 
   // Get OpenRouter API key (same pattern as niche-finder/suggest)
   let openrouterApiKey: string | null = null
+  let keySource = 'none'
+
+  // Helper to validate OpenRouter key format
+  const isValidOpenRouterKey = (key: string | null): boolean => {
+    return !!key && key.startsWith('sk-or-') && key.length > 20
+  }
 
   // 1. Try user_api_keys table
-  openrouterApiKey = await getUserApiKey({
+  const userKey = await getUserApiKey({
     userId: session.user.id,
     serviceName: 'openrouter',
     supabase,
   })
+  if (isValidOpenRouterKey(userKey)) {
+    openrouterApiKey = userKey
+    keySource = 'user_api_keys'
+  }
 
   // 2. Try user_openrouter_tokens (OAuth)
   if (!openrouterApiKey) {
@@ -142,7 +152,11 @@ export async function POST(request: NextRequest) {
 
     if (tokenRecord?.encrypted_api_key && tokenRecord.encrypted_api_key !== 'PENDING') {
       try {
-        openrouterApiKey = decryptToken(tokenRecord.encrypted_api_key)
+        const oauthKey = decryptToken(tokenRecord.encrypted_api_key)
+        if (isValidOpenRouterKey(oauthKey)) {
+          openrouterApiKey = oauthKey
+          keySource = 'user_openrouter_tokens'
+        }
       } catch {
         // Ignore decryption errors
       }
@@ -164,7 +178,11 @@ export async function POST(request: NextRequest) {
 
     if (agencyData?.openrouter_api_key) {
       try {
-        openrouterApiKey = decryptToken(agencyData.openrouter_api_key)
+        const agencyKey = decryptToken(agencyData.openrouter_api_key)
+        if (isValidOpenRouterKey(agencyKey)) {
+          openrouterApiKey = agencyKey
+          keySource = 'agency'
+        }
       } catch {
         // Ignore decryption errors
       }
@@ -173,8 +191,14 @@ export async function POST(request: NextRequest) {
 
   // 4. Fallback to env
   if (!openrouterApiKey) {
-    openrouterApiKey = process.env.OPENROUTER_API_KEY || null
+    const envKey = process.env.OPENROUTER_API_KEY || null
+    if (isValidOpenRouterKey(envKey)) {
+      openrouterApiKey = envKey
+      keySource = 'env'
+    }
   }
+
+  console.log(`[execute-step] OpenRouter key source: ${keySource}, valid: ${!!openrouterApiKey}`)
 
   if (!openrouterApiKey) {
     return NextResponse.json({
