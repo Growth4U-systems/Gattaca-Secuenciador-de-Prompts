@@ -12,6 +12,8 @@ import {
   RefreshCw,
   Copy,
   CheckCheck,
+  Edit3,
+  Square,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { WorkAreaProps, StepDefinition, StepState } from './types'
@@ -508,9 +510,10 @@ function SuggestionStep({ step, stepState, onUpdateState, onContinue, playbookCo
 interface AutoExecutingStepProps {
   step: StepDefinition
   stepState: StepState
+  onCancel?: () => void
 }
 
-function AutoExecutingStep({ step, stepState }: AutoExecutingStepProps) {
+function AutoExecutingStep({ step, stepState, onCancel }: AutoExecutingStepProps) {
   const progress = stepState.progress
 
   return (
@@ -551,6 +554,16 @@ function AutoExecutingStep({ step, stepState }: AutoExecutingStepProps) {
           El sistema continuará automáticamente cuando termine este paso.
         </p>
       </div>
+
+      {onCancel && (
+        <button
+          onClick={onCancel}
+          className="w-full px-4 py-2.5 bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100 border border-red-200 flex items-center justify-center gap-2 transition-colors"
+        >
+          <Square size={16} />
+          Cancelar Ejecución
+        </button>
+      )}
     </div>
   )
 }
@@ -913,9 +926,10 @@ interface CompletedStepProps {
   stepState: StepState
   onContinue: () => void
   onRerun?: () => void
+  onEdit?: () => void
 }
 
-function CompletedStep({ step, stepState, onContinue, onRerun }: CompletedStepProps) {
+function CompletedStep({ step, stepState, onContinue, onRerun, onEdit }: CompletedStepProps) {
   const [copied, setCopied] = useState(false)
   const output = stepState.output
   const suggestions = stepState.suggestions
@@ -1128,6 +1142,17 @@ function CompletedStep({ step, stepState, onContinue, onRerun }: CompletedStepPr
       {renderAutoOutput()}
 
       <div className="flex gap-2">
+        {/* Botón Editar - solo para pasos editables (no auto ni display) */}
+        {onEdit && !['auto', 'auto_with_preview', 'auto_with_review', 'display'].includes(step.type) && (
+          <button
+            onClick={onEdit}
+            className="flex-1 px-4 py-2.5 bg-amber-50 text-amber-700 rounded-lg font-medium hover:bg-amber-100 border border-amber-200 flex items-center justify-center gap-2 transition-colors"
+          >
+            <Edit3 size={16} />
+            Editar
+          </button>
+        )}
+        {/* Botón Re-ejecutar - solo para pasos auto */}
         {onRerun && (
           <button
             onClick={onRerun}
@@ -1171,6 +1196,8 @@ export default function WorkArea({
   onBack,
   onExecute,
   onUpdateState,
+  onEdit,
+  onCancel,
   isFirst,
   isLast,
   previousStepOutput,
@@ -1186,7 +1213,7 @@ export default function WorkArea({
 
     // In progress for auto steps
     if (stepState.status === 'in_progress' && ['auto', 'auto_with_preview', 'auto_with_review'].includes(step.type)) {
-      return <AutoExecutingStep step={step} stepState={stepState} />
+      return <AutoExecutingStep step={step} stepState={stepState} onCancel={onCancel} />
     }
 
     // Completed state
@@ -1197,6 +1224,7 @@ export default function WorkArea({
           stepState={stepState}
           onContinue={onContinue}
           onRerun={['auto', 'auto_with_preview', 'auto_with_review'].includes(step.type) ? () => onExecute() : undefined}
+          onEdit={onEdit}
         />
       )
     }

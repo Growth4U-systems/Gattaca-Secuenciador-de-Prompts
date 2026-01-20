@@ -209,6 +209,8 @@ export interface WorkAreaProps {
   onBack: () => void
   onExecute: (input?: any) => Promise<void>
   onUpdateState: (update: Partial<StepState>) => void
+  onEdit?: () => void       // Volver a editar un paso completado
+  onCancel?: () => void     // Cancelar ejecución en curso
   isFirst: boolean
   isLast: boolean
 }
