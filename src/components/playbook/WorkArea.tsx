@@ -20,6 +20,8 @@ import { WorkAreaProps, StepDefinition, StepState } from './types'
 import DeepResearchManualStep from './steps/DeepResearchManualStep'
 import { getDefaultPrompt } from './utils/getDefaultPrompts'
 import { B2C_CONTEXTS, B2B_CONTEXTS } from './configs/niche-finder.config'
+import { QueryPreviewPanel } from './QueryPreviewPanel'
+import { SerpResultsPanel } from './SerpResultsPanel'
 
 // Sub-components for different step types
 
@@ -1266,6 +1268,58 @@ export default function WorkArea({
       return <AutoExecutingStep step={step} stepState={stepState} onCancel={onCancel} />
     }
 
+    // SPECIAL HANDLING: Custom panels for specific step IDs
+    // These steps have custom UIs that differ from the generic step types
+
+    // Preview Queries Panel - shows before SERP execution
+    if (step.id === 'preview_queries' && stepState.status !== 'completed') {
+      // Build config from previous steps (available in playbookContext)
+      // Ensure arrays and default sources structure
+      const config = {
+        life_contexts: (playbookContext?.life_contexts as string[]) || [],
+        product_words: (playbookContext?.need_words as string[]) || [],
+        indicators: (playbookContext?.indicators as string[]) || [],
+        sources: (playbookContext?.sources as { reddit: boolean; thematic_forums: boolean; general_forums: string[] }) || {
+          reddit: true,
+          thematic_forums: false,
+          general_forums: [],
+        },
+        serp_pages: (playbookContext?.serp_pages as number) || 3,
+      }
+
+      return (
+        <QueryPreviewPanel
+          config={config}
+          onApprove={() => {
+            onUpdateState({ status: 'completed', completedAt: new Date() })
+            onContinue()
+          }}
+          onAdjust={onBack}
+        />
+      )
+    }
+
+    // SERP Results Panel - shows after SERP completes, before scraping
+    if (step.id === 'review_urls' && stepState.status !== 'completed') {
+      const jobId = playbookContext?.serpJobId as string
+      if (jobId) {
+        return (
+          <SerpResultsPanel
+            jobId={jobId}
+            onContinue={(selectedSources) => {
+              onUpdateState({
+                status: 'completed',
+                completedAt: new Date(),
+                output: { selectedSources }
+              })
+              onContinue()
+            }}
+            onBack={onBack}
+          />
+        )
+      }
+    }
+
     // Completed state
     if (stepState.status === 'completed') {
       return (
@@ -1332,6 +1386,10 @@ export default function WorkArea({
             projectId={projectId || ''}
           />
         )
+
+      case 'manual_review':
+        // For generic manual_review steps without custom panels
+        return <PendingStep step={step} onExecute={() => onContinue()} />
 
       case 'auto':
       case 'auto_with_preview':

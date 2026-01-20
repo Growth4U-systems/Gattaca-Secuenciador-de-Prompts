@@ -286,6 +286,15 @@ export default function PlaybookShell({
           if (stepState.output) {
             context[`${stepState.id}_output`] = stepState.output
           }
+
+          // Special case: Extract serpJobId from serp_search step output
+          // This is needed for review_urls step to display SERP results
+          if (stepState.id === 'serp_search' && stepState.output) {
+            const output = stepState.output as { jobId?: string }
+            if (output.jobId) {
+              context.serpJobId = output.jobId
+            }
+          }
         }
       }
     }

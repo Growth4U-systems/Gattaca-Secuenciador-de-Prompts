@@ -158,12 +158,15 @@ export function findThematicForums(lifeContext: string): ThematicForum[] {
   )
 }
 
+// Minimal config for query generation (subset of ScraperStepConfig)
+type QueryGenerationConfig = Pick<ScraperStepConfig, 'life_contexts' | 'product_words' | 'indicators' | 'sources' | 'serp_pages'>
+
 /**
  * Generate all search queries from scraper config
  * Creates A × B × Sources combinations
  * For thematic forums, uses context-specific keywords
  */
-export function generateSearchQueries(config: ScraperStepConfig): SearchQuery[] {
+export function generateSearchQueries(config: QueryGenerationConfig): SearchQuery[] {
   const queries: SearchQuery[] = []
 
   const { life_contexts, product_words, indicators, sources } = config
@@ -360,7 +363,7 @@ export function generateQueryPreview(
 /**
  * Calculate total number of queries that will be generated
  */
-export function calculateTotalQueries(config: ScraperStepConfig): number {
+export function calculateTotalQueries(config: QueryGenerationConfig): number {
   const { life_contexts, product_words, indicators, sources } = config
 
   const baseCombinations = life_contexts.length * product_words.length
