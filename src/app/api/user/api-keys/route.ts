@@ -9,7 +9,7 @@ const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const ALGORITHM = 'aes-256-gcm';
 
 // Supported services (perplexity removed - now accessed via OpenRouter)
-const SUPPORTED_SERVICES = ['apify', 'firecrawl', 'openrouter', 'serper'] as const;
+const SUPPORTED_SERVICES = ['apify', 'firecrawl', 'openrouter', 'serper', 'wavespeed', 'fal'] as const;
 type ServiceName = (typeof SUPPORTED_SERVICES)[number];
 
 // ============================================

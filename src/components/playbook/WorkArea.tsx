@@ -1603,12 +1603,16 @@ export default function WorkArea({
     // review_with_action: Shows URLs for review, then executes scraping
     if (step.type === 'review_with_action' && stepState.status !== 'completed') {
       const isExecuting = stepState.status === 'in_progress'
-      const jobId = playbookContext?.serpJobId as string
+      // Try to get jobId from context, or from previous step output, or from project's latest job
+      const jobId = playbookContext?.serpJobId as string ||
+                    (playbookContext?.search_and_preview_output as { jobId?: string })?.jobId ||
+                    playbookContext?.latestJobId as string
 
       if (jobId || isExecuting) {
         return (
           <ReviewAndScrapePanel
             jobId={jobId}
+            projectId={projectId} // Pass projectId as fallback for fetching latest job
             onExecute={async (selectedUrls) => {
               onUpdateState({
                 status: 'in_progress',
