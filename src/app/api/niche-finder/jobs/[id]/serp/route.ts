@@ -79,21 +79,9 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     // Track unique URLs to avoid duplicates
     const seenUrls = new Set<string>()
-    const urlsToInsert: Array<{
-      job_id: string
-      life_context: string
-      product_word: string
-      indicator: string | null
-      source_type: string
-      url: string
-      title: string
-      snippet: string
-      position: number
-      status: string
-    }> = []
-
     let totalSearches = 0
     let totalCost = 0
+    let totalUrlsInserted = 0
 
     // Update job with total expected queries for progress tracking
     const totalExpectedSearches = queries.length * serpPages
@@ -101,11 +89,12 @@ export async function POST(request: NextRequest, { params }: Params) {
       .from('niche_finder_jobs')
       .update({
         serp_total: totalExpectedSearches,
-        serp_completed: 0
+        serp_completed: 0,
+        urls_found: 0
       })
       .eq('id', jobId)
 
-    // Execute searches (with rate limiting)
+    // Execute searches (with rate limiting) - INSERT URLs incrementally
     for (const queryInfo of queries) {
       try {
         // Search multiple pages
@@ -119,31 +108,36 @@ export async function POST(request: NextRequest, { params }: Params) {
           totalSearches++
           totalCost += SERPER_COST_PER_SEARCH
 
-          // Update progress in real-time
-          await supabase
-            .from('niche_finder_jobs')
-            .update({ serp_completed: totalSearches })
-            .eq('id', jobId)
-
           // Process results - filter out blogs and low-quality URLs
           const organic = response.organic || []
+          const urlsFromThisSearch: Array<{
+            job_id: string
+            life_context: string
+            product_word: string
+            indicator: string | null
+            source_type: string
+            url: string
+            title: string
+            snippet: string
+            position: number
+            status: string
+          }> = []
+
           for (const result of organic) {
             if (!seenUrls.has(result.link)) {
               // Skip blogs and articles - we want forums with discussions
               if (isLikelyBlog(result.link)) {
-                console.log(`Filtered blog/article: ${result.link}`)
                 continue
               }
 
               // Check URL quality score (minimum 40)
               const qualityScore = scoreUrlQuality(result.link)
               if (qualityScore < 40) {
-                console.log(`Filtered low-quality URL (score ${qualityScore}): ${result.link}`)
                 continue
               }
 
               seenUrls.add(result.link)
-              urlsToInsert.push({
+              urlsFromThisSearch.push({
                 job_id: jobId,
                 life_context: queryInfo.lifeContext,
                 product_word: queryInfo.productWord,
@@ -158,21 +152,27 @@ export async function POST(request: NextRequest, { params }: Params) {
             }
           }
 
+          // INSERT URLs immediately (not at the end)
+          if (urlsFromThisSearch.length > 0) {
+            await supabase.from('niche_finder_urls').insert(urlsFromThisSearch)
+            totalUrlsInserted += urlsFromThisSearch.length
+          }
+
+          // Update progress in real-time with URLs found
+          await supabase
+            .from('niche_finder_jobs')
+            .update({
+              serp_completed: totalSearches,
+              urls_found: totalUrlsInserted
+            })
+            .eq('id', jobId)
+
           // Rate limiting - 100ms between requests
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
       } catch (error) {
         console.error(`Error searching for: ${queryInfo.query}`, error)
         // Continue with other queries
-      }
-    }
-
-    // Insert all URLs in batches
-    if (urlsToInsert.length > 0) {
-      const batchSize = 100
-      for (let i = 0; i < urlsToInsert.length; i += batchSize) {
-        const batch = urlsToInsert.slice(i, i + batchSize)
-        await supabase.from('niche_finder_urls').insert(batch)
       }
     }
 
@@ -186,18 +186,18 @@ export async function POST(request: NextRequest, { params }: Params) {
       metadata: { queries_executed: queries.length, pages_per_query: serpPages },
     })
 
-    // Update job with URL count
+    // Update job with final status
     await supabase
       .from('niche_finder_jobs')
       .update({
         status: 'serp_done',
-        urls_found: urlsToInsert.length,
+        urls_found: totalUrlsInserted,
       })
       .eq('id', jobId)
 
     return NextResponse.json({
       success: true,
-      urls_found: urlsToInsert.length,
+      urls_found: totalUrlsInserted,
       searches_executed: totalSearches,
       cost_usd: totalCost,
     })
