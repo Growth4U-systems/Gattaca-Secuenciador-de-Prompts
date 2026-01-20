@@ -5,7 +5,7 @@ import { decryptToken } from '@/lib/encryption'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60 // 1 minute for Perplexity call
+export const maxDuration = 60 // 1 minute for API call
 
 interface SuggestCreatorsRequest {
   projectId: string
@@ -36,47 +36,64 @@ export async function POST(request: NextRequest) {
     }, { status: 401 })
   }
 
-  // Get Perplexity API key
-  let perplexityApiKey: string | null = null
+  // Get OpenRouter API key (now uses Perplexity models via OpenRouter)
+  let openrouterApiKey: string | null = null
 
   // 1. Try user_api_keys table
-  perplexityApiKey = await getUserApiKey({
+  openrouterApiKey = await getUserApiKey({
     userId: session.user.id,
-    serviceName: 'perplexity',
+    serviceName: 'openrouter',
     supabase,
   })
 
-  // 2. Try agency key
-  if (!perplexityApiKey) {
-    const { data: membership } = await supabase
-      .from('agency_members')
-      .select('agency_id, agencies(id, perplexity_api_key)')
+  // 2. Try OAuth token
+  if (!openrouterApiKey) {
+    const { data: tokenRecord } = await supabase
+      .from('user_openrouter_tokens')
+      .select('encrypted_api_key')
       .eq('user_id', session.user.id)
       .single()
 
-    const agencyData = membership?.agencies as unknown as {
-      id: string
-      perplexity_api_key: string | null
-    } | null
-
-    if (agencyData?.perplexity_api_key) {
+    if (tokenRecord?.encrypted_api_key && tokenRecord.encrypted_api_key !== 'PENDING') {
       try {
-        perplexityApiKey = decryptToken(agencyData.perplexity_api_key)
+        openrouterApiKey = decryptToken(tokenRecord.encrypted_api_key)
       } catch {
         // Ignore decryption errors
       }
     }
   }
 
-  // 3. Fallback to env
-  if (!perplexityApiKey) {
-    perplexityApiKey = process.env.PERPLEXITY_API_KEY || null
+  // 3. Try agency key
+  if (!openrouterApiKey) {
+    const { data: membership } = await supabase
+      .from('agency_members')
+      .select('agency_id, agencies(id, openrouter_api_key)')
+      .eq('user_id', session.user.id)
+      .single()
+
+    const agencyData = membership?.agencies as unknown as {
+      id: string
+      openrouter_api_key: string | null
+    } | null
+
+    if (agencyData?.openrouter_api_key) {
+      try {
+        openrouterApiKey = decryptToken(agencyData.openrouter_api_key)
+      } catch {
+        // Ignore decryption errors
+      }
+    }
   }
 
-  if (!perplexityApiKey) {
+  // 4. Fallback to env
+  if (!openrouterApiKey) {
+    openrouterApiKey = process.env.OPENROUTER_API_KEY || null
+  }
+
+  if (!openrouterApiKey) {
     return NextResponse.json({
       success: false,
-      error: 'Perplexity API key not configured. Please add your API key in Settings > APIs.'
+      error: 'OpenRouter API key not configured. Please add your API key in Settings > APIs.'
     }, { status: 500 })
   }
 
@@ -125,15 +142,17 @@ Important:
 - Prioritize creators whose audience matches the ICP
 - Ensure LinkedIn URLs are valid profile URLs`
 
-    // Call Perplexity Sonar API
-    const perplexityResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+    // Call OpenRouter with Perplexity Sonar model (has web search)
+    const openrouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${perplexityApiKey}`,
+        'Authorization': `Bearer ${openrouterApiKey}`,
         'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://gattaca.growth4u.ai',
+        'X-Title': 'Gattaca Creator Suggestions',
       },
       body: JSON.stringify({
-        model: 'sonar',
+        model: 'perplexity/sonar', // Perplexity Sonar via OpenRouter
         messages: [
           {
             role: 'system',
@@ -149,14 +168,14 @@ Important:
       }),
     })
 
-    if (!perplexityResponse.ok) {
-      const errorText = await perplexityResponse.text()
-      console.error('[suggest-creators] Perplexity API error:', errorText)
-      throw new Error(`Perplexity API error: ${perplexityResponse.status}`)
+    if (!openrouterResponse.ok) {
+      const errorText = await openrouterResponse.text()
+      console.error('[suggest-creators] OpenRouter API error:', errorText)
+      throw new Error(`OpenRouter API error: ${openrouterResponse.status}`)
     }
 
-    const perplexityData = await perplexityResponse.json()
-    const content = perplexityData.choices?.[0]?.message?.content || ''
+    const responseData = await openrouterResponse.json()
+    const content = responseData.choices?.[0]?.message?.content || ''
 
     // Parse creators from response
     const creators = parseCreatorsFromResponse(content)
