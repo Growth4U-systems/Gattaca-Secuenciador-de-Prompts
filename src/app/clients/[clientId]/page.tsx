@@ -676,6 +676,7 @@ function ContextLakeTab({
 }
 
 import { playbookMetadata, getPlaybookName, formatStepName } from '@/lib/playbook-metadata'
+import ApiKeysConfig from '@/components/settings/ApiKeysConfig'
 
 // Playbooks Tab
 function PlaybooksTab({
@@ -917,20 +918,22 @@ function PlaybooksTab({
 // Settings Tab
 function SettingsTab({ client }: { client: any }) {
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-2xl space-y-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
         <p className="text-gray-500 mt-1">Configuración del cliente {client.name}</p>
       </div>
 
+      {/* Client Info */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="space-y-6">
+        <h3 className="font-semibold text-gray-900 mb-4">Información del Cliente</h3>
+        <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
             <input
               type="text"
               defaultValue={client.name}
-              className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900"
+              className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900 bg-gray-50"
               disabled
             />
           </div>
@@ -939,7 +942,7 @@ function SettingsTab({ client }: { client: any }) {
             <input
               type="text"
               defaultValue={client.industry || ''}
-              className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900"
+              className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900 bg-gray-50"
               disabled
             />
           </div>
@@ -947,7 +950,7 @@ function SettingsTab({ client }: { client: any }) {
             <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
             <select
               defaultValue={client.status}
-              className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900"
+              className="w-full px-4 py-2 border border-gray-200 rounded-xl text-gray-900 bg-gray-50"
               disabled
             >
               <option value="active">Activo</option>
@@ -957,10 +960,13 @@ function SettingsTab({ client }: { client: any }) {
           </div>
         </div>
 
-        <p className="text-sm text-gray-500 mt-6">
-          La edición de configuración estará disponible próximamente.
+        <p className="text-sm text-gray-500 mt-4">
+          La edición de información del cliente estará disponible próximamente.
         </p>
       </div>
+
+      {/* API Keys Section */}
+      <ApiKeysConfig />
     </div>
   )
 }
