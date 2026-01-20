@@ -33,6 +33,13 @@ export async function POST(request: NextRequest) {
 
   // Get user session to look up their API key
   let openrouterApiKey: string | null = null
+  let keySource = 'none'
+
+  // Helper to validate OpenRouter key format
+  const isValidOpenRouterKey = (key: string | null): boolean => {
+    return !!key && key.startsWith('sk-or-') && key.length > 20
+  }
+
   try {
     const supabase = await createServerClient()
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
@@ -41,12 +48,16 @@ export async function POST(request: NextRequest) {
 
     if (session?.user?.id) {
       // 1. Try user_api_keys table first (manual API key entry via Settings > APIs)
-      openrouterApiKey = await getUserApiKey({
+      const userKey = await getUserApiKey({
         userId: session.user.id,
         serviceName: 'openrouter',
         supabase,
       })
-      console.log('[suggest] getUserApiKey result:', openrouterApiKey ? 'found key' : 'no key found')
+      if (isValidOpenRouterKey(userKey)) {
+        openrouterApiKey = userKey
+        keySource = 'user_api_keys'
+      }
+      console.log('[suggest] getUserApiKey result:', openrouterApiKey ? 'found valid key' : 'no valid key found')
 
       // 2. Try user_openrouter_tokens table (OAuth flow via "Connect OpenRouter" button)
       if (!openrouterApiKey) {
@@ -59,8 +70,12 @@ export async function POST(request: NextRequest) {
 
         if (tokenRecord?.encrypted_api_key && tokenRecord.encrypted_api_key !== 'PENDING') {
           try {
-            openrouterApiKey = decryptToken(tokenRecord.encrypted_api_key)
-            console.log('[suggest] Found OAuth token in user_openrouter_tokens')
+            const oauthKey = decryptToken(tokenRecord.encrypted_api_key)
+            if (isValidOpenRouterKey(oauthKey)) {
+              openrouterApiKey = oauthKey
+              keySource = 'user_openrouter_tokens'
+              console.log('[suggest] Found valid OAuth token in user_openrouter_tokens')
+            }
           } catch (decryptError) {
             console.warn('[suggest] Failed to decrypt OAuth token:', decryptError)
           }
@@ -85,8 +100,12 @@ export async function POST(request: NextRequest) {
 
         if (agencyData?.openrouter_api_key) {
           try {
-            openrouterApiKey = decryptToken(agencyData.openrouter_api_key)
-            console.log('[suggest] Found agency OpenRouter key')
+            const agencyKey = decryptToken(agencyData.openrouter_api_key)
+            if (isValidOpenRouterKey(agencyKey)) {
+              openrouterApiKey = agencyKey
+              keySource = 'agency'
+              console.log('[suggest] Found valid agency OpenRouter key')
+            }
           } catch (decryptError) {
             console.warn('[suggest] Failed to decrypt agency key:', decryptError)
           }
@@ -99,12 +118,16 @@ export async function POST(request: NextRequest) {
     console.warn('[suggest] Could not get user session for API key lookup:', e)
   }
 
-  // Fallback to environment variable if no user key found
+  // Fallback to environment variable if no valid user key found
   if (!openrouterApiKey) {
-    openrouterApiKey = process.env.OPENROUTER_API_KEY || null
+    const envKey = process.env.OPENROUTER_API_KEY || null
+    if (isValidOpenRouterKey(envKey)) {
+      openrouterApiKey = envKey
+      keySource = 'env'
+    }
   }
 
-  console.log('Suggest API called, OpenRouter key exists:', !!openrouterApiKey)
+  console.log(`[suggest] OpenRouter key source: ${keySource}, valid: ${!!openrouterApiKey}`)
 
   if (!openrouterApiKey) {
     console.error('OPENROUTER_API_KEY not configured')
