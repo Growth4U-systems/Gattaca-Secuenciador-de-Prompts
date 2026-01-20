@@ -1244,16 +1244,41 @@ function CompletedStep({ step, stepState, onContinue, onRerun, onEdit }: Complet
     // Determine how to render based on output type
     let content: React.ReactNode
 
-    // First, try to parse JSON if output is a string that looks like JSON
+    // First, try to parse JSON if output is a string
+    // LLM outputs often have JSON embedded in text or markdown code blocks
     let parsedOutput = output
-    if (typeof output === 'string' && output.trim().startsWith('{')) {
-      try {
-        const jsonMatch = output.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          parsedOutput = JSON.parse(jsonMatch[0])
+    if (typeof output === 'string') {
+      const trimmed = output.trim()
+
+      // Try multiple patterns to extract JSON
+      let jsonToParse: string | null = null
+
+      // Pattern 1: Direct JSON object
+      if (trimmed.startsWith('{')) {
+        const match = trimmed.match(/^\{[\s\S]*\}/)
+        if (match) jsonToParse = match[0]
+      }
+
+      // Pattern 2: JSON in markdown code block (```json ... ```)
+      if (!jsonToParse) {
+        const codeBlockMatch = trimmed.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
+        if (codeBlockMatch) jsonToParse = codeBlockMatch[1]
+      }
+
+      // Pattern 3: JSON object anywhere in the text
+      if (!jsonToParse) {
+        const anyJsonMatch = trimmed.match(/\{[\s\S]*\}/)
+        if (anyJsonMatch) jsonToParse = anyJsonMatch[0]
+      }
+
+      // Try to parse if we found something
+      if (jsonToParse) {
+        try {
+          parsedOutput = JSON.parse(jsonToParse)
+        } catch {
+          // Keep as string if parsing fails
+          console.log('[WorkArea] Failed to parse JSON from output:', jsonToParse.substring(0, 100))
         }
-      } catch {
-        // Keep as string if parsing fails
       }
     }
 
