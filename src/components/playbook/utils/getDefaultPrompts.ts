@@ -13,6 +13,11 @@ import {
   STEP_4_CONSOLIDATE_PROMPT,
 } from '@/lib/templates/niche-finder-playbook'
 
+import {
+  STEP_1_1_GENERATE_IDEA_PROMPT,
+  STEP_2_1_GENERATE_SCENES_PROMPT,
+} from '@/lib/templates/video-viral-ia-playbook'
+
 // Mapping of promptKey to actual prompt content
 const PROMPT_KEY_MAP: Record<string, string> = {
   // Niche Finder prompts
@@ -32,6 +37,12 @@ const PROMPT_KEY_MAP: Record<string, string> = {
   'clean_filter': STEP_2_CLEAN_FILTER_PROMPT,
   'deep_research_manual': STEP_3_SCORING_PROMPT,
   'consolidate': STEP_4_CONSOLIDATE_PROMPT,
+
+  // Video Viral IA prompts
+  step_1_1_generate_idea: STEP_1_1_GENERATE_IDEA_PROMPT,
+  step_2_1_generate_scenes: STEP_2_1_GENERATE_SCENES_PROMPT,
+  generate_idea: STEP_1_1_GENERATE_IDEA_PROMPT,
+  generate_scenes: STEP_2_1_GENERATE_SCENES_PROMPT,
 
   // Forum suggestion prompt (still uses LLM)
   'suggest_forums': `Sugiere fuentes de datos para buscar conversaciones relevantes sobre {{product}} para el target {{target}}.

@@ -77,86 +77,37 @@ export default function CampaignWizard({
   // Step 3: System config (from playbook variables)
   const [systemConfig, setSystemConfig] = useState<Record<string, any>>({})
 
-  // Extract variables from prompts
+  // Initialize variables from playbook config
   useEffect(() => {
-    const extractVariables = async () => {
-      try {
-        // Fetch flow config to get custom prompts (if any)
-        const response = await fetch(`/api/projects/${projectId}`)
-        const data = await response.json()
-        const flowConfig = data.project?.legacy_flow_config
+    const initializeVariables = () => {
+      // Step 2: Text variables that need user input (type='text' or undefined type, and required)
+      // These are the main campaign variables like content_theme, target, product, etc.
+      const textVariables = (playbookConfig.variables || [])
+        .filter(v => (!v.type || v.type === 'text' || v.type === 'textarea') && v.required !== false)
+        .map(v => ({
+          key: v.key,
+          label: v.label || formatLabel(v.key),
+          value: v.defaultValue?.toString() || '',
+          description: v.description || VARIABLE_DESCRIPTIONS[v.key]?.description,
+          placeholder: v.placeholder || VARIABLE_DESCRIPTIONS[v.key]?.placeholder,
+          required: v.required !== false,
+        }))
 
-        const variableSet = new Set<string>()
+      setPromptVariables(textVariables)
 
-        // Helper function to extract variables from a prompt string
-        const extractFromPrompt = (prompt: string) => {
-          // Match {{variable}} but not {{#if ...}} or {{/if}}
-          const matches = prompt.match(/\{\{(\w+)\}\}/g) || []
-          matches.forEach((match: string) => {
-            const varName = match.replace(/\{\{|\}\}/g, '')
-            // Skip template control keywords
-            if (!['if', 'else', 'endif'].includes(varName)) {
-              variableSet.add(varName)
-            }
-          })
+      // Step 3: System config (select, number, etc. - non-text variables)
+      const initialConfig: Record<string, any> = {}
+      playbookConfig.variables?.forEach(v => {
+        if (v.type && v.type !== 'text' && v.type !== 'textarea') {
+          // Only system config variables (select, number)
+          initialConfig[v.key] = v.defaultValue
         }
-
-        // 1. Extract from custom prompts in flow config (if saved)
-        if (flowConfig?.steps) {
-          flowConfig.steps.forEach((flowStep: any) => {
-            if (flowStep.prompt) {
-              extractFromPrompt(flowStep.prompt)
-            }
-          })
-        }
-
-        // 2. Extract from default template prompts for all steps with promptKey
-        playbookConfig.phases.forEach(phase => {
-          phase.steps.forEach(step => {
-            if (step.promptKey) {
-              const defaultPrompt = getDefaultPromptForStep(step.id, step.promptKey)
-              if (defaultPrompt) {
-                extractFromPrompt(defaultPrompt)
-              }
-            }
-          })
-        })
-
-        // Filter out system variables (those defined in playbookConfig.variables)
-        const systemVarKeys = new Set(playbookConfig.variables?.map(v => v.key) || [])
-
-        // Convert to array with labels and descriptions, excluding system variables
-        const variables = Array.from(variableSet)
-          .filter(key => !systemVarKeys.has(key))
-          .map(key => {
-            const varInfo = VARIABLE_DESCRIPTIONS[key]
-            return {
-              key,
-              label: formatLabel(key),
-              value: '',
-              description: varInfo?.description,
-              placeholder: varInfo?.placeholder,
-              required: true,
-            }
-          })
-
-        setPromptVariables(variables)
-
-        // Initialize system config from playbook variables
-        const initialConfig: Record<string, any> = {}
-        playbookConfig.variables?.forEach(v => {
-          if (v.defaultValue !== undefined) {
-            initialConfig[v.key] = v.defaultValue
-          }
-        })
-        setSystemConfig(initialConfig)
-      } catch (error) {
-        console.error('Error extracting variables:', error)
-      }
+      })
+      setSystemConfig(initialConfig)
     }
 
-    extractVariables()
-  }, [projectId, playbookConfig])
+    initializeVariables()
+  }, [playbookConfig])
 
   const formatLabel = (key: string): string => {
     return key
@@ -349,13 +300,22 @@ export default function CampaignWizard({
                 </p>
               </div>
 
-              {!playbookConfig.variables || playbookConfig.variables.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  No hay configuraciones adicionales para este playbook
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {playbookConfig.variables.map((variable) => (
+              {(() => {
+                // Only show non-text variables (select, number, etc.)
+                const systemVariables = (playbookConfig.variables || [])
+                  .filter(v => v.type && v.type !== 'text' && v.type !== 'textarea')
+
+                if (systemVariables.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-gray-500">
+                      No hay configuraciones adicionales para este playbook
+                    </div>
+                  )
+                }
+
+                return (
+                  <div className="space-y-4">
+                    {systemVariables.map((variable) => (
                     <div key={variable.key}>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         {variable.label}
@@ -397,9 +357,10 @@ export default function CampaignWizard({
                         />
                       )}
                     </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )
+              })()}
 
               {error && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">

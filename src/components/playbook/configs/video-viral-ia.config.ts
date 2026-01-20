@@ -161,6 +161,9 @@ export const videoViralIAConfig: PlaybookConfig = {
       label: 'Tema del Contenido',
       type: 'text',
       required: true,
+      description:
+        'El tema principal de tu video viral. Sé específico para mejores resultados.',
+      placeholder: 'Ej: cutting ASMR, satisfying slime, kinetic sand, soap cutting',
     },
     {
       key: 'content_style',
