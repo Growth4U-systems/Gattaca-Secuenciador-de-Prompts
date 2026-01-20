@@ -39,7 +39,7 @@ export async function GET(
 
     const { data: project, error } = await supabase
       .from('projects')
-      .select('id, name, description, variable_definitions, legacy_flow_config, deep_research_prompts, campaign_docs_guide, custom_statuses')
+      .select('id, name, description, variable_definitions, deep_research_prompts, campaign_docs_guide, custom_statuses')
       .eq('id', projectId)
       .single()
 
@@ -57,15 +57,9 @@ export async function GET(
       )
     }
 
-    // Map legacy_flow_config to flow_config for frontend compatibility
-    const projectWithFlowConfig = {
-      ...project,
-      flow_config: project.legacy_flow_config,
-    }
-
     return NextResponse.json({
       success: true,
-      project: projectWithFlowConfig,
+      project,
     })
   } catch (error) {
     console.error('Get project error:', error)
