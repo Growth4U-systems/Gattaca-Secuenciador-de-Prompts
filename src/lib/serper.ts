@@ -78,7 +78,12 @@ export async function serperSearch(
     throw new Error(`Serper API error: ${response.status} - ${errorText}`)
   }
 
-  return response.json()
+  const text = await response.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new Error(`Serper returned invalid JSON: ${text.slice(0, 200)}`)
+  }
 }
 
 /**
