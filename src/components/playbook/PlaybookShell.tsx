@@ -491,15 +491,19 @@ export default function PlaybookShell({
               const selectedNeedWords = needWordsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
               const selectedIndicators = indicatorsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
 
-              // Parse sources output (JSON from LLM)
+              // Parse sources output (can be JSON string from LLM or already parsed object)
               let sourcesConfig = { reddit: { enabled: true, subreddits: [] }, thematic_forums: { enabled: false, forums: [] }, general_forums: { enabled: false, forums: [] } }
               try {
                 if (sourcesStep?.output) {
-                  const jsonMatch = typeof sourcesStep.output === 'string'
-                    ? sourcesStep.output.match(/\{[\s\S]*\}/)
-                    : null
-                  if (jsonMatch) {
-                    sourcesConfig = JSON.parse(jsonMatch[0])
+                  // Check if output is already an object (parsed)
+                  if (typeof sourcesStep.output === 'object' && sourcesStep.output !== null) {
+                    sourcesConfig = sourcesStep.output as typeof sourcesConfig
+                  } else if (typeof sourcesStep.output === 'string') {
+                    // Try to extract JSON from string
+                    const jsonMatch = sourcesStep.output.match(/\{[\s\S]*\}/)
+                    if (jsonMatch) {
+                      sourcesConfig = JSON.parse(jsonMatch[0])
+                    }
                   }
                 }
               } catch (e) {
@@ -514,6 +518,8 @@ export default function PlaybookShell({
                 serp_pages: (selectedCampaign?.customVariables?.serp_pages as number) || 3,
               }
 
+              console.log('[SERP] Starting job with config:', JSON.stringify(jobConfig, null, 2))
+
               // 1. Create job
               const createResponse = await fetch('/api/niche-finder/jobs/start', {
                 method: 'POST',
@@ -524,19 +530,23 @@ export default function PlaybookShell({
                 }),
               })
               const createData = await createResponse.json()
+              console.log('[SERP] Create job response:', createData)
 
               if (!createData.success) {
                 throw new Error(createData.error || 'Error creando job')
               }
 
               const jobId = createData.job_id
+              console.log('[SERP] Job created with ID:', jobId)
               updateStepState(stepId, { output: { jobId }, progress: { current: 0, total: 0, label: 'Iniciando búsqueda SERP...' } })
 
               // 2. Execute SERP job
+              console.log('[SERP] Executing SERP search...')
               const serpResponse = await fetch(`/api/niche-finder/jobs/${jobId}/serp`, {
                 method: 'POST',
               })
               const serpData = await serpResponse.json()
+              console.log('[SERP] SERP response:', serpData)
 
               if (serpData.error) {
                 // Check if it's a missing API key error
