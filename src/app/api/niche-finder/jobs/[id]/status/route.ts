@@ -81,8 +81,8 @@ export async function GET(request: NextRequest, { params }: Params) {
       phase,
       progress: {
         serp: {
-          total: job.urls_found || 0,
-          completed: job.urls_found || 0,
+          total: job.serp_total || job.urls_found || 0,
+          completed: job.serp_completed || job.urls_found || 0,
         },
         scraping: {
           total: job.urls_found || 0,

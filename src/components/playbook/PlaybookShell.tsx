@@ -564,11 +564,15 @@ export default function PlaybookShell({
 
                   const completed = statusData.progress?.serp?.completed || 0
                   const total = statusData.progress?.serp?.total || 0
+                  const remaining = total - completed
+                  const label = total > 0
+                    ? `Búsquedas: ${completed}/${total} (faltan ${remaining})`
+                    : 'Iniciando búsqueda SERP...'
                   updateStepState(stepId, {
                     progress: {
                       current: completed,
                       total: total,
-                      label: `Buscando URLs: ${completed}/${total}`,
+                      label,
                     },
                   })
 
