@@ -1242,21 +1242,34 @@ function CompletedStep({ step, stepState, onContinue, onRerun, onEdit }: Complet
     // Determine how to render based on output type
     let content: React.ReactNode
 
-    if (typeof output === 'string') {
+    // First, try to parse JSON if output is a string that looks like JSON
+    let parsedOutput = output
+    if (typeof output === 'string' && output.trim().startsWith('{')) {
+      try {
+        const jsonMatch = output.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          parsedOutput = JSON.parse(jsonMatch[0])
+        }
+      } catch {
+        // Keep as string if parsing fails
+      }
+    }
+
+    if (typeof parsedOutput === 'string') {
       // String output: render as markdown
       content = (
         <div className="prose prose-sm max-w-none">
-          <ReactMarkdown>{output}</ReactMarkdown>
+          <ReactMarkdown>{parsedOutput}</ReactMarkdown>
         </div>
       )
-    } else if (isSourcesConfig(output)) {
+    } else if (isSourcesConfig(parsedOutput)) {
       // Sources config: render user-friendly view
-      content = renderSourcesConfig(output)
-    } else if (Array.isArray(output)) {
+      content = renderSourcesConfig(parsedOutput as Record<string, unknown>)
+    } else if (Array.isArray(parsedOutput)) {
       // Array: render as list
       content = (
         <ul className="space-y-1">
-          {output.map((item, i) => (
+          {parsedOutput.map((item, i) => (
             <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
               <span className="text-blue-500 mt-1">•</span>
               <span>{typeof item === 'string' ? item : JSON.stringify(item)}</span>
@@ -1268,7 +1281,7 @@ function CompletedStep({ step, stepState, onContinue, onRerun, onEdit }: Complet
       // Fallback: show JSON but with better formatting
       content = (
         <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
-          {JSON.stringify(output, null, 2)}
+          {JSON.stringify(parsedOutput, null, 2)}
         </pre>
       )
     }
