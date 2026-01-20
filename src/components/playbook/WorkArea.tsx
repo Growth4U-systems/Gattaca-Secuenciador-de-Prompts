@@ -802,31 +802,100 @@ interface ErrorStateProps {
   onRetry: () => void
 }
 
+// Helper to detect API key errors and extract service name
+function detectApiKeyError(error: string | undefined): string | null {
+  if (!error) return null
+  const lowerError = error.toLowerCase()
+
+  // Common patterns for API key errors
+  if (lowerError.includes('api key') && lowerError.includes('no configurada')) {
+    // Extract service name from error like "API key de Wavespeed no configurada"
+    const match = error.match(/API key de (\w+)/i)
+    if (match) {
+      return match[1].toLowerCase()
+    }
+  }
+  if (lowerError.includes('wavespeed') && (lowerError.includes('key') || lowerError.includes('auth'))) {
+    return 'wavespeed'
+  }
+  if (lowerError.includes('openrouter') && (lowerError.includes('key') || lowerError.includes('auth'))) {
+    return 'openrouter'
+  }
+  if (lowerError.includes('serper') && (lowerError.includes('key') || lowerError.includes('auth'))) {
+    return 'serper'
+  }
+  if (lowerError.includes('firecrawl') && (lowerError.includes('key') || lowerError.includes('auth'))) {
+    return 'firecrawl'
+  }
+  if (lowerError.includes('apify') && (lowerError.includes('key') || lowerError.includes('auth'))) {
+    return 'apify'
+  }
+  if (lowerError.includes('fal') && (lowerError.includes('key') || lowerError.includes('auth'))) {
+    return 'fal'
+  }
+
+  return null
+}
+
 function ErrorState({ step, stepState, onRetry }: ErrorStateProps) {
+  const [showSetupModal, setShowSetupModal] = useState(false)
+
+  // Check if this is an API key error
+  const missingService = detectApiKeyError(stepState.error)
+  const isApiKeyError = !!missingService
+
+  const handleSetupComplete = () => {
+    setShowSetupModal(false)
+    // Retry after configuring API key
+    onRetry()
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="bg-red-50 rounded-lg p-4 border border-red-100">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-red-800">
-              Error en {step.name}
-            </p>
-            <p className="text-sm text-red-700 mt-1">
-              {stepState.error || 'Ha ocurrido un error inesperado.'}
-            </p>
+    <>
+      <div className="space-y-4">
+        <div className={`rounded-lg p-4 border ${isApiKeyError ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-100'}`}>
+          <div className="flex items-start gap-3">
+            <AlertCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${isApiKeyError ? 'text-yellow-600' : 'text-red-600'}`} />
+            <div>
+              <p className={`text-sm font-medium ${isApiKeyError ? 'text-yellow-800' : 'text-red-800'}`}>
+                {isApiKeyError ? 'API Key requerida' : `Error en ${step.name}`}
+              </p>
+              <p className={`text-sm mt-1 ${isApiKeyError ? 'text-yellow-700' : 'text-red-700'}`}>
+                {stepState.error || 'Ha ocurrido un error inesperado.'}
+              </p>
+            </div>
           </div>
         </div>
+
+        {isApiKeyError ? (
+          <button
+            onClick={() => setShowSetupModal(true)}
+            className="w-full px-4 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 flex items-center justify-center gap-2"
+          >
+            Configurar API Key
+          </button>
+        ) : (
+          <button
+            onClick={onRetry}
+            className="w-full px-4 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 flex items-center justify-center gap-2"
+          >
+            <RefreshCw size={16} />
+            Reintentar
+          </button>
+        )}
       </div>
 
-      <button
-        onClick={onRetry}
-        className="w-full px-4 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 flex items-center justify-center gap-2"
-      >
-        <RefreshCw size={16} />
-        Reintentar
-      </button>
-    </div>
+      {/* API Key Setup Modal */}
+      {showSetupModal && missingService && (
+        <ApiKeySetupModal
+          missingServices={[missingService]}
+          onComplete={handleSetupComplete}
+          onCancel={() => setShowSetupModal(false)}
+          title="Configurar API Key"
+          description="Configura la API key para continuar:"
+        />
+      )}
+    </>
   )
 }
 
@@ -880,7 +949,7 @@ const STEP_API_REQUIREMENTS: Record<string, string[]> = {
   // LLM steps (default to openrouter)
   llm: ['openrouter'],
   // Video viral steps
-  generate_clips: ['fal', 'openrouter'],
+  generate_clips: ['wavespeed'],
   generate_audio: ['openrouter'],
   compose_video: ['openrouter'],
 }
