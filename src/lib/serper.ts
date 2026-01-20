@@ -43,12 +43,17 @@ export const SERPER_COST_PER_SEARCH = 0.004
 
 /**
  * Search using Serper.dev API
+ * @param options - Search options (query, countryCode, etc.)
+ * @param apiKey - Optional API key (falls back to env var if not provided)
  */
-export async function serperSearch(options: SerperSearchOptions): Promise<SerperResponse> {
-  const apiKey = process.env.SERPER_API_KEY
+export async function serperSearch(
+  options: SerperSearchOptions,
+  apiKey?: string
+): Promise<SerperResponse> {
+  const key = apiKey || process.env.SERPER_API_KEY
 
-  if (!apiKey) {
-    throw new Error('SERPER_API_KEY environment variable is not set')
+  if (!key) {
+    throw new Error('SERPER_API_KEY not provided. Please add your Serper API key in Settings > APIs.')
   }
 
   const { query, countryCode = 'es', languageCode = 'es', numResults = 10, page = 1 } = options
@@ -56,7 +61,7 @@ export async function serperSearch(options: SerperSearchOptions): Promise<Serper
   const response = await fetch('https://google.serper.dev/search', {
     method: 'POST',
     headers: {
-      'X-API-KEY': apiKey,
+      'X-API-KEY': key,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -109,10 +114,14 @@ export function buildNicheFinderQuery(params: {
 
 /**
  * Search multiple pages and combine results
+ * @param options - Search options
+ * @param pages - Number of pages to fetch (default: 5)
+ * @param apiKey - Optional API key (falls back to env var if not provided)
  */
 export async function serperSearchMultiplePages(
   options: SerperSearchOptions,
-  pages: number = 5
+  pages: number = 5,
+  apiKey?: string
 ): Promise<SerperSearchResult[]> {
   const allResults: SerperSearchResult[] = []
   const seenUrls = new Set<string>()
@@ -123,7 +132,7 @@ export async function serperSearchMultiplePages(
         ...options,
         page,
         numResults: 10, // 10 per page is most reliable
-      })
+      }, apiKey)
 
       for (const result of response.organic) {
         // Deduplicate by URL

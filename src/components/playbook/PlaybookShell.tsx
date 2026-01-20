@@ -471,9 +471,128 @@ export default function PlaybookShell({
             break
 
           case 'job':
-            // Job-based execution handled differently (polling)
-            // The job system will update the state externally
-            return
+            // Job-based execution: create job, execute, poll for status
+            if (step.jobType === 'niche_finder_serp') {
+              // Build job config from completed steps
+              const lifeContextsStep = state.phases
+                .flatMap(p => p.steps)
+                .find(s => s.id === 'life_contexts')
+              const needWordsStep = state.phases
+                .flatMap(p => p.steps)
+                .find(s => s.id === 'need_words')
+              const indicatorsStep = state.phases
+                .flatMap(p => p.steps)
+                .find(s => s.id === 'indicators')
+              const sourcesStep = state.phases
+                .flatMap(p => p.steps)
+                .find(s => s.id === 'sources')
+
+              const selectedContexts = lifeContextsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
+              const selectedNeedWords = needWordsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
+              const selectedIndicators = indicatorsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
+
+              // Parse sources output (JSON from LLM)
+              let sourcesConfig = { reddit: { enabled: true, subreddits: [] }, thematic_forums: { enabled: false, forums: [] }, general_forums: { enabled: false, forums: [] } }
+              try {
+                if (sourcesStep?.output) {
+                  const jsonMatch = typeof sourcesStep.output === 'string'
+                    ? sourcesStep.output.match(/\{[\s\S]*\}/)
+                    : null
+                  if (jsonMatch) {
+                    sourcesConfig = JSON.parse(jsonMatch[0])
+                  }
+                }
+              } catch (e) {
+                console.error('Error parsing sources config:', e)
+              }
+
+              const jobConfig = {
+                life_contexts: selectedContexts,
+                product_words: selectedNeedWords,
+                indicators: selectedIndicators,
+                sources: sourcesConfig,
+                serp_pages: (selectedCampaign?.customVariables?.serp_pages as number) || 3,
+              }
+
+              // 1. Create job
+              const createResponse = await fetch('/api/niche-finder/jobs/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  project_id: projectId,
+                  config: jobConfig,
+                }),
+              })
+              const createData = await createResponse.json()
+
+              if (!createData.success) {
+                throw new Error(createData.error || 'Error creando job')
+              }
+
+              const jobId = createData.job_id
+              updateStepState(stepId, { output: { jobId }, progress: { current: 0, total: 0, label: 'Iniciando búsqueda SERP...' } })
+
+              // 2. Execute SERP job
+              const serpResponse = await fetch(`/api/niche-finder/jobs/${jobId}/serp`, {
+                method: 'POST',
+              })
+              const serpData = await serpResponse.json()
+
+              if (serpData.error) {
+                // Check if it's a missing API key error
+                if (serpData.code === 'MISSING_API_KEY') {
+                  throw new Error(`API Key faltante: ${serpData.service}. Configura tu API key en Ajustes > APIs.`)
+                }
+                throw new Error(serpData.error)
+              }
+
+              // 3. Poll for status
+              const pollInterval = setInterval(async () => {
+                try {
+                  const statusResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+                  const statusData = await statusResponse.json()
+
+                  const completed = statusData.progress?.serp?.completed || 0
+                  const total = statusData.progress?.serp?.total || 0
+                  updateStepState(stepId, {
+                    progress: {
+                      current: completed,
+                      total: total,
+                      label: `Buscando URLs: ${completed}/${total}`,
+                    },
+                  })
+
+                  if (statusData.status === 'serp_done' || statusData.status === 'serp_completed') {
+                    clearInterval(pollInterval)
+                    updateStepState(stepId, {
+                      status: 'completed',
+                      completedAt: new Date(),
+                      output: {
+                        jobId,
+                        urlsFound: statusData.job?.urls_found || 0,
+                        costs: statusData.costs,
+                      },
+                    })
+                    setTimeout(goToNextStep, 500)
+                  } else if (statusData.status === 'failed' || statusData.status === 'error') {
+                    clearInterval(pollInterval)
+                    throw new Error(statusData.job?.error_message || 'Job failed')
+                  }
+                } catch (pollError) {
+                  clearInterval(pollInterval)
+                  updateStepState(stepId, {
+                    status: 'error',
+                    error: pollError instanceof Error ? pollError.message : 'Error checking job status',
+                  })
+                }
+              }, 2000) // Poll every 2 seconds
+
+              // Don't fall through to the completion logic below
+              return
+            }
+            // For other job types, just mark as pending
+            result = input
+            break
 
           case 'none':
           default:
@@ -500,7 +619,7 @@ export default function PlaybookShell({
         })
       }
     },
-    [projectId, playbookConfig.type, playbookConfig.phases, updateStepState, goToNextStep]
+    [projectId, playbookConfig.type, playbookConfig.phases, updateStepState, goToNextStep, selectedCampaign, state.phases]
   )
 
   // Handle continue from current step

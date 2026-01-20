@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createClient as createServerClient } from '@/lib/supabase-server'
 import { serperSearch, SERPER_COST_PER_SEARCH } from '@/lib/serper'
 import { generateSearchQueries } from '@/lib/scraper/query-builder'
 import { isLikelyBlog, scoreUrlQuality } from '@/lib/scraper/url-filter'
+import { getUserApiKey } from '@/lib/getUserApiKey'
 import type { ScraperStepConfig } from '@/types/scraper.types'
 
 export const dynamic = 'force-dynamic'
@@ -19,6 +21,29 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
   const { id: jobId } = await params
+
+  // Get authenticated user
+  const serverClient = await createServerClient()
+  const { data: { session } } = await serverClient.auth.getSession()
+
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Get Serper API key (user's personal key or env fallback)
+  const serperApiKey = await getUserApiKey({
+    userId: session.user.id,
+    serviceName: 'serper',
+    supabase: serverClient,
+  })
+
+  if (!serperApiKey) {
+    return NextResponse.json({
+      error: 'Serper API key not configured. Please add your Serper API key in Settings > APIs.',
+      code: 'MISSING_API_KEY',
+      service: 'serper',
+    }, { status: 400 })
+  }
 
   try {
     // Get job
@@ -78,7 +103,7 @@ export async function POST(request: NextRequest, { params }: Params) {
             query: queryInfo.query,
             page,
             numResults: 10,
-          })
+          }, serperApiKey)
 
           totalSearches++
           totalCost += SERPER_COST_PER_SEARCH
