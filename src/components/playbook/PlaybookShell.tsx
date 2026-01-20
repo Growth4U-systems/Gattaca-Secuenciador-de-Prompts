@@ -545,15 +545,26 @@ export default function PlaybookShell({
               const serpResponse = await fetch(`/api/niche-finder/jobs/${jobId}/serp`, {
                 method: 'POST',
               })
-              const serpData = await serpResponse.json()
-              console.log('[SERP] SERP response:', serpData)
 
-              if (serpData.error) {
-                // Check if it's a missing API key error
-                if (serpData.code === 'MISSING_API_KEY') {
-                  throw new Error(`API Key faltante: ${serpData.service}. Configura tu API key en Ajustes > APIs.`)
+              // Handle non-JSON responses (e.g., Vercel timeout HTML pages)
+              const contentType = serpResponse.headers.get('content-type')
+              if (!contentType || !contentType.includes('application/json')) {
+                const text = await serpResponse.text()
+                console.error('[SERP] Non-JSON response:', text.slice(0, 500))
+                // If we got a non-JSON response, the job might still be running in the background
+                // Continue to polling to check status
+                console.log('[SERP] Continuing to poll for job status despite non-JSON response...')
+              } else {
+                const serpData = await serpResponse.json()
+                console.log('[SERP] SERP response:', serpData)
+
+                if (serpData.error) {
+                  // Check if it's a missing API key error
+                  if (serpData.code === 'MISSING_API_KEY') {
+                    throw new Error(`API Key faltante: ${serpData.service}. Configura tu API key en Ajustes > APIs.`)
+                  }
+                  throw new Error(serpData.error)
                 }
-                throw new Error(serpData.error)
               }
 
               // 3. Poll for status

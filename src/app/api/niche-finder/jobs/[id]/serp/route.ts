@@ -8,6 +8,7 @@ import { getUserApiKey } from '@/lib/getUserApiKey'
 import type { ScraperStepConfig } from '@/types/scraper.types'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 300 // 5 minutes max for SERP searches
 
 type Params = { params: Promise<{ id: string }> }
 
