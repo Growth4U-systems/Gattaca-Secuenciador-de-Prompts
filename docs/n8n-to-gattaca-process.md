@@ -242,11 +242,40 @@ Desarrollar inline (Claude implementa)
 | `src/lib/templates/[nombre]-playbook.ts` | Template con prompts y flow_config |
 | `src/lib/templates/index.ts` | Registrar template |
 | `src/components/playbook/configs/[nombre].config.ts` | Config visual (fases, steps) |
-| `src/components/playbook/configs/index.ts` | Registrar config visual |
+| `src/components/playbook/configs/index.ts` | Registrar config visual + exportar config |
+| `src/components/playbook/index.ts` | **CRÍTICO**: Exportar el config para uso externo |
+| `src/components/[nombre]/[Nombre]Playbook.tsx` | **CRÍTICO**: Componente wrapper que usa PlaybookShell |
+| `src/components/[nombre]/index.ts` | Export del componente wrapper |
+| `src/app/projects/[projectId]/page.tsx` | **CRÍTICO**: Agregar tabs y renderizado para el nuevo tipo |
 | `src/types/database.types.ts` | Agregar PlaybookType |
 | `src/lib/playbook-metadata.ts` | Metadata para UI |
 | `supabase/migrations/[ts]_add_[nombre].sql` | Enum + constraint |
 | `supabase/migrations/[ts]_insert_[nombre].sql` | Insert playbook |
+
+### ⚠️ CRÍTICO: Pasos frecuentemente olvidados
+
+**Estos 3 archivos son los más olvidados y causan que el playbook no aparezca en la UI:**
+
+1. **`src/components/playbook/index.ts`** - Debe exportar el nuevo config:
+   ```typescript
+   export { playbookConfigs, getPlaybookConfig, nicheFinderConfig, [nuevoConfig] } from './configs'
+   ```
+
+2. **`src/components/[nombre]/[Nombre]Playbook.tsx`** - Componente wrapper:
+   ```typescript
+   import { PlaybookShell, [nuevoConfig] } from '../playbook'
+
+   export default function [Nombre]Playbook({ projectId }) {
+     return <PlaybookShell projectId={projectId} playbookConfig={[nuevoConfig]} />
+   }
+   ```
+
+3. **`src/app/projects/[projectId]/page.tsx`** - Integración en la página:
+   - Agregar import del componente wrapper
+   - Agregar nuevo tipo a `TabType`
+   - Agregar condición en `useEffect` para tab inicial
+   - Agregar array de tabs específicos para el nuevo tipo
+   - Agregar renderizado en el switch de contenido de tabs
 
 ### Referencia completa
 Ver [playbook-templates.md](playbook-templates.md) para instrucciones detalladas de cada archivo.
@@ -300,15 +329,28 @@ describe('[Nombre] Playbook Integration', () => {
 ```markdown
 ## Checklist de Verificación - Playbook: [NOMBRE]
 
-### Pre-Deploy
-- [ ] Template TypeScript compila sin errores
-- [ ] Config visual registrada en index.ts
-- [ ] PlaybookType agregado a database.types.ts
-- [ ] Metadata agregada a playbook-metadata.ts
+### Pre-Deploy (Archivos)
+- [ ] Template TypeScript compila sin errores (`src/lib/templates/[nombre]-playbook.ts`)
+- [ ] Template registrado en `src/lib/templates/index.ts`
+- [ ] Config visual creada (`src/components/playbook/configs/[nombre].config.ts`)
+- [ ] Config registrada en `src/components/playbook/configs/index.ts`
+- [ ] **Config exportada desde `src/components/playbook/index.ts`** ⚠️
+- [ ] **Componente wrapper creado** (`src/components/[nombre]/[Nombre]Playbook.tsx`) ⚠️
+- [ ] **Componente integrado en página del proyecto** (`src/app/projects/[projectId]/page.tsx`) ⚠️
+  - [ ] Import del componente
+  - [ ] Nuevo tipo en `TabType`
+  - [ ] Condición en `useEffect` para tab inicial
+  - [ ] Array de tabs específicos
+  - [ ] Renderizado en switch de contenido
+- [ ] PlaybookType agregado a `src/types/database.types.ts`
+- [ ] Metadata agregada a `src/lib/playbook-metadata.ts`
 - [ ] Migraciones creadas (enum + insert)
+- [ ] `npx tsc --noEmit` pasa sin errores
 
 ### Post-Deploy (UI)
-- [ ] Playbook aparece en lista de playbooks
+- [ ] Playbook aparece en dropdown de nuevo proyecto
+- [ ] Al crear proyecto, se redirige al tab correcto
+- [ ] El PlaybookShell se renderiza (panel navegación + work area)
 - [ ] Se puede crear nueva campaña
 - [ ] Wizard de variables funciona
 - [ ] Navegación entre fases funciona
