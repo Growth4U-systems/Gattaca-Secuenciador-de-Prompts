@@ -779,6 +779,16 @@ function InputStep({ step, stepState, onUpdateState, onContinue }: InputStepProp
   )
 }
 
+// Map of step types/jobTypes to required API services
+const STEP_API_REQUIREMENTS: Record<string, string[]> = {
+  // Niche Finder jobs
+  niche_finder_serp: ['serper'],
+  niche_finder_scrape: ['firecrawl'],
+  niche_finder_extract: ['openrouter'],
+  // LLM steps (default to openrouter)
+  llm: ['openrouter'],
+}
+
 interface PendingStepProps {
   step: StepDefinition
   onExecute: () => void
@@ -786,6 +796,100 @@ interface PendingStepProps {
 
 function PendingStep({ step, onExecute }: PendingStepProps) {
   const isAutoStep = ['auto', 'auto_with_preview', 'auto_with_review'].includes(step.type)
+  const [apiKeyStatus, setApiKeyStatus] = useState<{
+    loading: boolean
+    missing: string[]
+    checked: boolean
+  }>({ loading: false, missing: [], checked: false })
+
+  // Determine which APIs this step requires
+  const requiredApis = step.jobType
+    ? STEP_API_REQUIREMENTS[step.jobType] || []
+    : step.executor === 'llm'
+    ? STEP_API_REQUIREMENTS.llm
+    : []
+
+  // Check API keys when component mounts
+  useEffect(() => {
+    if (requiredApis.length === 0) {
+      setApiKeyStatus({ loading: false, missing: [], checked: true })
+      return
+    }
+
+    const checkApiKeys = async () => {
+      setApiKeyStatus(prev => ({ ...prev, loading: true }))
+      try {
+        const response = await fetch(`/api/user/api-keys/check?services=${requiredApis.join(',')}`)
+        const data = await response.json()
+        setApiKeyStatus({
+          loading: false,
+          missing: data.missing || [],
+          checked: true,
+        })
+      } catch {
+        // If check fails, assume keys are configured to allow execution
+        setApiKeyStatus({ loading: false, missing: [], checked: true })
+      }
+    }
+    checkApiKeys()
+  }, [requiredApis.join(',')])
+
+  // Service name to display name
+  const serviceDisplayName: Record<string, string> = {
+    serper: 'Serper (búsqueda Google)',
+    firecrawl: 'Firecrawl (scraping)',
+    openrouter: 'OpenRouter (IA)',
+    apify: 'Apify (scraping social)',
+    perplexity: 'Perplexity (búsqueda IA)',
+  }
+
+  // Show loading while checking
+  if (apiKeyStatus.loading) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 text-gray-500">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span className="text-sm">Verificando configuración...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Show warning if missing API keys
+  if (apiKeyStatus.missing.length > 0) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-yellow-800">
+                API Keys requeridas
+              </p>
+              <p className="text-sm text-yellow-700 mt-1">
+                Para ejecutar este paso necesitas configurar:
+              </p>
+              <ul className="mt-2 space-y-1">
+                {apiKeyStatus.missing.map(service => (
+                  <li key={service} className="text-sm text-yellow-700 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full" />
+                    {serviceDisplayName[service] || service}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <a
+          href="/settings#apis"
+          className="w-full px-4 py-2.5 bg-yellow-600 text-white rounded-lg font-medium hover:bg-yellow-700 flex items-center justify-center gap-2"
+        >
+          Ir a Configuración → APIs
+        </a>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
