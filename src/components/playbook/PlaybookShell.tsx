@@ -410,6 +410,54 @@ export default function PlaybookShell({
     })
   }, [playbookConfig.phases])
 
+  // Re-run the previous step (go back and reset its state to pending)
+  const rerunPreviousStep = useCallback(() => {
+    setState(prev => {
+      let newPhaseIndex = prev.currentPhaseIndex
+      let newStepIndex = prev.currentStepIndex
+
+      // Find previous step
+      if (prev.currentStepIndex > 0) {
+        newStepIndex = prev.currentStepIndex - 1
+      } else if (prev.currentPhaseIndex > 0) {
+        const prevPhase = playbookConfig.phases[prev.currentPhaseIndex - 1]
+        newPhaseIndex = prev.currentPhaseIndex - 1
+        newStepIndex = prevPhase.steps.length - 1
+      } else {
+        // Already at the beginning, nothing to rerun
+        return prev
+      }
+
+      // Get the previous step ID
+      const prevStepId = playbookConfig.phases[newPhaseIndex].steps[newStepIndex].id
+
+      // Reset the previous step state to pending and navigate to it
+      const newPhases = prev.phases.map((phase, pi) => ({
+        ...phase,
+        steps: phase.steps.map((step, si) => {
+          if (pi === newPhaseIndex && si === newStepIndex) {
+            return {
+              ...step,
+              status: 'pending' as const,
+              output: undefined,
+              error: undefined,
+            }
+          }
+          return step
+        }),
+      }))
+
+      return {
+        ...prev,
+        phases: newPhases,
+        currentPhaseIndex: newPhaseIndex,
+        currentStepIndex: newStepIndex,
+      }
+    })
+    // Trigger auto-execute after navigating
+    setShouldAutoExecute(true)
+  }, [playbookConfig.phases])
+
   // Update step state
   const updateStepState = useCallback(
     (stepId: string, update: Partial<StepState>) => {
@@ -1189,6 +1237,7 @@ export default function PlaybookShell({
                 onUpdateState={(update) => updateStepState(currentStep.id, update)}
                 onEdit={handleEdit}
                 onCancel={handleCancel}
+                onRerunPrevious={rerunPreviousStep}
                 isFirst={isFirstStep}
                 isLast={isLastStep}
                 previousStepOutput={getPreviousStepOutput()}
