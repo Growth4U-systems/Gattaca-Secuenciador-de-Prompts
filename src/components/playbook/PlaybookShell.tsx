@@ -291,6 +291,7 @@ export default function PlaybookShell({
 
           // Special case: Extract serpJobId from serp_search or search_and_preview step output
           // This is needed for review_urls/review_and_scrape step to display SERP results
+          // Note: We check this inside the completed block, but also outside below
           if ((stepState.id === 'serp_search' || stepState.id === 'search_and_preview') && stepState.output) {
             const output = stepState.output as { jobId?: string }
             if (output.jobId) {
@@ -319,6 +320,15 @@ export default function PlaybookShell({
               console.error('[buildPlaybookContext] Error parsing sources output:', e)
               // Don't set context.sources - let it use default values
             }
+          }
+        }
+
+        // IMPORTANT: Extract serpJobId even from non-completed steps (e.g., after cancel)
+        // This allows review_and_scrape to show URLs from a cancelled SERP job
+        if ((stepState.id === 'serp_search' || stepState.id === 'search_and_preview') && stepState.output && !context.serpJobId) {
+          const output = stepState.output as { jobId?: string }
+          if (output.jobId) {
+            context.serpJobId = output.jobId
           }
         }
       }
@@ -670,6 +680,8 @@ export default function PlaybookShell({
 
               // 3. Poll for status and auto-resume if needed
               let isResuming = false
+              let lastCompletedCount = -1 // Track previous poll value
+              let stallCount = 0 // Count consecutive stalls
 
               // Clear any existing poll interval
               if (pollIntervalRef.current) {
@@ -698,24 +710,33 @@ export default function PlaybookShell({
                   // Auto-resume if job was interrupted (still serp_running but not progressing)
                   // This handles Vercel timeout scenarios
                   if (statusData.status === 'serp_running' && completed < total && !isResuming) {
-                    // Check if progress has stalled (same completed count for 5+ seconds)
-                    const lastCompleted = statusData.progress?.serp?.completed || 0
-                    if (lastCompleted === completed && remaining > 0) {
-                      console.log(`[SERP] Job appears stalled at ${completed}/${total}, auto-resuming...`)
-                      isResuming = true
-                      // Resume the job by calling SERP endpoint again
-                      fetch(`/api/niche-finder/jobs/${jobId}/serp`, { method: 'POST' })
-                        .then(res => res.json())
-                        .then(data => {
-                          console.log('[SERP] Resume response:', data)
-                          isResuming = false
-                        })
-                        .catch(err => {
-                          console.error('[SERP] Resume error:', err)
-                          isResuming = false
-                        })
+                    // Check if progress has stalled (same value as PREVIOUS poll)
+                    if (lastCompletedCount === completed && remaining > 0) {
+                      stallCount++
+                      // After 2 consecutive stalls (4+ seconds), trigger resume
+                      if (stallCount >= 2) {
+                        console.log(`[SERP] Job stalled at ${completed}/${total} for ${stallCount * 2}s, auto-resuming...`)
+                        isResuming = true
+                        stallCount = 0
+                        // Resume the job by calling SERP endpoint again
+                        fetch(`/api/niche-finder/jobs/${jobId}/serp`, { method: 'POST' })
+                          .then(res => res.json())
+                          .then(data => {
+                            console.log('[SERP] Resume response:', data)
+                            isResuming = false
+                          })
+                          .catch(err => {
+                            console.error('[SERP] Resume error:', err)
+                            isResuming = false
+                          })
+                      }
+                    } else {
+                      stallCount = 0 // Reset stall count if progress is being made
                     }
                   }
+
+                  // Update last completed for next poll comparison
+                  lastCompletedCount = completed
 
                   if (statusData.status === 'serp_done' || statusData.status === 'serp_completed') {
                     if (pollIntervalRef.current) {
