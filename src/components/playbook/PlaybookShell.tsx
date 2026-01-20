@@ -139,6 +139,8 @@ export default function PlaybookShell({
   const shouldSaveRef = useRef(false)
   // Ref to prevent duplicate saves
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Ref to store polling interval for cancellation
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Save playbook state to database (debounced)
   const savePlaybookState = useCallback(async (stateToSave: PlaybookState) => {
@@ -539,94 +541,107 @@ export default function PlaybookShell({
           case 'job':
             // Job-based execution: create job, execute, poll for status
             if (step.jobType === 'niche_finder_serp') {
-              // Build job config from completed steps OR from input (for search_with_preview)
-              let jobConfig: {
-                life_contexts: string[]
-                product_words: string[]
-                indicators: string[]
-                sources: { reddit: boolean | { enabled?: boolean; subreddits?: string[] }; thematic_forums: boolean | { enabled?: boolean; forums?: string[] }; general_forums: string[] | { enabled?: boolean; forums?: string[] } }
-                serp_pages: number
-              }
+              // Check if we have an existing job to resume (from cancelled execution)
+              const currentStepForJob = state.phases.flatMap(p => p.steps).find(s => s.id === stepId)
+              const existingJobId = (currentStepForJob?.output as { jobId?: string })?.jobId
 
-              // If input is provided (from SearchWithPreviewPanel), use it directly
-              if (input && input.life_contexts && input.product_words) {
-                jobConfig = {
-                  life_contexts: input.life_contexts,
-                  product_words: input.product_words,
-                  indicators: input.indicators || [],
-                  sources: input.sources || { reddit: true, thematic_forums: false, general_forums: [] },
-                  serp_pages: input.serp_pages || 5,
-                }
+              let jobId: string
+
+              if (existingJobId) {
+                // Resume existing job
+                console.log('[SERP] Resuming existing job:', existingJobId)
+                jobId = existingJobId
+                updateStepState(stepId, { progress: { current: 0, total: 0, label: 'Retomando búsqueda SERP...' } })
               } else {
-                // Fall back to building from completed steps (legacy flow)
-                const lifeContextsStep = state.phases
-                  .flatMap(p => p.steps)
-                  .find(s => s.id === 'life_contexts')
-                const needWordsStep = state.phases
-                  .flatMap(p => p.steps)
-                  .find(s => s.id === 'need_words')
-                const indicatorsStep = state.phases
-                  .flatMap(p => p.steps)
-                  .find(s => s.id === 'indicators')
-                const sourcesStep = state.phases
-                  .flatMap(p => p.steps)
-                  .find(s => s.id === 'sources')
+                // Build job config from completed steps OR from input (for search_with_preview)
+                let jobConfig: {
+                  life_contexts: string[]
+                  product_words: string[]
+                  indicators: string[]
+                  sources: { reddit: boolean | { enabled?: boolean; subreddits?: string[] }; thematic_forums: boolean | { enabled?: boolean; forums?: string[] }; general_forums: string[] | { enabled?: boolean; forums?: string[] } }
+                  serp_pages: number
+                }
 
-                const selectedContexts = lifeContextsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
-                const selectedNeedWords = needWordsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
-                const selectedIndicators = indicatorsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
+                // If input is provided (from SearchWithPreviewPanel), use it directly
+                if (input && input.life_contexts && input.product_words) {
+                  jobConfig = {
+                    life_contexts: input.life_contexts,
+                    product_words: input.product_words,
+                    indicators: input.indicators || [],
+                    sources: input.sources || { reddit: true, thematic_forums: false, general_forums: [] },
+                    serp_pages: input.serp_pages || 5,
+                  }
+                } else {
+                  // Fall back to building from completed steps (legacy flow)
+                  const lifeContextsStep = state.phases
+                    .flatMap(p => p.steps)
+                    .find(s => s.id === 'life_contexts')
+                  const needWordsStep = state.phases
+                    .flatMap(p => p.steps)
+                    .find(s => s.id === 'need_words')
+                  const indicatorsStep = state.phases
+                    .flatMap(p => p.steps)
+                    .find(s => s.id === 'indicators')
+                  const sourcesStep = state.phases
+                    .flatMap(p => p.steps)
+                    .find(s => s.id === 'sources')
 
-                // Parse sources output (can be JSON string from LLM or already parsed object)
-                let sourcesConfig: { reddit: { enabled: boolean; subreddits: string[] }; thematic_forums: { enabled: boolean; forums: string[] }; general_forums: { enabled: boolean; forums: string[] } } = { reddit: { enabled: true, subreddits: [] }, thematic_forums: { enabled: false, forums: [] }, general_forums: { enabled: false, forums: [] } }
-                try {
-                  if (sourcesStep?.output) {
-                    // Check if output is already an object (parsed)
-                    if (typeof sourcesStep.output === 'object' && sourcesStep.output !== null) {
-                      sourcesConfig = sourcesStep.output as typeof sourcesConfig
-                    } else if (typeof sourcesStep.output === 'string') {
-                      // Try to extract JSON from string
-                      const jsonMatch = sourcesStep.output.match(/\{[\s\S]*\}/)
-                      if (jsonMatch) {
-                        sourcesConfig = JSON.parse(jsonMatch[0])
+                  const selectedContexts = lifeContextsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
+                  const selectedNeedWords = needWordsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
+                  const selectedIndicators = indicatorsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
+
+                  // Parse sources output (can be JSON string from LLM or already parsed object)
+                  let sourcesConfig: { reddit: { enabled: boolean; subreddits: string[] }; thematic_forums: { enabled: boolean; forums: string[] }; general_forums: { enabled: boolean; forums: string[] } } = { reddit: { enabled: true, subreddits: [] }, thematic_forums: { enabled: false, forums: [] }, general_forums: { enabled: false, forums: [] } }
+                  try {
+                    if (sourcesStep?.output) {
+                      // Check if output is already an object (parsed)
+                      if (typeof sourcesStep.output === 'object' && sourcesStep.output !== null) {
+                        sourcesConfig = sourcesStep.output as typeof sourcesConfig
+                      } else if (typeof sourcesStep.output === 'string') {
+                        // Try to extract JSON from string
+                        const jsonMatch = sourcesStep.output.match(/\{[\s\S]*\}/)
+                        if (jsonMatch) {
+                          sourcesConfig = JSON.parse(jsonMatch[0])
+                        }
                       }
                     }
+                  } catch (e) {
+                    console.error('Error parsing sources config:', e)
                   }
-                } catch (e) {
-                  console.error('Error parsing sources config:', e)
+
+                  jobConfig = {
+                    life_contexts: selectedContexts,
+                    product_words: selectedNeedWords,
+                    indicators: selectedIndicators,
+                    sources: sourcesConfig,
+                    serp_pages: (selectedCampaign?.customVariables?.serp_pages as number) || 5,
+                  }
                 }
 
-                jobConfig = {
-                  life_contexts: selectedContexts,
-                  product_words: selectedNeedWords,
-                  indicators: selectedIndicators,
-                  sources: sourcesConfig,
-                  serp_pages: (selectedCampaign?.customVariables?.serp_pages as number) || 5,
+                console.log('[SERP] Starting job with config:', JSON.stringify(jobConfig, null, 2))
+
+                // 1. Create job
+                const createResponse = await fetch('/api/niche-finder/jobs/start', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    project_id: projectId,
+                    config: jobConfig,
+                  }),
+                })
+                const createData = await createResponse.json()
+                console.log('[SERP] Create job response:', createData)
+
+                if (!createData.success) {
+                  throw new Error(createData.error || 'Error creando job')
                 }
+
+                jobId = createData.job_id
+                console.log('[SERP] Job created with ID:', jobId)
+                updateStepState(stepId, { output: { jobId }, progress: { current: 0, total: 0, label: 'Iniciando búsqueda SERP...' } })
               }
 
-              console.log('[SERP] Starting job with config:', JSON.stringify(jobConfig, null, 2))
-
-              // 1. Create job
-              const createResponse = await fetch('/api/niche-finder/jobs/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  project_id: projectId,
-                  config: jobConfig,
-                }),
-              })
-              const createData = await createResponse.json()
-              console.log('[SERP] Create job response:', createData)
-
-              if (!createData.success) {
-                throw new Error(createData.error || 'Error creando job')
-              }
-
-              const jobId = createData.job_id
-              console.log('[SERP] Job created with ID:', jobId)
-              updateStepState(stepId, { output: { jobId }, progress: { current: 0, total: 0, label: 'Iniciando búsqueda SERP...' } })
-
-              // 2. Execute SERP job
+              // 2. Execute SERP job (this will resume from where it left off if job was interrupted)
               console.log('[SERP] Executing SERP search...')
               const serpResponse = await fetch(`/api/niche-finder/jobs/${jobId}/serp`, {
                 method: 'POST',
@@ -656,7 +671,12 @@ export default function PlaybookShell({
               // 3. Poll for status and auto-resume if needed
               let isResuming = false
 
-              const pollInterval = setInterval(async () => {
+              // Clear any existing poll interval
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+              }
+
+              pollIntervalRef.current = setInterval(async () => {
                 try {
                   const statusResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
                   const statusData = await statusResponse.json()
@@ -698,7 +718,10 @@ export default function PlaybookShell({
                   }
 
                   if (statusData.status === 'serp_done' || statusData.status === 'serp_completed') {
-                    clearInterval(pollInterval)
+                    if (pollIntervalRef.current) {
+                      clearInterval(pollIntervalRef.current)
+                      pollIntervalRef.current = null
+                    }
                     updateStepState(stepId, {
                       status: 'completed',
                       completedAt: new Date(),
@@ -710,11 +733,17 @@ export default function PlaybookShell({
                     })
                     setTimeout(goToNextStep, 500)
                   } else if (statusData.status === 'failed' || statusData.status === 'error') {
-                    clearInterval(pollInterval)
+                    if (pollIntervalRef.current) {
+                      clearInterval(pollIntervalRef.current)
+                      pollIntervalRef.current = null
+                    }
                     throw new Error(statusData.job?.error_message || 'Job failed')
                   }
                 } catch (pollError) {
-                  clearInterval(pollInterval)
+                  if (pollIntervalRef.current) {
+                    clearInterval(pollIntervalRef.current)
+                    pollIntervalRef.current = null
+                  }
                   updateStepState(stepId, {
                     status: 'error',
                     error: pollError instanceof Error ? pollError.message : 'Error checking job status',
@@ -780,13 +809,23 @@ export default function PlaybookShell({
   }, [currentStep?.id, updateStepState])
 
   // Handle cancel - cancelar ejecución en curso
+  // IMPORTANTE: Mantiene el output (jobId) para poder retomar el job
   const handleCancel = useCallback(() => {
     if (!currentStep) return
-    // Volver a pending y limpiar progreso
+
+    // Clear polling interval if running
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+      console.log('[Cancel] Cleared polling interval')
+    }
+
+    // Volver a pending y limpiar progreso, pero MANTENER output (contiene jobId)
     updateStepState(currentStep.id, {
       status: 'pending',
       progress: undefined,
       error: undefined,
+      // NO limpiamos output para mantener el jobId y poder retomar
     })
   }, [currentStep?.id, updateStepState])
 
