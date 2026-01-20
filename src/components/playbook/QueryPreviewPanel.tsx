@@ -19,11 +19,46 @@ const SECONDS_PER_SEARCH = 0.15 // ~150ms per search with rate limiting
 
 export function QueryPreviewPanel({ config, onApprove, onAdjust }: QueryPreviewPanelProps) {
   const [showExamples, setShowExamples] = useState(false)
+  const [configError, setConfigError] = useState<string | null>(null)
+
+  // Validate config structure
+  const validatedConfig = useMemo(() => {
+    // Check if sources is valid (not a string error message)
+    if (typeof config.sources === 'string') {
+      setConfigError(`Configuración inválida: ${config.sources}`)
+      return null
+    }
+    if (!config.sources || typeof config.sources !== 'object') {
+      setConfigError('Configuración de fuentes no disponible')
+      return null
+    }
+    // Ensure arrays are valid
+    if (!Array.isArray(config.life_contexts) || !Array.isArray(config.product_words)) {
+      setConfigError('Configuración de contextos o palabras inválida')
+      return null
+    }
+    setConfigError(null)
+    return config
+  }, [config])
 
   // Calculate totals
   const stats = useMemo(() => {
-    const queries = generateSearchQueries(config)
-    const serpPages = config.serp_pages || 3
+    if (!validatedConfig) {
+      return {
+        queries: [],
+        totalQueries: 0,
+        totalSearches: 0,
+        estimatedCost: 0,
+        estimatedTimeMinutes: 0,
+        sourceBreakdown: {},
+        exampleQueries: [],
+        contexts: 0,
+        words: 0,
+        pages: 3,
+      }
+    }
+    const queries = generateSearchQueries(validatedConfig)
+    const serpPages = validatedConfig.serp_pages || 3
     const totalSearches = queries.length * serpPages
     const estimatedCost = totalSearches * COST_PER_SEARCH
     const estimatedTimeSeconds = totalSearches * SECONDS_PER_SEARCH
@@ -46,11 +81,11 @@ export function QueryPreviewPanel({ config, onApprove, onAdjust }: QueryPreviewP
       estimatedTimeMinutes,
       sourceBreakdown,
       exampleQueries,
-      contexts: config.life_contexts?.length || 0,
-      words: config.product_words?.length || 0,
+      contexts: validatedConfig.life_contexts?.length || 0,
+      words: validatedConfig.product_words?.length || 0,
       pages: serpPages
     }
-  }, [config])
+  }, [validatedConfig])
 
   // Warning if too many searches
   const isHighVolume = stats.totalSearches > 500

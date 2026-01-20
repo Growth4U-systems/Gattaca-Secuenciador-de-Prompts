@@ -24,8 +24,10 @@ import ApiKeysConfig from '@/components/settings/ApiKeysConfig'
 import NicheFinderPlaybook from '@/components/niche-finder/NicheFinderPlaybook'
 import NicheFinderPlaybookV2 from '@/components/niche-finder/NicheFinderPlaybookV2'
 import SignalBasedOutreachPlaybook from '@/components/signal-outreach/SignalBasedOutreachPlaybook'
+import { VideoViralIAPlaybook } from '@/components/video-viral-ia'
+import { Video } from 'lucide-react'
 
-type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder' | 'signal-outreach'
+type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder' | 'signal-outreach' | 'video-viral-ia'
 
 // Loading Skeleton
 function LoadingSkeleton() {
@@ -87,6 +89,7 @@ export default function ProjectPage({
       setActiveTab(
         project.playbook_type === 'niche_finder' ? 'niche-finder' :
         project.playbook_type === 'signal_based_outreach' ? 'signal-outreach' :
+        project.playbook_type === 'video_viral_ia' ? 'video-viral-ia' :
         'documents'
       )
     }
@@ -111,14 +114,22 @@ export default function ProjectPage({
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
   ]
 
+  // Video Viral IA: Uses unified view with config and campaigns integrated
+  const videoViralIATabs = [
+    { id: 'video-viral-ia' as TabType, label: 'Video Viral IA', icon: Video, description: 'Crear videos virales' },
+    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
+  ]
+
   // Add Export tab only for ECP projects
   const tabs = project?.playbook_type === 'niche_finder'
     ? nicheFinderTabs
     : project?.playbook_type === 'signal_based_outreach'
       ? signalOutreachTabs
-      : project?.playbook_type === 'ecp'
-        ? [...baseTabs, { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' }]
-        : baseTabs
+      : project?.playbook_type === 'video_viral_ia'
+        ? videoViralIATabs
+        : project?.playbook_type === 'ecp'
+          ? [...baseTabs, { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' }]
+          : baseTabs
 
   if (projectLoading || activeTab === null) {
     return <LoadingSkeleton />
@@ -475,6 +486,9 @@ export default function ProjectPage({
             )}
             {activeTab === 'signal-outreach' && (
               <SignalBasedOutreachPlaybook projectId={params.projectId} />
+            )}
+            {activeTab === 'video-viral-ia' && (
+              <VideoViralIAPlaybook projectId={params.projectId} />
             )}
           </div>
         </div>
