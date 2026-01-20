@@ -94,6 +94,16 @@ export async function POST(request: NextRequest, { params }: Params) {
     let totalSearches = 0
     let totalCost = 0
 
+    // Update job with total expected queries for progress tracking
+    const totalExpectedSearches = queries.length * serpPages
+    await supabase
+      .from('niche_finder_jobs')
+      .update({
+        serp_total: totalExpectedSearches,
+        serp_completed: 0
+      })
+      .eq('id', jobId)
+
     // Execute searches (with rate limiting)
     for (const queryInfo of queries) {
       try {
@@ -107,6 +117,12 @@ export async function POST(request: NextRequest, { params }: Params) {
 
           totalSearches++
           totalCost += SERPER_COST_PER_SEARCH
+
+          // Update progress in real-time
+          await supabase
+            .from('niche_finder_jobs')
+            .update({ serp_completed: totalSearches })
+            .eq('id', jobId)
 
           // Process results - filter out blogs and low-quality URLs
           for (const result of response.organic) {
