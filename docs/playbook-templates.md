@@ -1,6 +1,21 @@
-# Playbook Templates - Documentación y Verificación
+# Playbook Templates - Documentación Completa
 
-Este documento define la estructura estándar de los templates de playbook y su estado de completitud.
+Este documento es la **guía definitiva** para crear y mantener playbooks. Está diseñado para que Claude (u otro agente de IA) pueda crear nuevos playbooks correctamente siguiendo todas las reglas y patrones establecidos.
+
+**Última actualización**: 2026-01-20
+
+---
+
+## Tabla de Contenidos
+
+1. [Arquitectura Visual Unificada](#arquitectura-visual-unificada)
+2. [Tipos de Paso (StepType)](#tipos-de-paso-steptype)
+3. [Tipos de Ejecutor (ExecutorType)](#tipos-de-ejecutor-executortype)
+4. [Manejo de Outputs](#manejo-de-outputs)
+5. [API Keys Requeridas](#api-keys-requeridas)
+6. [Cómo Agregar un Nuevo Playbook](#cómo-agregar-un-nuevo-playbook)
+7. [Verificación y Testing](#verificación-y-testing)
+8. [Templates Existentes](#templates-existentes)
 
 ---
 
@@ -52,7 +67,7 @@ Todos los playbooks usan una vista unificada con:
 - Wizard de configuración al crear nueva campaña
 - Ejecución paso a paso con human in the loop
 
-### Tipos de Paso para UI
+### Tipos de Paso para UI (Resumen)
 
 ```typescript
 type StepType =
@@ -64,9 +79,12 @@ type StepType =
   | 'decision'           // Usuario toma decisión crítica
   | 'display'            // Solo muestra información
   | 'action'             // Acción del usuario (ej: exportar)
+  | 'manual_research'    // Usuario hace research externo (ChatGPT/Perplexity)
 
 type ExecutorType = 'llm' | 'job' | 'api' | 'custom' | 'none'
 ```
+
+> ⚠️ **IMPORTANTE**: Ver sección [Tipos de Paso (StepType)](#tipos-de-paso-steptype) para documentación detallada de cada tipo.
 
 ### Archivos de Configuración Visual
 
