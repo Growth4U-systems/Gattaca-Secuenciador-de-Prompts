@@ -1425,6 +1425,7 @@ export default function WorkArea({
   onUpdateState,
   onEdit,
   onCancel,
+  onRerunPrevious,
   isFirst,
   isLast,
   previousStepOutput,
@@ -1592,6 +1593,8 @@ export default function WorkArea({
             stepState={stepState}
             onUpdateState={onUpdateState}
             onContinue={onContinue}
+            onBack={onBack}
+            onRerunPrevious={onRerunPrevious}
           />
         )
 
