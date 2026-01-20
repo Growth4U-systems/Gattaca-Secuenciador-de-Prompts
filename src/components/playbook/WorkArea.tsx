@@ -918,6 +918,7 @@ interface CompletedStepProps {
 function CompletedStep({ step, stepState, onContinue, onRerun }: CompletedStepProps) {
   const [copied, setCopied] = useState(false)
   const output = stepState.output
+  const suggestions = stepState.suggestions
 
   const handleCopy = async () => {
     if (!output) return
@@ -927,6 +928,55 @@ function CompletedStep({ step, stepState, onContinue, onRerun }: CompletedStepPr
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // Render summary for suggestion steps (show selected items as chips)
+  const renderSuggestionSummary = () => {
+    if (step.type !== 'suggestion' || !suggestions) return null
+    const selected = suggestions.filter(s => s.selected)
+    if (selected.length === 0) return null
+
+    return (
+      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+        <div className="text-sm font-medium text-gray-600 mb-2">
+          {selected.length} seleccionados:
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {selected.map(s => (
+            <span key={s.id} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">
+              {s.label}
+            </span>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Render output for auto steps
+  const renderAutoOutput = () => {
+    if (!output || step.type === 'suggestion') return null
+
+    return (
+      <div className="relative">
+        <button
+          onClick={handleCopy}
+          className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded z-10"
+        >
+          {copied ? <CheckCheck size={16} className="text-green-600" /> : <Copy size={16} />}
+        </button>
+        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 overflow-auto max-h-64">
+          {typeof output === 'string' ? (
+            <div className="prose prose-sm max-w-none">
+              <ReactMarkdown>{output}</ReactMarkdown>
+            </div>
+          ) : (
+            <pre className="text-sm text-gray-700 whitespace-pre-wrap">
+              {JSON.stringify(output, null, 2)}
+            </pre>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-green-700">
@@ -934,27 +984,11 @@ function CompletedStep({ step, stepState, onContinue, onRerun }: CompletedStepPr
         <span className="font-medium">Completado</span>
       </div>
 
-      {output && (
-        <div className="relative">
-          <button
-            onClick={handleCopy}
-            className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded z-10"
-          >
-            {copied ? <CheckCheck size={16} className="text-green-600" /> : <Copy size={16} />}
-          </button>
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 overflow-auto max-h-64">
-            {typeof output === 'string' ? (
-              <div className="prose prose-sm max-w-none">
-                <ReactMarkdown>{output}</ReactMarkdown>
-              </div>
-            ) : (
-              <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-                {JSON.stringify(output, null, 2)}
-              </pre>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Show selected items for suggestion steps */}
+      {renderSuggestionSummary()}
+
+      {/* Show output for auto steps */}
+      {renderAutoOutput()}
 
       <div className="flex gap-2">
         {onRerun && (
