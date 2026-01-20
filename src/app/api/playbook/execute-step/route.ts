@@ -4,6 +4,8 @@ import { createClient as createAdminClient } from '@/lib/supabase-server-admin'
 import { getUserApiKey } from '@/lib/getUserApiKey'
 import { decryptToken } from '@/lib/encryption'
 import { SIGNAL_OUTREACH_FLOW_STEPS } from '@/lib/templates/signal-based-outreach-playbook'
+import { NICHE_FINDER_FLOW_STEPS } from '@/lib/templates/niche-finder-playbook'
+import { getDefaultPromptForStep } from '@/components/playbook/utils/getDefaultPrompts'
 import { APIFY_ACTORS } from '@/lib/scraperTemplates'
 
 export const dynamic = 'force-dynamic'
@@ -40,8 +42,8 @@ interface EvaluatedPost {
   fitReason?: string
 }
 
-// Mapeo de step IDs de UI a template
-const STEP_ID_MAP: Record<string, string> = {
+// Mapeo de step IDs de UI a template - Signal Outreach
+const SIGNAL_OUTREACH_STEP_ID_MAP: Record<string, string> = {
   'map_topics': 'step-1-value-prop-topics',
   'find_creators': 'step-2-search-creators',
   'evaluate_creators': 'step-3-evaluate-creators',
@@ -55,8 +57,19 @@ const STEP_ID_MAP: Record<string, string> = {
   'export_launch': 'step-11-export-launch',
 }
 
-// Orden de los pasos para saber cuál es el anterior
-const STEP_ORDER = [
+// Mapeo de step IDs de UI a template - Niche Finder
+const NICHE_FINDER_STEP_ID_MAP: Record<string, string> = {
+  'sources': 'suggest_forums',
+  'need_words': 'suggest_need_words',
+  'life_contexts': 'suggest_life_contexts',
+  'extract_problems': 'step-1-find-problems',
+  'clean_filter': 'step-2-clean-filter',
+  'deep_research_manual': 'step-3-scoring',
+  'consolidate': 'step-4-consolidate',
+}
+
+// Orden de los pasos para saber cuál es el anterior - Signal Outreach
+const SIGNAL_OUTREACH_STEP_ORDER = [
   'map_topics',
   'find_creators',
   'evaluate_creators',
@@ -68,6 +81,25 @@ const STEP_ORDER = [
   'filter_icp',
   'lead_magnet_messages',
   'export_launch',
+]
+
+// Orden de los pasos para Niche Finder
+const NICHE_FINDER_STEP_ORDER = [
+  'life_contexts',
+  'need_words',
+  'indicators',
+  'sources',
+  'serp_search',
+  'review_urls',
+  'scrape',
+  'extract_problems',
+  'review_extraction',
+  'clean_filter',
+  'deep_research_manual',
+  'consolidate',
+  'select_niches',
+  'dashboard',
+  'export',
 ]
 
 interface ExecuteStepRequest {
@@ -175,21 +207,60 @@ export async function POST(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // Get the template step
-    const templateStepId = STEP_ID_MAP[stepId]
-    if (!templateStepId) {
-      return NextResponse.json({
-        success: false,
-        error: `Unknown step ID: ${stepId}`
-      }, { status: 400 })
-    }
+    // Get the template step based on playbook type
+    const isNicheFinder = playbookType === 'niche_finder'
+    const stepIdMap = isNicheFinder ? NICHE_FINDER_STEP_ID_MAP : SIGNAL_OUTREACH_STEP_ID_MAP
+    const stepOrder = isNicheFinder ? NICHE_FINDER_STEP_ORDER : SIGNAL_OUTREACH_STEP_ORDER
+    const flowSteps = isNicheFinder ? NICHE_FINDER_FLOW_STEPS : SIGNAL_OUTREACH_FLOW_STEPS
 
-    const templateStep = SIGNAL_OUTREACH_FLOW_STEPS.find(s => s.id === templateStepId)
-    if (!templateStep) {
-      return NextResponse.json({
-        success: false,
-        error: `Template step not found: ${templateStepId}`
-      }, { status: 500 })
+    // For Niche Finder, we can use promptKey directly from getDefaultPrompts
+    let prompt = ''
+    let model = 'google/gemini-2.0-flash-001'
+    let maxTokens = 4096
+    let temperature = 0.7
+
+    const templateStepId = stepIdMap[stepId]
+
+    if (isNicheFinder) {
+      // Niche Finder: Get prompt from getDefaultPrompts utility
+      const promptKey = templateStepId || stepId
+      prompt = getDefaultPromptForStep(stepId, promptKey)
+
+      if (!prompt) {
+        return NextResponse.json({
+          success: false,
+          error: `No prompt found for step: ${stepId} (promptKey: ${promptKey})`
+        }, { status: 400 })
+      }
+
+      // Find step config in flow steps if available
+      const flowStep = flowSteps.find(s => s.id === templateStepId)
+      if (flowStep) {
+        model = flowStep.model || model
+        maxTokens = flowStep.max_tokens || maxTokens
+        temperature = flowStep.temperature || temperature
+      }
+    } else {
+      // Signal Outreach: Use original logic
+      if (!templateStepId) {
+        return NextResponse.json({
+          success: false,
+          error: `Unknown step ID: ${stepId}`
+        }, { status: 400 })
+      }
+
+      const templateStep = flowSteps.find(s => s.id === templateStepId)
+      if (!templateStep) {
+        return NextResponse.json({
+          success: false,
+          error: `Template step not found: ${templateStepId}`
+        }, { status: 500 })
+      }
+
+      prompt = templateStep.prompt
+      model = templateStep.model || model
+      maxTokens = templateStep.max_tokens || maxTokens
+      temperature = templateStep.temperature || temperature
     }
 
     // Get outputs from previous steps
@@ -202,11 +273,11 @@ export async function POST(request: NextRequest) {
       .eq('status', 'completed')
 
     // Build previous_step_output from the immediately previous step
-    const currentStepIndex = STEP_ORDER.indexOf(stepId)
+    const currentStepIndex = stepOrder.indexOf(stepId)
     let previousStepOutput = ''
 
     if (currentStepIndex > 0) {
-      const previousStepId = STEP_ORDER[currentStepIndex - 1]
+      const previousStepId = stepOrder[currentStepIndex - 1]
       const previousStep = previousOutputs?.find(o => o.step_id === previousStepId)
 
       if (previousStep) {
@@ -227,7 +298,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Replace variables in prompt
-    let prompt = templateStep.prompt
     const allVariables = {
       ...variables,
       previous_step_output: previousStepOutput || variables.previous_step_output || '(No hay output del paso anterior)',
@@ -278,15 +348,15 @@ export async function POST(request: NextRequest) {
         'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
       },
       body: JSON.stringify({
-        model: templateStep.model || 'google/gemini-2.0-flash-001',
+        model,
         messages: [
           {
             role: 'user',
             content: prompt,
           },
         ],
-        max_tokens: templateStep.max_tokens || 4096,
-        temperature: templateStep.temperature || 0.7,
+        max_tokens: maxTokens,
+        temperature,
       }),
     })
 
@@ -322,7 +392,7 @@ export async function POST(request: NextRequest) {
       success: true,
       output,
       stepId,
-      model: templateStep.model,
+      model,
     })
 
   } catch (error) {
