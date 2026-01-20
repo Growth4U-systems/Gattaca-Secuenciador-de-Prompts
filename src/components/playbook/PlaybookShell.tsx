@@ -643,6 +643,28 @@ export default function PlaybookShell({
     goToNextStep()
   }, [currentStep?.id, currentStepState?.status, updateStepState, goToNextStep])
 
+  // Handle edit - volver a editar un paso completado
+  const handleEdit = useCallback(() => {
+    if (!currentStep) return
+    // Cambiar status a pending sin perder los datos (suggestions, output, etc.)
+    updateStepState(currentStep.id, {
+      status: 'pending',
+      completedAt: undefined,
+      error: undefined,
+    })
+  }, [currentStep?.id, updateStepState])
+
+  // Handle cancel - cancelar ejecución en curso
+  const handleCancel = useCallback(() => {
+    if (!currentStep) return
+    // Volver a pending y limpiar progreso
+    updateStepState(currentStep.id, {
+      status: 'pending',
+      progress: undefined,
+      error: undefined,
+    })
+  }, [currentStep?.id, updateStepState])
+
   // Auto-start current step if it's an auto step, pending, AND user clicked Continue
   useEffect(() => {
     console.log('[AutoExecute] Check:', {
@@ -838,6 +860,8 @@ export default function PlaybookShell({
                 onBack={goToPreviousStep}
                 onExecute={(input) => executeStep(currentStep.id, input)}
                 onUpdateState={(update) => updateStepState(currentStep.id, update)}
+                onEdit={handleEdit}
+                onCancel={handleCancel}
                 isFirst={isFirstStep}
                 isLast={isLastStep}
                 previousStepOutput={getPreviousStepOutput()}
