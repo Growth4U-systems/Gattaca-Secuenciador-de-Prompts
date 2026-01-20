@@ -163,6 +163,7 @@ export const nicheFinderConfig: PlaybookConfig = {
 
     // =========================================
     // FASE 2: BÚSQUEDA & SCRAPING
+    // Simplificado a 2 pasos claros y accionables
     // =========================================
     {
       id: 'search',
@@ -170,60 +171,22 @@ export const nicheFinderConfig: PlaybookConfig = {
       description: 'Busca y recopila contenido relevante',
       steps: [
         {
-          id: 'preview_queries',
-          name: 'Vista Previa de Búsquedas',
-          description: 'Revisa el número de búsquedas y costo estimado antes de ejecutar',
-          type: 'manual_review',
-          executor: 'none',
+          id: 'search_and_preview',
+          name: 'Buscar URLs',
+          description: 'Configura y ejecuta la búsqueda en Google',
+          type: 'search_with_preview', // Nuevo tipo: preview + auto execution
+          executor: 'job',
+          jobType: 'niche_finder_serp',
           dependsOn: ['sources'],
         },
         {
-          id: 'serp_search',
-          name: 'Buscar URLs (SERP)',
-          description: 'Ejecuta búsquedas en Google para encontrar URLs relevantes',
-          type: 'auto',
-          executor: 'job',
-          jobType: 'niche_finder_serp',
-          dependsOn: ['preview_queries'],
-          executionExplanation: {
-            title: 'Búsqueda en Google (SERP)',
-            steps: [
-              'Combina contextos × palabras × fuentes para crear queries',
-              'Busca cada query en Google (múltiples páginas)',
-              'Filtra URLs de blogs y contenido no relevante',
-              'Guarda URLs únicas de foros y discusiones',
-            ],
-            estimatedCost: 'Variable según configuración',
-            costService: 'Serper API',
-          },
-        },
-        {
-          id: 'review_urls',
-          name: 'Revisar URLs',
-          description: 'Revisa y selecciona las fuentes a scrapear',
-          type: 'manual_review',
-          executor: 'none',
-          dependsOn: ['serp_search'],
-        },
-        {
-          id: 'scrape',
-          name: 'Scrapear Contenido',
-          description: 'Descarga el contenido de las URLs seleccionadas',
-          type: 'auto',
+          id: 'review_and_scrape',
+          name: 'Revisar y Scrapear',
+          description: 'Selecciona las URLs a scrapear y descarga el contenido',
+          type: 'review_with_action', // Nuevo tipo: review + auto execution
           executor: 'job',
           jobType: 'niche_finder_scrape',
-          dependsOn: ['review_urls'],
-          executionExplanation: {
-            title: 'Descarga de Contenido',
-            steps: [
-              'Descarga el HTML de cada URL seleccionada',
-              'Convierte a Markdown limpio (posts, comentarios)',
-              'Filtra contenido no relevante (navegación, ads)',
-              'Guarda el contenido para análisis posterior',
-            ],
-            estimatedCost: 'Variable según URLs',
-            costService: 'Firecrawl',
-          },
+          dependsOn: ['search_and_preview'],
         },
       ],
     },

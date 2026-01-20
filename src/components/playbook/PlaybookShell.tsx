@@ -287,9 +287,9 @@ export default function PlaybookShell({
             context[`${stepState.id}_output`] = stepState.output
           }
 
-          // Special case: Extract serpJobId from serp_search step output
-          // This is needed for review_urls step to display SERP results
-          if (stepState.id === 'serp_search' && stepState.output) {
+          // Special case: Extract serpJobId from serp_search or search_and_preview step output
+          // This is needed for review_urls/review_and_scrape step to display SERP results
+          if ((stepState.id === 'serp_search' || stepState.id === 'search_and_preview') && stepState.output) {
             const output = stepState.output as { jobId?: string }
             if (output.jobId) {
               context.serpJobId = output.jobId
@@ -505,49 +505,69 @@ export default function PlaybookShell({
           case 'job':
             // Job-based execution: create job, execute, poll for status
             if (step.jobType === 'niche_finder_serp') {
-              // Build job config from completed steps
-              const lifeContextsStep = state.phases
-                .flatMap(p => p.steps)
-                .find(s => s.id === 'life_contexts')
-              const needWordsStep = state.phases
-                .flatMap(p => p.steps)
-                .find(s => s.id === 'need_words')
-              const indicatorsStep = state.phases
-                .flatMap(p => p.steps)
-                .find(s => s.id === 'indicators')
-              const sourcesStep = state.phases
-                .flatMap(p => p.steps)
-                .find(s => s.id === 'sources')
-
-              const selectedContexts = lifeContextsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
-              const selectedNeedWords = needWordsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
-              const selectedIndicators = indicatorsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
-
-              // Parse sources output (can be JSON string from LLM or already parsed object)
-              let sourcesConfig = { reddit: { enabled: true, subreddits: [] }, thematic_forums: { enabled: false, forums: [] }, general_forums: { enabled: false, forums: [] } }
-              try {
-                if (sourcesStep?.output) {
-                  // Check if output is already an object (parsed)
-                  if (typeof sourcesStep.output === 'object' && sourcesStep.output !== null) {
-                    sourcesConfig = sourcesStep.output as typeof sourcesConfig
-                  } else if (typeof sourcesStep.output === 'string') {
-                    // Try to extract JSON from string
-                    const jsonMatch = sourcesStep.output.match(/\{[\s\S]*\}/)
-                    if (jsonMatch) {
-                      sourcesConfig = JSON.parse(jsonMatch[0])
-                    }
-                  }
-                }
-              } catch (e) {
-                console.error('Error parsing sources config:', e)
+              // Build job config from completed steps OR from input (for search_with_preview)
+              let jobConfig: {
+                life_contexts: string[]
+                product_words: string[]
+                indicators: string[]
+                sources: { reddit: boolean | { enabled?: boolean; subreddits?: string[] }; thematic_forums: boolean | { enabled?: boolean; forums?: string[] }; general_forums: string[] | { enabled?: boolean; forums?: string[] } }
+                serp_pages: number
               }
 
-              const jobConfig = {
-                life_contexts: selectedContexts,
-                product_words: selectedNeedWords,
-                indicators: selectedIndicators,
-                sources: sourcesConfig,
-                serp_pages: (selectedCampaign?.customVariables?.serp_pages as number) || 3,
+              // If input is provided (from SearchWithPreviewPanel), use it directly
+              if (input && input.life_contexts && input.product_words) {
+                jobConfig = {
+                  life_contexts: input.life_contexts,
+                  product_words: input.product_words,
+                  indicators: input.indicators || [],
+                  sources: input.sources || { reddit: true, thematic_forums: false, general_forums: [] },
+                  serp_pages: input.serp_pages || 3,
+                }
+              } else {
+                // Fall back to building from completed steps (legacy flow)
+                const lifeContextsStep = state.phases
+                  .flatMap(p => p.steps)
+                  .find(s => s.id === 'life_contexts')
+                const needWordsStep = state.phases
+                  .flatMap(p => p.steps)
+                  .find(s => s.id === 'need_words')
+                const indicatorsStep = state.phases
+                  .flatMap(p => p.steps)
+                  .find(s => s.id === 'indicators')
+                const sourcesStep = state.phases
+                  .flatMap(p => p.steps)
+                  .find(s => s.id === 'sources')
+
+                const selectedContexts = lifeContextsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
+                const selectedNeedWords = needWordsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
+                const selectedIndicators = indicatorsStep?.suggestions?.filter(s => s.selected).map(s => s.label) || []
+
+                // Parse sources output (can be JSON string from LLM or already parsed object)
+                let sourcesConfig: { reddit: { enabled: boolean; subreddits: string[] }; thematic_forums: { enabled: boolean; forums: string[] }; general_forums: { enabled: boolean; forums: string[] } } = { reddit: { enabled: true, subreddits: [] }, thematic_forums: { enabled: false, forums: [] }, general_forums: { enabled: false, forums: [] } }
+                try {
+                  if (sourcesStep?.output) {
+                    // Check if output is already an object (parsed)
+                    if (typeof sourcesStep.output === 'object' && sourcesStep.output !== null) {
+                      sourcesConfig = sourcesStep.output as typeof sourcesConfig
+                    } else if (typeof sourcesStep.output === 'string') {
+                      // Try to extract JSON from string
+                      const jsonMatch = sourcesStep.output.match(/\{[\s\S]*\}/)
+                      if (jsonMatch) {
+                        sourcesConfig = JSON.parse(jsonMatch[0])
+                      }
+                    }
+                  }
+                } catch (e) {
+                  console.error('Error parsing sources config:', e)
+                }
+
+                jobConfig = {
+                  life_contexts: selectedContexts,
+                  product_words: selectedNeedWords,
+                  indicators: selectedIndicators,
+                  sources: sourcesConfig,
+                  serp_pages: (selectedCampaign?.customVariables?.serp_pages as number) || 3,
+                }
               }
 
               console.log('[SERP] Starting job with config:', JSON.stringify(jobConfig, null, 2))
