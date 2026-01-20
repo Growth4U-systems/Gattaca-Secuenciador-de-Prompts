@@ -15,6 +15,8 @@ export type PhaseStatus = 'pending' | 'in_progress' | 'completed' | 'error'
  * - action: User performs an action (e.g., export)
  * - manual_research: User performs manual research with external tools (e.g., ChatGPT/Perplexity)
  * - manual_review: User must review and approve before continuing (e.g., preview queries before SERP)
+ * - search_with_preview: Shows search config preview with ability to adjust, then executes search
+ * - review_with_action: Shows results for review/selection, then executes action on selected items
  */
 export type StepType =
   | 'input'
@@ -27,6 +29,8 @@ export type StepType =
   | 'action'
   | 'manual_research'
   | 'manual_review'
+  | 'search_with_preview'
+  | 'review_with_action'
 
 /**
  * Executor type determines how the step is executed:

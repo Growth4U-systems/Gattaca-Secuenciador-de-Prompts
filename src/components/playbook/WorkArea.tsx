@@ -22,6 +22,8 @@ import { getDefaultPrompt } from './utils/getDefaultPrompts'
 import { B2C_CONTEXTS, B2B_CONTEXTS } from './configs/niche-finder.config'
 import { QueryPreviewPanel } from './QueryPreviewPanel'
 import { SerpResultsPanel } from './SerpResultsPanel'
+import { SearchWithPreviewPanel } from './SearchWithPreviewPanel'
+import { ReviewAndScrapePanel } from './ReviewAndScrapePanel'
 
 // Sub-components for different step types
 
@@ -1390,10 +1392,73 @@ export default function WorkArea({
       return <AutoExecutingStep step={step} stepState={stepState} onCancel={onCancel} />
     }
 
-    // SPECIAL HANDLING: Custom panels for specific step IDs
-    // These steps have custom UIs that differ from the generic step types
+    // SPECIAL HANDLING: New unified step types for simplified flow
 
-    // Preview Queries Panel - shows before SERP execution
+    // search_with_preview: Shows config preview with editing, then executes SERP
+    if (step.type === 'search_with_preview' && stepState.status !== 'completed') {
+      const isExecuting = stepState.status === 'in_progress'
+      const config = {
+        life_contexts: (playbookContext?.life_contexts as string[]) || [],
+        product_words: (playbookContext?.need_words as string[]) || [],
+        indicators: (playbookContext?.indicators as string[]) || [],
+        sources: (playbookContext?.sources as { reddit: boolean; thematic_forums: boolean; general_forums: string[] }) || {
+          reddit: true,
+          thematic_forums: false,
+          general_forums: [],
+        },
+        serp_pages: (playbookContext?.serp_pages as number) || 3,
+      }
+
+      return (
+        <SearchWithPreviewPanel
+          config={config}
+          onExecute={async (finalConfig) => {
+            // Save the edited config and start execution
+            onUpdateState({
+              status: 'in_progress',
+              startedAt: new Date(),
+              input: finalConfig,
+            })
+            await onExecute(finalConfig)
+          }}
+          onBack={onBack}
+          isExecuting={isExecuting}
+          progress={stepState.progress}
+        />
+      )
+    }
+
+    // review_with_action: Shows URLs for review, then executes scraping
+    if (step.type === 'review_with_action' && stepState.status !== 'completed') {
+      const isExecuting = stepState.status === 'in_progress'
+      const jobId = playbookContext?.serpJobId as string
+
+      if (jobId || isExecuting) {
+        return (
+          <ReviewAndScrapePanel
+            jobId={jobId}
+            onExecute={async (selectedUrls) => {
+              onUpdateState({
+                status: 'in_progress',
+                startedAt: new Date(),
+                input: { selectedUrls },
+              })
+              await onExecute({ selectedUrls })
+            }}
+            onBack={onBack}
+            isExecuting={isExecuting}
+            progress={stepState.progress ? {
+              ...stepState.progress,
+              successCount: stepState.partialResults?.successCount,
+              failedCount: stepState.partialResults?.failedCount,
+            } : undefined}
+          />
+        )
+      }
+    }
+
+    // LEGACY: Keep old step IDs working for backwards compatibility
+    // Preview Queries Panel - shows before SERP execution (legacy)
     if (step.id === 'preview_queries' && stepState.status !== 'completed') {
       // Build config from previous steps (available in playbookContext)
       // Ensure arrays and default sources structure
@@ -1421,7 +1486,7 @@ export default function WorkArea({
       )
     }
 
-    // SERP Results Panel - shows after SERP completes, before scraping
+    // SERP Results Panel - shows after SERP completes, before scraping (legacy)
     if (step.id === 'review_urls' && stepState.status !== 'completed') {
       const jobId = playbookContext?.serpJobId as string
       if (jobId) {
@@ -1512,6 +1577,12 @@ export default function WorkArea({
       case 'manual_review':
         // For generic manual_review steps without custom panels
         return <PendingStep step={step} onExecute={() => onContinue()} />
+
+      case 'search_with_preview':
+      case 'review_with_action':
+        // These are handled above with special components
+        // If we get here, show a pending state
+        return <PendingStep step={step} onExecute={() => onExecute()} />
 
       case 'auto':
       case 'auto_with_preview':
