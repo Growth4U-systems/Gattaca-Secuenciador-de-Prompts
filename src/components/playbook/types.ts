@@ -85,6 +85,16 @@ export interface StepDefinition {
     actionType: 'export' | 'save' | 'navigate' | 'custom'
     customHandler?: string
   }
+
+  // Explanation shown before executing auto steps
+  // Helps user understand what the step will do
+  executionExplanation?: {
+    title: string
+    steps: string[] // List of what the step will do
+    estimatedTime?: string
+    estimatedCost?: string
+    costService?: string // e.g., "Serper API", "Firecrawl"
+  }
 }
 
 export interface PhaseDefinition {
@@ -141,6 +151,15 @@ export interface StepState {
     total: number
     label?: string
     estimatedTimeRemaining?: string
+  }
+
+  // Partial results shown during execution
+  partialResults?: {
+    lastItems?: string[] // Last few items found/processed
+    successCount?: number
+    failedCount?: number
+    lastSnippet?: string // Last content snippet (for scraping)
+    lastUrl?: string // Last URL processed
   }
 }
 

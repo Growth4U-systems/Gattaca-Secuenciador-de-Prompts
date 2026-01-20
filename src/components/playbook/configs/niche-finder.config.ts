@@ -185,6 +185,17 @@ export const nicheFinderConfig: PlaybookConfig = {
           executor: 'job',
           jobType: 'niche_finder_serp',
           dependsOn: ['preview_queries'],
+          executionExplanation: {
+            title: 'Búsqueda en Google (SERP)',
+            steps: [
+              'Combina contextos × palabras × fuentes para crear queries',
+              'Busca cada query en Google (múltiples páginas)',
+              'Filtra URLs de blogs y contenido no relevante',
+              'Guarda URLs únicas de foros y discusiones',
+            ],
+            estimatedCost: 'Variable según configuración',
+            costService: 'Serper API',
+          },
         },
         {
           id: 'review_urls',
@@ -202,6 +213,17 @@ export const nicheFinderConfig: PlaybookConfig = {
           executor: 'job',
           jobType: 'niche_finder_scrape',
           dependsOn: ['review_urls'],
+          executionExplanation: {
+            title: 'Descarga de Contenido',
+            steps: [
+              'Descarga el HTML de cada URL seleccionada',
+              'Convierte a Markdown limpio (posts, comentarios)',
+              'Filtra contenido no relevante (navegación, ads)',
+              'Guarda el contenido para análisis posterior',
+            ],
+            estimatedCost: 'Variable según URLs',
+            costService: 'Firecrawl',
+          },
         },
       ],
     },
@@ -223,6 +245,17 @@ export const nicheFinderConfig: PlaybookConfig = {
           jobType: 'niche_finder_extract',
           promptKey: 'step_1_find_problems',
           dependsOn: ['scrape'],
+          executionExplanation: {
+            title: 'Extracción de Problemas',
+            steps: [
+              'Lee el contenido de cada página scrapeada',
+              'Identifica quejas, frustraciones y necesidades',
+              'Extrae problema, contexto y evidencia textual',
+              'Genera tabla CSV con todos los pain points',
+            ],
+            estimatedCost: 'Variable según contenido',
+            costService: 'OpenAI API',
+          },
         },
         {
           id: 'review_extraction',
@@ -251,6 +284,17 @@ export const nicheFinderConfig: PlaybookConfig = {
           executor: 'llm',
           promptKey: 'step_2_clean_filter',
           dependsOn: ['review_extraction'],
+          executionExplanation: {
+            title: 'Limpieza y Filtrado',
+            steps: [
+              'Agrupa problemas similares o duplicados',
+              'Valida que cada problema sea real y específico',
+              'Filtra problemas genéricos o irrelevantes',
+              'Genera tabla consolidada de 30-50 nichos únicos',
+            ],
+            estimatedCost: 'Fijo por ejecución',
+            costService: 'OpenAI API',
+          },
         },
         {
           id: 'deep_research_manual',
@@ -269,6 +313,17 @@ export const nicheFinderConfig: PlaybookConfig = {
           executor: 'llm',
           promptKey: 'step_4_consolidate',
           dependsOn: ['deep_research_manual'],
+          executionExplanation: {
+            title: 'Consolidación Final',
+            steps: [
+              'Combina tabla filtrada con tu Deep Research',
+              'Calcula scores de oportunidad por nicho',
+              'Ordena nichos por potencial de mercado',
+              'Genera tabla final con métricas comparativas',
+            ],
+            estimatedCost: 'Fijo por ejecución',
+            costService: 'OpenAI API',
+          },
         },
       ],
     },
