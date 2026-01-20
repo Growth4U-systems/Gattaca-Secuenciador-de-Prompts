@@ -125,7 +125,8 @@ export async function POST(request: NextRequest, { params }: Params) {
             .eq('id', jobId)
 
           // Process results - filter out blogs and low-quality URLs
-          for (const result of response.organic) {
+          const organic = response.organic || []
+          for (const result of organic) {
             if (!seenUrls.has(result.link)) {
               // Skip blogs and articles - we want forums with discussions
               if (isLikelyBlog(result.link)) {
