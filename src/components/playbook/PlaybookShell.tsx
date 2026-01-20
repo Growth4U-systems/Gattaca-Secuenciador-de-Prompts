@@ -882,6 +882,122 @@ export default function PlaybookShell({
     }
   }, [shouldAutoExecute, currentStep, currentStepState?.status, executeStep])
 
+  // Resume polling for in_progress steps on page reload
+  // This handles the case where user refreshes the page while a SERP job is running
+  useEffect(() => {
+    // Only for search_with_preview steps that are in_progress with a jobId
+    if (
+      currentStep?.type === 'search_with_preview' &&
+      currentStepState?.status === 'in_progress' &&
+      currentStepState?.output &&
+      !pollIntervalRef.current
+    ) {
+      const output = currentStepState.output as { jobId?: string }
+      const jobId = output.jobId
+
+      if (jobId) {
+        console.log('[Resume] Resuming polling for job:', jobId)
+
+        // Set up polling - same logic as in executeStep
+        let isResuming = false
+        let lastCompletedCount = -1
+        let stallCount = 0
+        let initialCompleted = -1
+
+        pollIntervalRef.current = setInterval(async () => {
+          try {
+            const statusResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+            const statusData = await statusResponse.json()
+
+            const completed = statusData.progress?.serp?.completed || 0
+            const total = statusData.progress?.serp?.total || 0
+            const remaining = total - completed
+            const label = total > 0
+              ? `Búsquedas: ${completed}/${total} (faltan ${remaining})`
+              : 'Reconectando...'
+
+            updateStepState(currentStep.id, {
+              progress: {
+                current: completed,
+                total: total,
+                label,
+              },
+            })
+
+            // Track initial value on first poll
+            if (initialCompleted === -1) {
+              initialCompleted = completed
+              console.log('[Resume] Initial completed:', initialCompleted)
+            }
+
+            // Auto-resume if job was interrupted
+            if (statusData.status === 'serp_running' && completed < total && !isResuming) {
+              if (lastCompletedCount === completed && remaining > 0) {
+                stallCount++
+                const noProgressSinceStart = completed === initialCompleted && stallCount >= 1
+                if (stallCount >= 2 || noProgressSinceStart) {
+                  console.log(`[Resume] Job stalled at ${completed}/${total}, auto-resuming...`)
+                  isResuming = true
+                  stallCount = 0
+                  fetch(`/api/niche-finder/jobs/${jobId}/serp`, { method: 'POST' })
+                    .then(res => res.json())
+                    .then(data => {
+                      console.log('[Resume] Resume response:', data)
+                      isResuming = false
+                    })
+                    .catch(err => {
+                      console.error('[Resume] Resume error:', err)
+                      isResuming = false
+                    })
+                }
+              } else {
+                stallCount = 0
+              }
+            }
+            lastCompletedCount = completed
+
+            if (statusData.status === 'serp_done' || statusData.status === 'serp_completed') {
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+                pollIntervalRef.current = null
+              }
+              updateStepState(currentStep.id, {
+                status: 'completed',
+                completedAt: new Date(),
+                output: {
+                  jobId,
+                  urlsFound: statusData.job?.urls_found || 0,
+                  costs: statusData.costs,
+                },
+              })
+              setTimeout(goToNextStep, 500)
+            } else if (statusData.status === 'failed' || statusData.status === 'error') {
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+                pollIntervalRef.current = null
+              }
+              updateStepState(currentStep.id, {
+                status: 'error',
+                error: statusData.job?.error_message || 'Job failed',
+              })
+            }
+          } catch (pollError) {
+            console.error('[Resume] Poll error:', pollError)
+            // Don't stop polling on transient errors
+          }
+        }, 2000)
+
+        // Cleanup on unmount
+        return () => {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+        }
+      }
+    }
+  }, [currentStep?.id, currentStep?.type, currentStepState?.status, currentStepState?.output, updateStepState, goToNextStep])
+
   if (!currentPhase || !currentStep || !currentStepState) {
     return (
       <div className="flex items-center justify-center h-64 text-gray-500">
