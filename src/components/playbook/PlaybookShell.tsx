@@ -491,14 +491,48 @@ export default function PlaybookShell({
           case 'api':
             // Call custom API endpoint
             if (step.apiEndpoint) {
+              // Build payload with previous step outputs and campaign variables
+              const campaignVarsForApi = selectedCampaign?.customVariables || {}
+
+              // Get outputs from previous steps (dependsOn)
+              const previousOutputs: Record<string, unknown> = {}
+              if (step.dependsOn?.length) {
+                for (const depId of step.dependsOn) {
+                  for (const phase of state.phases) {
+                    const depStep = phase.steps.find(s => s.id === depId)
+                    if (depStep?.output) {
+                      previousOutputs[depId] = depStep.output
+                    }
+                  }
+                }
+              }
+
+              // Build scenes array from generate_scenes output (for video-viral generate-clips)
+              let scenes: string[] | undefined
+              if (previousOutputs.generate_scenes) {
+                const scenesOutput = previousOutputs.generate_scenes as Record<string, string>
+                // Extract scene_1, scene_2, scene_3, etc. from the output
+                scenes = Object.entries(scenesOutput)
+                  .filter(([key]) => key.startsWith('scene_'))
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([, value]) => value)
+              }
+
               const apiResponse = await fetch(step.apiEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ projectId, stepId, input }),
+                body: JSON.stringify({
+                  projectId,
+                  stepId,
+                  input,
+                  ...campaignVarsForApi,
+                  previousOutputs,
+                  scenes, // For generate-clips endpoint
+                }),
               })
               const apiData = await apiResponse.json()
-              if (!apiData.success) throw new Error(apiData.error || 'Error en API')
-              result = apiData.result
+              if (!apiData.success && apiData.error) throw new Error(apiData.error)
+              result = apiData
             }
             break
 
@@ -619,7 +653,9 @@ export default function PlaybookShell({
                 }
               }
 
-              // 3. Poll for status
+              // 3. Poll for status and auto-resume if needed
+              let isResuming = false
+
               const pollInterval = setInterval(async () => {
                 try {
                   const statusResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
@@ -638,6 +674,28 @@ export default function PlaybookShell({
                       label,
                     },
                   })
+
+                  // Auto-resume if job was interrupted (still serp_running but not progressing)
+                  // This handles Vercel timeout scenarios
+                  if (statusData.status === 'serp_running' && completed < total && !isResuming) {
+                    // Check if progress has stalled (same completed count for 5+ seconds)
+                    const lastCompleted = statusData.progress?.serp?.completed || 0
+                    if (lastCompleted === completed && remaining > 0) {
+                      console.log(`[SERP] Job appears stalled at ${completed}/${total}, auto-resuming...`)
+                      isResuming = true
+                      // Resume the job by calling SERP endpoint again
+                      fetch(`/api/niche-finder/jobs/${jobId}/serp`, { method: 'POST' })
+                        .then(res => res.json())
+                        .then(data => {
+                          console.log('[SERP] Resume response:', data)
+                          isResuming = false
+                        })
+                        .catch(err => {
+                          console.error('[SERP] Resume error:', err)
+                          isResuming = false
+                        })
+                    }
+                  }
 
                   if (statusData.status === 'serp_done' || statusData.status === 'serp_completed') {
                     clearInterval(pollInterval)

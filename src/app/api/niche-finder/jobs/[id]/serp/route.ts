@@ -10,6 +10,11 @@ import type { ScraperStepConfig } from '@/types/scraper.types'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes max for SERP searches
 
+// Process in chunks to avoid Vercel timeout
+// With 100ms per search, 250 searches = 25 seconds per chunk (safe margin)
+const CHUNK_SIZE = 250
+const MAX_EXECUTION_TIME_MS = 270000 // 4.5 minutes - leave margin for cleanup
+
 type Params = { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, { params }: Params) {
@@ -58,7 +63,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 })
     }
 
-    if (job.status !== 'pending') {
+    // Allow resuming jobs that were interrupted (serp_running status)
+    if (job.status !== 'pending' && job.status !== 'serp_running') {
       return NextResponse.json(
         { error: `Cannot start SERP for job in status: ${job.status}` },
         { status: 400 }
@@ -72,33 +78,75 @@ export async function POST(request: NextRequest, { params }: Params) {
       .eq('id', jobId)
 
     const config: ScraperStepConfig = job.config
+    const startTime = Date.now()
 
     // Generate all search queries
     const queries = generateSearchQueries(config)
     const serpPages = config.serp_pages || 5
 
-    // Track unique URLs to avoid duplicates
-    const seenUrls = new Set<string>()
-    let totalSearches = 0
-    let totalCost = 0
-    let totalUrlsInserted = 0
+    // Track unique URLs to avoid duplicates - load existing URLs first
+    const { data: existingUrls } = await supabase
+      .from('niche_finder_urls')
+      .select('url')
+      .eq('job_id', jobId)
 
-    // Update job with total expected queries for progress tracking
+    const seenUrls = new Set<string>((existingUrls || []).map(u => u.url))
+
+    // Resume from where we left off if job was interrupted
+    const startFromSearch = job.serp_completed || 0
+    let totalSearches = startFromSearch
+    let totalCost = 0
+    let totalUrlsInserted = seenUrls.size
+
+    // Calculate which query/page to start from
+    const startQueryIndex = Math.floor(startFromSearch / serpPages)
+    const startPageIndex = startFromSearch % serpPages
+
+    // Update job with total expected queries for progress tracking (only if first run)
     const totalExpectedSearches = queries.length * serpPages
-    await supabase
-      .from('niche_finder_jobs')
-      .update({
-        serp_total: totalExpectedSearches,
-        serp_completed: 0,
-        urls_found: 0
-      })
-      .eq('id', jobId)
+    if (job.status === 'pending') {
+      await supabase
+        .from('niche_finder_jobs')
+        .update({
+          status: 'serp_running',
+          started_at: new Date().toISOString(),
+          serp_total: totalExpectedSearches,
+          serp_completed: 0,
+          urls_found: 0
+        })
+        .eq('id', jobId)
+    } else {
+      // Resuming - just update status
+      console.log(`[SERP] Resuming job ${jobId} from search ${startFromSearch}/${totalExpectedSearches}`)
+    }
 
     // Execute searches (with rate limiting) - INSERT URLs incrementally
-    for (const queryInfo of queries) {
+    // Start from where we left off if resuming
+    let interrupted = false
+
+    for (let qi = startQueryIndex; qi < queries.length; qi++) {
+      const queryInfo = queries[qi]
+
+      // Check if we're running out of time
+      if (Date.now() - startTime > MAX_EXECUTION_TIME_MS) {
+        console.log(`[SERP] Time limit approaching, pausing job ${jobId} at search ${totalSearches}`)
+        interrupted = true
+        break
+      }
+
       try {
+        // Determine starting page (only for first query when resuming)
+        const startPage = (qi === startQueryIndex) ? (startPageIndex + 1) : 1
+
         // Search multiple pages
-        for (let page = 1; page <= serpPages; page++) {
+        for (let page = startPage; page <= serpPages; page++) {
+          // Check time again before each search
+          if (Date.now() - startTime > MAX_EXECUTION_TIME_MS) {
+            console.log(`[SERP] Time limit reached mid-query, pausing at search ${totalSearches}`)
+            interrupted = true
+            break
+          }
+
           const response = await serperSearch({
             query: queryInfo.query,
             page,
@@ -170,23 +218,47 @@ export async function POST(request: NextRequest, { params }: Params) {
           // Rate limiting - 100ms between requests
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
+
+        if (interrupted) break
       } catch (error) {
         console.error(`Error searching for: ${queryInfo.query}`, error)
         // Continue with other queries
       }
     }
 
-    // Record cost
-    await supabase.from('niche_finder_costs').insert({
-      job_id: jobId,
-      cost_type: 'serp',
-      service: 'serper',
-      units: totalSearches,
-      cost_usd: totalCost,
-      metadata: { queries_executed: queries.length, pages_per_query: serpPages },
-    })
+    // Record cost (only if we actually did searches this run)
+    const searchesThisRun = totalSearches - startFromSearch
+    if (searchesThisRun > 0) {
+      await supabase.from('niche_finder_costs').insert({
+        job_id: jobId,
+        cost_type: 'serp',
+        service: 'serper',
+        units: searchesThisRun,
+        cost_usd: searchesThisRun * SERPER_COST_PER_SEARCH,
+        metadata: {
+          queries_executed: queries.length,
+          pages_per_query: serpPages,
+          resumed_from: startFromSearch,
+          completed_to: totalSearches,
+        },
+      })
+    }
 
     // Update job with final status
+    if (interrupted) {
+      // Job was paused due to time limit - will be resumed on next call
+      return NextResponse.json({
+        success: true,
+        interrupted: true,
+        message: 'Job paused due to time limit. Call this endpoint again to resume.',
+        urls_found: totalUrlsInserted,
+        searches_executed: totalSearches,
+        total_searches: totalExpectedSearches,
+        remaining: totalExpectedSearches - totalSearches,
+      })
+    }
+
+    // Completed all searches
     await supabase
       .from('niche_finder_jobs')
       .update({
