@@ -123,6 +123,8 @@ export interface PlaybookConfig {
     type: 'text' | 'textarea' | 'select' | 'multiselect' | 'number'
     required?: boolean
     defaultValue?: any
+    description?: string
+    placeholder?: string
     options?: Array<{ value: string; label: string }>
     // For number type
     min?: number
