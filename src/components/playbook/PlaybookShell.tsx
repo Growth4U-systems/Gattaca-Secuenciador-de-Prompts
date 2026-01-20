@@ -555,7 +555,7 @@ export default function PlaybookShell({
                   product_words: input.product_words,
                   indicators: input.indicators || [],
                   sources: input.sources || { reddit: true, thematic_forums: false, general_forums: [] },
-                  serp_pages: input.serp_pages || 3,
+                  serp_pages: input.serp_pages || 5,
                 }
               } else {
                 // Fall back to building from completed steps (legacy flow)
@@ -600,7 +600,7 @@ export default function PlaybookShell({
                   product_words: selectedNeedWords,
                   indicators: selectedIndicators,
                   sources: sourcesConfig,
-                  serp_pages: (selectedCampaign?.customVariables?.serp_pages as number) || 3,
+                  serp_pages: (selectedCampaign?.customVariables?.serp_pages as number) || 5,
                 }
               }
 

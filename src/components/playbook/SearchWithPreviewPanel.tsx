@@ -56,6 +56,7 @@ export function SearchWithPreviewPanel({
   progress,
 }: SearchWithPreviewPanelProps) {
   // Editable state - initialize from config
+  // Default serp_pages to 5 to match SERP route default
   const [editableConfig, setEditableConfig] = useState<EditableConfig>(() => ({
     life_contexts: config.life_contexts || [],
     product_words: config.product_words || [],
@@ -65,7 +66,7 @@ export function SearchWithPreviewPanel({
       thematic_forums: false,
       general_forums: [],
     },
-    serp_pages: config.serp_pages || 3,
+    serp_pages: config.serp_pages || 5,
   }))
 
   const [showExamples, setShowExamples] = useState(false)
@@ -101,7 +102,7 @@ export function SearchWithPreviewPanel({
     }
 
     const queries = generateSearchQueries(editableConfig as ScraperStepConfig)
-    const serpPages = editableConfig.serp_pages || 3
+    const serpPages = editableConfig.serp_pages || 5
     const totalSearches = queries.length * serpPages
     const estimatedCost = totalSearches * COST_PER_SEARCH
     const estimatedTimeSeconds = totalSearches * SECONDS_PER_SEARCH
