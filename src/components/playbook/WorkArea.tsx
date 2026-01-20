@@ -929,15 +929,38 @@ function CompletedStep({ step, stepState, onContinue, onRerun }: CompletedStepPr
   }
 
   // Render summary for suggestion steps (show selected items as chips)
+  // REGLA UX: Siempre mostrar algo útil al usuario, nunca dejar la UI vacía
   const renderSuggestionSummary = () => {
-    if (step.type !== 'suggestion' || !suggestions) return null
+    if (step.type !== 'suggestion') return null
+
+    // Si no hay suggestions en el state, mostrar mensaje informativo
+    if (!suggestions || suggestions.length === 0) {
+      return (
+        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+          <p className="text-sm text-gray-500 italic">
+            Este paso se completó sin opciones cargadas.
+          </p>
+        </div>
+      )
+    }
+
     const selected = suggestions.filter(s => s.selected)
-    if (selected.length === 0) return null
+
+    // Si hay opciones pero ninguna seleccionada
+    if (selected.length === 0) {
+      return (
+        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+          <p className="text-sm text-gray-500 italic">
+            No se seleccionó ninguna opción (opcional).
+          </p>
+        </div>
+      )
+    }
 
     return (
       <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
         <div className="text-sm font-medium text-gray-600 mb-2">
-          {selected.length} seleccionados:
+          {selected.length} seleccionado{selected.length !== 1 ? 's' : ''}:
         </div>
         <div className="flex flex-wrap gap-2">
           {selected.map(s => (
@@ -950,28 +973,142 @@ function CompletedStep({ step, stepState, onContinue, onRerun }: CompletedStepPr
     )
   }
 
-  // Render output for auto steps
+  // Render user-friendly output for auto steps
+  // REGLA UX: Nunca mostrar JSON raw al usuario - siempre presentar datos de forma legible
   const renderAutoOutput = () => {
     if (!output || step.type === 'suggestion') return null
+
+    // Helper: render sources config (Fuentes de Datos step)
+    const renderSourcesConfig = (data: Record<string, unknown>) => {
+      const sections: React.ReactNode[] = []
+
+      // Reddit
+      if (data.reddit && typeof data.reddit === 'object') {
+        const reddit = data.reddit as { enabled?: boolean; subreddits?: string[] }
+        if (reddit.enabled && reddit.subreddits?.length) {
+          sections.push(
+            <div key="reddit" className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-orange-500 font-medium">Reddit</span>
+                <span className="text-xs text-gray-500">({reddit.subreddits.length} subreddits)</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {reddit.subreddits.map((sub: string) => (
+                  <span key={sub} className="px-2 py-1 bg-orange-50 text-orange-700 rounded text-sm border border-orange-200">
+                    r/{sub}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )
+        }
+      }
+
+      // Thematic Forums
+      if (data.thematic_forums && typeof data.thematic_forums === 'object') {
+        const forums = data.thematic_forums as { enabled?: boolean; domains?: string[] }
+        if (forums.enabled && forums.domains?.length) {
+          sections.push(
+            <div key="thematic" className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-purple-600 font-medium">Foros Temáticos</span>
+                <span className="text-xs text-gray-500">({forums.domains.length} sitios)</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {forums.domains.map((domain: string) => (
+                  <span key={domain} className="px-2 py-1 bg-purple-50 text-purple-700 rounded text-sm border border-purple-200">
+                    {domain}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )
+        }
+      }
+
+      // General Forums
+      if (data.general_forums && typeof data.general_forums === 'object') {
+        const forums = data.general_forums as { enabled?: boolean; domains?: string[] }
+        if (forums.enabled && forums.domains?.length) {
+          sections.push(
+            <div key="general" className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-blue-600 font-medium">Foros Generales</span>
+                <span className="text-xs text-gray-500">({forums.domains.length} sitios)</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {forums.domains.map((domain: string) => (
+                  <span key={domain} className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-sm border border-blue-200">
+                    {domain}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )
+        }
+      }
+
+      if (sections.length === 0) return null
+
+      return (
+        <div className="space-y-4">
+          {sections}
+        </div>
+      )
+    }
+
+    // Helper: check if output looks like sources config
+    const isSourcesConfig = (data: unknown): data is Record<string, unknown> => {
+      if (typeof data !== 'object' || data === null) return false
+      const obj = data as Record<string, unknown>
+      return 'reddit' in obj || 'thematic_forums' in obj || 'general_forums' in obj
+    }
+
+    // Determine how to render based on output type
+    let content: React.ReactNode
+
+    if (typeof output === 'string') {
+      // String output: render as markdown
+      content = (
+        <div className="prose prose-sm max-w-none">
+          <ReactMarkdown>{output}</ReactMarkdown>
+        </div>
+      )
+    } else if (isSourcesConfig(output)) {
+      // Sources config: render user-friendly view
+      content = renderSourcesConfig(output)
+    } else if (Array.isArray(output)) {
+      // Array: render as list
+      content = (
+        <ul className="space-y-1">
+          {output.map((item, i) => (
+            <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
+              <span className="text-blue-500 mt-1">•</span>
+              <span>{typeof item === 'string' ? item : JSON.stringify(item)}</span>
+            </li>
+          ))}
+        </ul>
+      )
+    } else {
+      // Fallback: show JSON but with better formatting
+      content = (
+        <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
+          {JSON.stringify(output, null, 2)}
+        </pre>
+      )
+    }
 
     return (
       <div className="relative">
         <button
           onClick={handleCopy}
+          title="Copiar al portapapeles"
           className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded z-10"
         >
           {copied ? <CheckCheck size={16} className="text-green-600" /> : <Copy size={16} />}
         </button>
-        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 overflow-auto max-h-64">
-          {typeof output === 'string' ? (
-            <div className="prose prose-sm max-w-none">
-              <ReactMarkdown>{output}</ReactMarkdown>
-            </div>
-          ) : (
-            <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-              {JSON.stringify(output, null, 2)}
-            </pre>
-          )}
+        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 overflow-auto max-h-80">
+          {content}
         </div>
       </div>
     )
