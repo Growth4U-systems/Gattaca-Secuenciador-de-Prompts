@@ -27,4 +27,4 @@ export type {
 } from './types'
 
 // Configurations
-export { playbookConfigs, getPlaybookConfig, nicheFinderConfig } from './configs'
+export { playbookConfigs, getPlaybookConfig, nicheFinderConfig, videoViralIAConfig } from './configs'
