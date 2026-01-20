@@ -80,6 +80,8 @@ export default function CampaignWizard({
   // Initialize variables from playbook config
   useEffect(() => {
     const initializeVariables = () => {
+      console.log('[CampaignWizard] playbookConfig.variables:', playbookConfig.variables)
+
       // Step 2: Text variables that need user input (type='text' or undefined type, and required)
       // These are the main campaign variables like content_theme, target, product, etc.
       const textVariables = (playbookConfig.variables || [])
@@ -93,6 +95,7 @@ export default function CampaignWizard({
           required: v.required !== false,
         }))
 
+      console.log('[CampaignWizard] textVariables:', textVariables)
       setPromptVariables(textVariables)
 
       // Step 3: System config (select, number, etc. - non-text variables)
