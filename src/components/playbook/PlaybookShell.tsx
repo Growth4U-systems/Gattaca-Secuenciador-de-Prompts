@@ -645,12 +645,19 @@ export default function PlaybookShell({
 
   // Auto-start current step if it's an auto step, pending, AND user clicked Continue
   useEffect(() => {
+    console.log('[AutoExecute] Check:', {
+      shouldAutoExecute,
+      currentStepId: currentStep?.id,
+      currentStepType: currentStep?.type,
+      currentStepStatus: currentStepState?.status,
+    })
     if (
       shouldAutoExecute &&
       currentStep &&
       currentStepState?.status === 'pending' &&
       ['auto'].includes(currentStep.type)
     ) {
+      console.log('[AutoExecute] Starting auto execution for:', currentStep.id)
       // Reset the flag
       setShouldAutoExecute(false)
       // Small delay to allow UI to render first
