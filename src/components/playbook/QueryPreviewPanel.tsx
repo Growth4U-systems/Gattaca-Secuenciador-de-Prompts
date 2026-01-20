@@ -54,11 +54,11 @@ export function QueryPreviewPanel({ config, onApprove, onAdjust }: QueryPreviewP
         exampleQueries: [],
         contexts: 0,
         words: 0,
-        pages: 3,
+        pages: 5,
       }
     }
     const queries = generateSearchQueries(validatedConfig)
-    const serpPages = validatedConfig.serp_pages || 3
+    const serpPages = validatedConfig.serp_pages || 5
     const totalSearches = queries.length * serpPages
     const estimatedCost = totalSearches * COST_PER_SEARCH
     const estimatedTimeSeconds = totalSearches * SECONDS_PER_SEARCH

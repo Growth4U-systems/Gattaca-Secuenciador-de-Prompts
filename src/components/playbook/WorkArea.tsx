@@ -1431,7 +1431,7 @@ export default function WorkArea({
           thematic_forums: false,
           general_forums: [],
         },
-        serp_pages: (playbookContext?.serp_pages as number) || 3,
+        serp_pages: (playbookContext?.serp_pages as number) || 5,
       }
 
       return (
@@ -1497,7 +1497,7 @@ export default function WorkArea({
           thematic_forums: false,
           general_forums: [],
         },
-        serp_pages: (playbookContext?.serp_pages as number) || 3,
+        serp_pages: (playbookContext?.serp_pages as number) || 5,
       }
 
       return (
