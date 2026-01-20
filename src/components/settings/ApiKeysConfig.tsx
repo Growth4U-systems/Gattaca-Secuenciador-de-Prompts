@@ -46,16 +46,9 @@ const SERVICE_INFO: Record<string, ServiceInfo> = {
   openrouter: {
     name: 'openrouter',
     label: 'OpenRouter',
-    description: 'Sugerencias de IA para el Buscador de Nichos (contextos, palabras, foros)',
+    description: 'IA para sugerencias y Deep Search (usa Perplexity Sonar internamente)',
     docsUrl: 'https://openrouter.ai/keys',
     placeholder: 'sk-or-v1-xxxxxxxxxxxx',
-  },
-  perplexity: {
-    name: 'perplexity',
-    label: 'Perplexity',
-    description: 'Búsqueda avanzada de foros con IA (Deep Search)',
-    docsUrl: 'https://www.perplexity.ai/settings/api',
-    placeholder: 'pplx-xxxxxxxxxxxx',
   },
 };
 

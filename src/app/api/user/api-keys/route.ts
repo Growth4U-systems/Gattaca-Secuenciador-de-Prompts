@@ -8,8 +8,8 @@ export const dynamic = 'force-dynamic';
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const ALGORITHM = 'aes-256-gcm';
 
-// Supported services
-const SUPPORTED_SERVICES = ['apify', 'firecrawl', 'openrouter', 'perplexity', 'serper'] as const;
+// Supported services (perplexity removed - now accessed via OpenRouter)
+const SUPPORTED_SERVICES = ['apify', 'firecrawl', 'openrouter', 'serper'] as const;
 type ServiceName = (typeof SUPPORTED_SERVICES)[number];
 
 // ============================================
