@@ -21,8 +21,7 @@ interface ForumSuggestion {
 }
 
 export async function POST(request: NextRequest) {
-  // Try to get API keys from user settings first, then fallback to environment variables
-  let perplexityApiKey: string | null = null
+  // Get OpenRouter API key (now the only key needed - supports Perplexity models)
   let openrouterApiKey: string | null = null
 
   try {
@@ -30,22 +29,13 @@ export async function POST(request: NextRequest) {
     const { data: { session } } = await supabase.auth.getSession()
 
     if (session?.user?.id) {
-      // 1. Get both keys from user_api_keys table (manual entry via Settings > APIs)
-      const [perplexityKey, openrouterKey] = await Promise.all([
-        getUserApiKey({
-          userId: session.user.id,
-          serviceName: 'perplexity',
-          supabase,
-        }),
-        getUserApiKey({
-          userId: session.user.id,
-          serviceName: 'openrouter',
-          supabase,
-        }),
-      ])
-      perplexityApiKey = perplexityKey
-      openrouterApiKey = openrouterKey
-      console.log('[deep-search] user_api_keys - perplexity:', !!perplexityKey, 'openrouter:', !!openrouterKey)
+      // 1. Get OpenRouter key from user_api_keys table (manual entry via Settings > APIs)
+      openrouterApiKey = await getUserApiKey({
+        userId: session.user.id,
+        serviceName: 'openrouter',
+        supabase,
+      })
+      console.log('[deep-search] user_api_keys - openrouter:', !!openrouterApiKey)
 
       // 2. If no OpenRouter key from user_api_keys, check OAuth tokens
       if (!openrouterApiKey) {
@@ -94,20 +84,17 @@ export async function POST(request: NextRequest) {
     console.warn('Could not get user session for API key lookup:', e)
   }
 
-  // Fallback to environment variables
-  if (!perplexityApiKey) {
-    perplexityApiKey = process.env.PERPLEXITY_API_KEY || null
-  }
+  // Fallback to environment variable
   if (!openrouterApiKey) {
     openrouterApiKey = process.env.OPENROUTER_API_KEY || null
   }
 
-  console.log('Deep search API called, Perplexity key exists:', !!perplexityApiKey, 'OpenRouter key exists:', !!openrouterApiKey)
+  console.log('Deep search API called, OpenRouter key exists:', !!openrouterApiKey)
 
-  if (!perplexityApiKey && !openrouterApiKey) {
-    console.error('No API keys configured for deep search')
+  if (!openrouterApiKey) {
+    console.error('No OpenRouter API key configured for deep search')
     return NextResponse.json(
-      { success: false, error: 'No API key configured for deep search. Please add your Perplexity or OpenRouter API key in Settings > APIs.' },
+      { success: false, error: 'No API key configured for deep search. Please add your OpenRouter API key in Settings > APIs.' },
       { status: 500 }
     )
   }
@@ -159,94 +146,92 @@ Responde SOLO con el JSON, sin texto adicional.`
 
     let forums: ForumSuggestion[] = []
 
-    // Try Perplexity first (better for web search)
-    if (perplexityApiKey) {
-      try {
-        console.log('Trying Perplexity API...')
-        const perplexityResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+    // Use OpenRouter with Perplexity Sonar Deep Research model (has web search built-in)
+    console.log('Using OpenRouter with perplexity/sonar-deep-research...')
+    const openrouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openrouterApiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://gattaca.growth4u.ai',
+        'X-Title': 'Gattaca Niche Finder',
+      },
+      body: JSON.stringify({
+        model: 'perplexity/sonar-deep-research', // Deep research with web search
+        messages: [
+          {
+            role: 'system',
+            content: 'Eres un investigador de mercado experto en encontrar comunidades online activas. Respondes SOLO con JSON válido, sin markdown ni texto adicional.'
+          },
+          { role: 'user', content: searchPrompt }
+        ],
+        max_tokens: 4000,
+        temperature: 0.3,
+      }),
+    })
+
+    console.log('OpenRouter response status:', openrouterResponse.status)
+
+    if (!openrouterResponse.ok) {
+      const errorBody = await openrouterResponse.text()
+      console.error('OpenRouter error:', openrouterResponse.status, errorBody.slice(0, 500))
+
+      // If sonar-deep-research fails, try sonar as fallback
+      if (openrouterResponse.status === 400 || openrouterResponse.status === 404) {
+        console.log('Trying fallback to perplexity/sonar...')
+        const fallbackResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${perplexityApiKey}`,
+            'Authorization': `Bearer ${openrouterApiKey}`,
             'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://gattaca.growth4u.ai',
+            'X-Title': 'Gattaca Niche Finder',
           },
           body: JSON.stringify({
-            model: 'llama-3.1-sonar-large-128k-online', // Web search enabled model
+            model: 'perplexity/sonar', // Lighter model with web search
             messages: [
               {
                 role: 'system',
-                content: 'Eres un investigador de mercado experto. Respondes SOLO con JSON válido, sin markdown ni texto adicional.'
+                content: 'Eres un investigador de mercado experto. Respondes SOLO con JSON válido.'
               },
               { role: 'user', content: searchPrompt }
             ],
             max_tokens: 2000,
             temperature: 0.3,
-            return_related_questions: false,
           }),
         })
 
-        console.log('Perplexity response status:', perplexityResponse.status)
-
-        if (perplexityResponse.ok) {
-          const data = await perplexityResponse.json()
-          const content = data.choices?.[0]?.message?.content || '[]'
-          console.log('Perplexity content length:', content.length)
-          forums = parseForumsFromResponse(content, existing_forums)
-
-          if (forums.length > 0) {
-            console.log('Perplexity returned', forums.length, 'forums')
-            return NextResponse.json({ success: true, forums, source: 'perplexity' })
-          }
-        } else {
-          const errorBody = await perplexityResponse.text()
-          console.warn('Perplexity error:', perplexityResponse.status, errorBody.slice(0, 200))
+        if (!fallbackResponse.ok) {
+          const fallbackError = await fallbackResponse.text()
+          console.error('Fallback error:', fallbackResponse.status, fallbackError.slice(0, 200))
+          throw new Error(`OpenRouter error: ${openrouterResponse.status}`)
         }
-      } catch (e) {
-        console.warn('Perplexity search failed, trying OpenRouter:', e)
-      }
-    }
 
-    // Fallback to OpenRouter with a capable model
-    if (openrouterApiKey && forums.length === 0) {
-      console.log('Trying OpenRouter fallback...')
-      const openrouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openrouterApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'anthropic/claude-3.5-sonnet', // Good at research tasks
-          messages: [
-            {
-              role: 'system',
-              content: 'Eres un investigador de mercado experto en encontrar comunidades online. Respondes SOLO con JSON válido.'
-            },
-            { role: 'user', content: searchPrompt }
-          ],
-          max_tokens: 2000,
-          temperature: 0.5,
-        }),
-      })
+        const fallbackData = await fallbackResponse.json()
+        const fallbackContent = fallbackData.choices?.[0]?.message?.content || '[]'
+        forums = parseForumsFromResponse(fallbackContent, existing_forums)
+        console.log('Fallback sonar returned', forums.length, 'forums')
 
-      console.log('OpenRouter response status:', openrouterResponse.status)
-
-      if (!openrouterResponse.ok) {
-        const errorBody = await openrouterResponse.text()
-        console.error('OpenRouter error:', openrouterResponse.status, errorBody.slice(0, 200))
-        throw new Error(`OpenRouter error: ${openrouterResponse.status}`)
+        return NextResponse.json({
+          success: true,
+          forums,
+          source: 'openrouter-sonar'
+        })
       }
 
-      const data = await openrouterResponse.json()
-      const content = data.choices?.[0]?.message?.content || '[]'
-      console.log('OpenRouter content length:', content.length)
-      forums = parseForumsFromResponse(content, existing_forums)
-      console.log('OpenRouter returned', forums.length, 'forums')
+      throw new Error(`OpenRouter error: ${openrouterResponse.status}`)
     }
+
+    const data = await openrouterResponse.json()
+    const content = data.choices?.[0]?.message?.content || '[]'
+    console.log('OpenRouter content length:', content.length)
+    forums = parseForumsFromResponse(content, existing_forums)
+    console.log('OpenRouter returned', forums.length, 'forums')
 
     return NextResponse.json({
       success: true,
       forums,
-      source: perplexityApiKey ? 'perplexity-fallback' : 'openrouter'
+      source: 'openrouter-sonar-deep-research'
     })
 
   } catch (error) {
