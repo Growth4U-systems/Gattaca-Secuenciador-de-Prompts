@@ -522,12 +522,31 @@ export default function PlaybookShell({
               // Build scenes array from generate_scenes output (for video-viral generate-clips)
               let scenes: string[] | undefined
               if (previousOutputs.generate_scenes) {
-                const scenesOutput = previousOutputs.generate_scenes as Record<string, string>
+                let scenesOutput = previousOutputs.generate_scenes
+
+                // Parse JSON if output is a string (LLM outputs often come as strings)
+                if (typeof scenesOutput === 'string') {
+                  try {
+                    // Try to extract JSON from the string (might be wrapped in markdown code blocks)
+                    const jsonMatch = scenesOutput.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/) ||
+                                     scenesOutput.match(/(\{[\s\S]*\})/)
+                    if (jsonMatch) {
+                      scenesOutput = JSON.parse(jsonMatch[1])
+                    }
+                  } catch (e) {
+                    console.error('[executeStep] Failed to parse generate_scenes output:', e)
+                  }
+                }
+
                 // Extract scene_1, scene_2, scene_3, etc. from the output
-                scenes = Object.entries(scenesOutput)
-                  .filter(([key]) => key.startsWith('scene_'))
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([, value]) => value)
+                if (typeof scenesOutput === 'object' && scenesOutput !== null) {
+                  const scenesRecord = scenesOutput as Record<string, string>
+                  scenes = Object.entries(scenesRecord)
+                    .filter(([key]) => key.startsWith('scene_'))
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([, value]) => value)
+                  console.log('[executeStep] Extracted scenes:', scenes)
+                }
               }
 
               const apiResponse = await fetch(step.apiEndpoint, {
