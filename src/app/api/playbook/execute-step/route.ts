@@ -106,7 +106,8 @@ interface ExecuteStepRequest {
   projectId: string
   stepId: string
   playbookType: string
-  variables: Record<string, string>
+  variables?: Record<string, string>
+  input?: Record<string, string> // Alias for variables (backward compatibility)
 }
 
 export async function POST(request: NextRequest) {
@@ -184,7 +185,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: ExecuteStepRequest = await request.json()
-    const { projectId, stepId, playbookType, variables } = body
+    const { projectId, stepId, playbookType, variables, input } = body
+    // Support both 'variables' and 'input' field names for backward compatibility
+    const vars = variables || input || {}
 
     if (!projectId || !stepId || !playbookType) {
       return NextResponse.json({
@@ -299,8 +302,8 @@ export async function POST(request: NextRequest) {
 
     // Replace variables in prompt
     const allVariables = {
-      ...variables,
-      previous_step_output: previousStepOutput || variables.previous_step_output || '(No hay output del paso anterior)',
+      ...vars,
+      previous_step_output: previousStepOutput || vars?.previous_step_output || '(No hay output del paso anterior)',
     }
 
     for (const [key, value] of Object.entries(allVariables)) {
@@ -315,7 +318,7 @@ export async function POST(request: NextRequest) {
         playbook_type: playbookType,
         step_id: stepId,
         status: 'running',
-        variables_used: variables,
+        variables_used: vars,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'project_id,playbook_type,step_id'
@@ -331,7 +334,7 @@ export async function POST(request: NextRequest) {
         projectId,
         playbookType,
         stepId,
-        variables,
+        vars,
         session.user.id,
         supabase,
         openrouterApiKey
@@ -381,7 +384,7 @@ export async function POST(request: NextRequest) {
         step_id: stepId,
         output_content: output,
         status: 'completed',
-        variables_used: variables,
+        variables_used: vars,
         executed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }, {

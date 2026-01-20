@@ -431,6 +431,14 @@ export default function PlaybookShell({
 
         switch (step.executor) {
           case 'llm':
+            // Build variables including campaign custom_variables (product, target, industry, etc.)
+            const campaignVars = selectedCampaign?.customVariables || {}
+            const stepVariables = {
+              ...Object.fromEntries(
+                Object.entries(campaignVars).map(([k, v]) => [k, String(v ?? '')])
+              ),
+              ...(input || {}),
+            }
             // Call LLM API
             const response = await fetch('/api/playbook/execute-step', {
               method: 'POST',
@@ -440,7 +448,7 @@ export default function PlaybookShell({
                 stepId,
                 playbookType: playbookConfig.type,
                 promptKey: step.promptKey,
-                input,
+                variables: stepVariables,
               }),
             })
             const data = await response.json()
