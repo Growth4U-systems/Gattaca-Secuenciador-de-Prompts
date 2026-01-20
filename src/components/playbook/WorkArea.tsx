@@ -993,70 +993,120 @@ function CompletedStep({ step, stepState, onContinue, onRerun, onEdit }: Complet
     if (!output || step.type === 'suggestion') return null
 
     // Helper: render sources config (Fuentes de Datos step)
+    // Supports both LLM format ({ enabled, subreddits/forums }) and array format
     const renderSourcesConfig = (data: Record<string, unknown>) => {
       const sections: React.ReactNode[] = []
 
-      // Reddit
-      if (data.reddit && typeof data.reddit === 'object') {
-        const reddit = data.reddit as { enabled?: boolean; subreddits?: string[] }
-        if (reddit.enabled && reddit.subreddits?.length) {
+      // Reddit - support both { enabled, subreddits } and boolean formats
+      if (data.reddit) {
+        let subreddits: string[] = []
+        let isEnabled = false
+
+        if (typeof data.reddit === 'object') {
+          const reddit = data.reddit as { enabled?: boolean; subreddits?: string[] }
+          isEnabled = reddit.enabled ?? false
+          subreddits = reddit.subreddits || []
+        } else if (typeof data.reddit === 'boolean') {
+          isEnabled = data.reddit
+        }
+
+        if (isEnabled || subreddits.length > 0) {
           sections.push(
             <div key="reddit" className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-orange-500 font-medium">Reddit</span>
-                <span className="text-xs text-gray-500">({reddit.subreddits.length} subreddits)</span>
+                {subreddits.length > 0 && (
+                  <span className="text-xs text-gray-500">({subreddits.length} subreddits)</span>
+                )}
+                {isEnabled && subreddits.length === 0 && (
+                  <span className="text-xs text-green-600">Habilitado</span>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {reddit.subreddits.map((sub: string) => (
-                  <span key={sub} className="px-2 py-1 bg-orange-50 text-orange-700 rounded text-sm border border-orange-200">
-                    r/{sub}
-                  </span>
-                ))}
-              </div>
+              {subreddits.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {subreddits.map((sub: string) => (
+                    <span key={sub} className="px-2 py-1 bg-orange-50 text-orange-700 rounded text-sm border border-orange-200">
+                      r/{sub}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )
         }
       }
 
-      // Thematic Forums
-      if (data.thematic_forums && typeof data.thematic_forums === 'object') {
-        const forums = data.thematic_forums as { enabled?: boolean; domains?: string[] }
-        if (forums.enabled && forums.domains?.length) {
+      // Thematic Forums - support both { enabled, forums/domains } and boolean formats
+      if (data.thematic_forums) {
+        let forums: string[] = []
+        let isEnabled = false
+
+        if (typeof data.thematic_forums === 'object') {
+          const tf = data.thematic_forums as { enabled?: boolean; forums?: string[]; domains?: string[] }
+          isEnabled = tf.enabled ?? false
+          forums = tf.forums || tf.domains || []
+        } else if (typeof data.thematic_forums === 'boolean') {
+          isEnabled = data.thematic_forums
+        }
+
+        if (isEnabled || forums.length > 0) {
           sections.push(
             <div key="thematic" className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-purple-600 font-medium">Foros Temáticos</span>
-                <span className="text-xs text-gray-500">({forums.domains.length} sitios)</span>
+                {forums.length > 0 && (
+                  <span className="text-xs text-gray-500">({forums.length} sitios)</span>
+                )}
+                {isEnabled && forums.length === 0 && (
+                  <span className="text-xs text-green-600">Habilitado (auto-detecta)</span>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {forums.domains.map((domain: string) => (
-                  <span key={domain} className="px-2 py-1 bg-purple-50 text-purple-700 rounded text-sm border border-purple-200">
-                    {domain}
-                  </span>
-                ))}
-              </div>
+              {forums.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {forums.map((domain: string) => (
+                    <span key={domain} className="px-2 py-1 bg-purple-50 text-purple-700 rounded text-sm border border-purple-200">
+                      {domain}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )
         }
       }
 
-      // General Forums
-      if (data.general_forums && typeof data.general_forums === 'object') {
-        const forums = data.general_forums as { enabled?: boolean; domains?: string[] }
-        if (forums.enabled && forums.domains?.length) {
+      // General Forums - support both { enabled, forums/domains } and string[] formats
+      if (data.general_forums) {
+        let forums: string[] = []
+        let isEnabled = false
+
+        if (Array.isArray(data.general_forums)) {
+          forums = data.general_forums
+          isEnabled = forums.length > 0
+        } else if (typeof data.general_forums === 'object') {
+          const gf = data.general_forums as { enabled?: boolean; forums?: string[]; domains?: string[] }
+          isEnabled = gf.enabled ?? false
+          forums = gf.forums || gf.domains || []
+        }
+
+        if (isEnabled || forums.length > 0) {
           sections.push(
             <div key="general" className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-blue-600 font-medium">Foros Generales</span>
-                <span className="text-xs text-gray-500">({forums.domains.length} sitios)</span>
+                {forums.length > 0 && (
+                  <span className="text-xs text-gray-500">({forums.length} sitios)</span>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {forums.domains.map((domain: string) => (
-                  <span key={domain} className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-sm border border-blue-200">
-                    {domain}
-                  </span>
-                ))}
-              </div>
+              {forums.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {forums.map((domain: string) => (
+                    <span key={domain} className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-sm border border-blue-200">
+                      {domain}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )
         }

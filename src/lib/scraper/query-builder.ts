@@ -168,11 +168,22 @@ export function generateSearchQueries(config: ScraperStepConfig): SearchQuery[] 
 
   const { life_contexts, product_words, indicators, sources } = config
 
+  // Normalize sources to handle both formats:
+  // - Old format: { reddit: boolean, thematic_forums: boolean, general_forums: string[] }
+  // - LLM format: { reddit: { enabled, subreddits }, thematic_forums: { enabled, forums }, general_forums: { enabled, forums } }
+  const isRedditEnabled = typeof sources.reddit === 'boolean'
+    ? sources.reddit
+    : (sources.reddit as unknown as { enabled?: boolean })?.enabled ?? false
+
+  const isThematicEnabled = typeof sources.thematic_forums === 'boolean'
+    ? sources.thematic_forums
+    : (sources.thematic_forums as unknown as { enabled?: boolean })?.enabled ?? false
+
   // Generate all A × B combinations
   for (const lifeContext of life_contexts) {
     for (const productWord of product_words) {
       // Reddit searches (general)
-      if (sources.reddit) {
+      if (isRedditEnabled) {
         // Base query without indicator
         queries.push(createQuery(lifeContext, productWord, undefined, 'reddit', 'reddit.com'))
 
@@ -185,7 +196,7 @@ export function generateSearchQueries(config: ScraperStepConfig): SearchQuery[] 
       }
 
       // Thematic forums - use context-matched forums
-      if (sources.thematic_forums) {
+      if (isThematicEnabled) {
         const matchedForums = findThematicForums(lifeContext)
         for (const forum of matchedForums) {
           // For thematic forums, we might want to add forum-specific keywords
@@ -205,7 +216,12 @@ export function generateSearchQueries(config: ScraperStepConfig): SearchQuery[] 
       }
 
       // General forum searches
-      for (const forum of sources.general_forums) {
+      // Support both array format (string[]) and object format ({ enabled, forums })
+      const generalForums = Array.isArray(sources.general_forums)
+        ? sources.general_forums
+        : (sources.general_forums as unknown as { enabled?: boolean; forums?: string[] })?.forums || []
+
+      for (const forum of generalForums) {
         queries.push(createQuery(lifeContext, productWord, undefined, 'general_forum', forum))
 
         // With indicators
