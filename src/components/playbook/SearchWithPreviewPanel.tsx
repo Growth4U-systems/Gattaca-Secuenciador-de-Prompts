@@ -35,6 +35,7 @@ interface SearchWithPreviewPanelProps {
   config: Partial<EditableConfig>
   onExecute: (finalConfig: EditableConfig) => void
   onBack: () => void
+  onCancel?: () => void // Para cancelar la ejecución
   isExecuting?: boolean
   progress?: {
     current: number
@@ -50,6 +51,7 @@ export function SearchWithPreviewPanel({
   config,
   onExecute,
   onBack,
+  onCancel,
   isExecuting = false,
   progress,
 }: SearchWithPreviewPanelProps) {
@@ -163,6 +165,15 @@ export function SearchWithPreviewPanel({
 
   // Render executing state
   if (isExecuting) {
+    const totalSearches = progress?.total || stats.totalSearches
+    const currentProgress = progress?.current || 0
+    const remaining = totalSearches - currentProgress
+    const percentComplete = totalSearches > 0 ? (currentProgress / totalSearches) * 100 : 0
+
+    // Estimate time remaining based on progress
+    const estimatedSecondsRemaining = remaining * SECONDS_PER_SEARCH
+    const estimatedMinutesRemaining = Math.ceil(estimatedSecondsRemaining / 60)
+
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-3">
@@ -170,33 +181,49 @@ export function SearchWithPreviewPanel({
           <div>
             <h3 className="font-semibold text-gray-900">Buscando URLs...</h3>
             <p className="text-sm text-gray-500">
-              Ejecutando {stats.totalSearches.toLocaleString()} búsquedas en Google
+              Ejecutando {totalSearches.toLocaleString()} búsquedas en Google
             </p>
           </div>
         </div>
 
-        {progress && (
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">{progress.label || 'Progreso'}</span>
-              <span className="text-gray-700 font-medium">
-                {progress.current} / {progress.total}
-              </span>
-            </div>
-            <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-600 rounded-full transition-all duration-300"
-                style={{ width: `${(progress.current / progress.total) * 100}%` }}
-              />
-            </div>
+        {/* Progress bar with detailed info */}
+        <div className="space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">
+              Búsquedas: {currentProgress.toLocaleString()}/{totalSearches.toLocaleString()}
+              {remaining > 0 && <span className="text-gray-400 ml-1">(faltan {remaining.toLocaleString()})</span>}
+            </span>
+            <span className="text-gray-700 font-medium">
+              {currentProgress} / {totalSearches}
+            </span>
           </div>
-        )}
+          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-600 rounded-full transition-all duration-300"
+              style={{ width: `${percentComplete}%` }}
+            />
+          </div>
+        </div>
 
+        {/* Info box */}
         <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
           <p className="text-sm text-blue-700">
-            Esto puede tomar ~{stats.estimatedTimeMinutes} minutos. No cierres esta ventana.
+            {estimatedMinutesRemaining > 0
+              ? `Esto puede tomar ~${estimatedMinutesRemaining} minutos. No cierres esta ventana.`
+              : 'Finalizando búsqueda...'}
           </p>
         </div>
+
+        {/* Cancel button */}
+        {onCancel && (
+          <button
+            onClick={onCancel}
+            className="w-full px-4 py-2.5 bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100 border border-red-200 flex items-center justify-center gap-2 transition-colors"
+          >
+            <X className="w-4 h-4" />
+            Cancelar Búsqueda
+          </button>
+        )}
       </div>
     )
   }
