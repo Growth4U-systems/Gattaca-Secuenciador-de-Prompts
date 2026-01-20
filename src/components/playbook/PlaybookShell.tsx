@@ -955,7 +955,7 @@ export default function PlaybookShell({
     // Only for search_with_preview steps that are in_progress with a jobId
     if (
       currentStep?.type === 'search_with_preview' &&
-      currentStepState?.status === 'in_progress' &&
+      (currentStepState?.status === 'in_progress' || currentStepState?.status === 'pending') &&
       currentStepState?.output &&
       !pollIntervalRef.current
     ) {
@@ -965,13 +965,42 @@ export default function PlaybookShell({
       if (jobId) {
         console.log('[Resume] Resuming polling for job:', jobId)
 
-        // Set up polling - same logic as in executeStep
-        let isResuming = false
-        let lastCompletedCount = -1
-        let stallCount = 0
-        let initialCompleted = -1
+        // First, check if job is already done (immediate check, not polling)
+        fetch(`/api/niche-finder/jobs/${jobId}/status`)
+          .then(res => res.json())
+          .then(statusData => {
+            if (statusData.status === 'serp_done' || statusData.status === 'serp_completed') {
+              console.log('[Resume] Job already completed, marking step as done')
+              updateStepState(currentStep.id, {
+                status: 'completed',
+                completedAt: new Date(),
+                output: {
+                  jobId,
+                  urlsFound: statusData.job?.urls_found || 0,
+                  costs: statusData.costs,
+                },
+              })
+              setTimeout(goToNextStep, 500)
+              return // Don't start polling
+            }
+            // If not done, continue with normal polling setup below
+            startPolling()
+          })
+          .catch(err => {
+            console.error('[Resume] Error checking initial status:', err)
+            startPolling() // Start polling anyway
+          })
 
-        pollIntervalRef.current = setInterval(async () => {
+        function startPolling() {
+          if (pollIntervalRef.current) return // Already polling
+
+          // Set up polling - same logic as in executeStep
+          let isResuming = false
+          let lastCompletedCount = -1
+          let stallCount = 0
+          let initialCompleted = -1
+
+          pollIntervalRef.current = setInterval(async () => {
           try {
             const statusResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
             const statusData = await statusResponse.json()
@@ -1053,6 +1082,7 @@ export default function PlaybookShell({
             // Don't stop polling on transient errors
           }
         }, 2000)
+        } // End startPolling function
 
         // Cleanup on unmount
         return () => {
