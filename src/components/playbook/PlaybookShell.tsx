@@ -295,6 +295,29 @@ export default function PlaybookShell({
               context.serpJobId = output.jobId
             }
           }
+
+          // Special case: Parse sources step output for QueryPreviewPanel
+          // The LLM returns a JSON string that needs to be parsed
+          if (stepState.id === 'sources' && stepState.output) {
+            try {
+              let parsedSources = stepState.output
+              if (typeof stepState.output === 'string') {
+                // Try to extract JSON from the LLM response
+                const jsonMatch = stepState.output.match(/\{[\s\S]*\}/)
+                if (jsonMatch) {
+                  parsedSources = JSON.parse(jsonMatch[0])
+                }
+              }
+              // Only set if it's a valid sources config object
+              if (parsedSources && typeof parsedSources === 'object' &&
+                  ('reddit' in parsedSources || 'thematic_forums' in parsedSources || 'general_forums' in parsedSources)) {
+                context.sources = parsedSources
+              }
+            } catch (e) {
+              console.error('[buildPlaybookContext] Error parsing sources output:', e)
+              // Don't set context.sources - let it use default values
+            }
+          }
         }
       }
     }

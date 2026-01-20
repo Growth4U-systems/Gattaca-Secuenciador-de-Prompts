@@ -254,28 +254,142 @@ Desarrollar inline (Claude implementa)
 
 ### ⚠️ CRÍTICO: Pasos frecuentemente olvidados
 
-**Estos 3 archivos son los más olvidados y causan que el playbook no aparezca en la UI:**
+**Estos 3 archivos son los más olvidados y causan que el playbook no aparezca en la UI. SIN ESTOS PASOS, EL PLAYBOOK NO FUNCIONA:**
 
-1. **`src/components/playbook/index.ts`** - Debe exportar el nuevo config:
-   ```typescript
-   export { playbookConfigs, getPlaybookConfig, nicheFinderConfig, [nuevoConfig] } from './configs'
-   ```
+#### 1. Exportar config desde `src/components/playbook/index.ts`
 
-2. **`src/components/[nombre]/[Nombre]Playbook.tsx`** - Componente wrapper:
-   ```typescript
-   import { PlaybookShell, [nuevoConfig] } from '../playbook'
+```typescript
+// Agregar el nuevo config al export existente
+export { playbookConfigs, getPlaybookConfig, nicheFinderConfig, videoViralIAConfig } from './configs'
+```
 
-   export default function [Nombre]Playbook({ projectId }) {
-     return <PlaybookShell projectId={projectId} playbookConfig={[nuevoConfig]} />
-   }
-   ```
+#### 2. Crear componente wrapper en `src/components/[nombre]/`
 
-3. **`src/app/projects/[projectId]/page.tsx`** - Integración en la página:
-   - Agregar import del componente wrapper
-   - Agregar nuevo tipo a `TabType`
-   - Agregar condición en `useEffect` para tab inicial
-   - Agregar array de tabs específicos para el nuevo tipo
-   - Agregar renderizado en el switch de contenido de tabs
+**Archivo: `src/components/[nombre]/[Nombre]Playbook.tsx`**
+```typescript
+'use client'
+
+import { useState, useEffect } from 'react'
+import { PlaybookShell, [nombre]Config } from '../playbook'
+import { PlaybookState } from '../playbook/types'
+
+interface [Nombre]PlaybookProps {
+  projectId: string
+}
+
+export default function [Nombre]Playbook({ projectId }: [Nombre]PlaybookProps) {
+  const [initialState, setInitialState] = useState<Partial<PlaybookState> | undefined>(undefined)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadState() {
+      try {
+        const response = await fetch(`/api/projects/${projectId}/playbook-state`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.state) {
+            setInitialState(data.state)
+          }
+        }
+      } catch (error) {
+        console.error('Error loading playbook state:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadState()
+  }, [projectId])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  return (
+    <PlaybookShell
+      projectId={projectId}
+      playbookConfig={[nombre]Config}
+      initialState={initialState}
+    />
+  )
+}
+```
+
+**Archivo: `src/components/[nombre]/index.ts`**
+```typescript
+export { default as [Nombre]Playbook } from './[Nombre]Playbook'
+```
+
+#### 3. Integrar en `src/app/projects/[projectId]/page.tsx`
+
+**3a. Agregar imports (cerca del inicio del archivo):**
+```typescript
+import { [Nombre]Playbook } from '@/components/[nombre]'
+import { [IconName] } from 'lucide-react'  // Ej: Video, Search, Users
+```
+
+**3b. Agregar al tipo TabType:**
+```typescript
+type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder' | 'signal-outreach' | '[nombre-con-guiones]'
+```
+
+**3c. Agregar condición para tab inicial (en useEffect):**
+```typescript
+useEffect(() => {
+  if (project && activeTab === null) {
+    setActiveTab(
+      project.playbook_type === 'niche_finder' ? 'niche-finder' :
+      project.playbook_type === 'signal_based_outreach' ? 'signal-outreach' :
+      project.playbook_type === '[nombre_con_guion_bajo]' ? '[nombre-con-guiones]' :  // AGREGAR ESTA LÍNEA
+      'documents'
+    )
+  }
+}, [project, activeTab])
+```
+
+**3d. Agregar array de tabs específicos:**
+```typescript
+// [Nombre] playbook: Uses unified view with config and campaigns integrated
+const [nombre]Tabs = [
+  { id: '[nombre-con-guiones]' as TabType, label: '[Nombre Display]', icon: [IconName], description: '[Descripción corta]' },
+  { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
+]
+```
+
+**3e. Agregar condición en selección de tabs:**
+```typescript
+const tabs = project?.playbook_type === 'niche_finder'
+  ? nicheFinderTabs
+  : project?.playbook_type === 'signal_based_outreach'
+    ? signalOutreachTabs
+    : project?.playbook_type === '[nombre_con_guion_bajo]'  // AGREGAR ESTA CONDICIÓN
+      ? [nombre]Tabs
+      : project?.playbook_type === 'ecp'
+        ? [...baseTabs, { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' }]
+        : baseTabs
+```
+
+**3f. Agregar renderizado del componente:**
+```typescript
+{activeTab === '[nombre-con-guiones]' && (
+  <[Nombre]Playbook projectId={params.projectId} />
+)}
+```
+
+### Ejemplo completo: Video Viral IA
+
+Para el playbook `video_viral_ia`, los cambios fueron:
+
+1. **Config export**: `videoViralIAConfig` en `playbook/index.ts`
+2. **Componente**: `VideoViralIAPlaybook` en `components/video-viral-ia/`
+3. **Page.tsx**:
+   - TabType: `'video-viral-ia'`
+   - useEffect: `project.playbook_type === 'video_viral_ia' ? 'video-viral-ia'`
+   - Tabs: `videoViralIATabs` con icon `Video`
+   - Render: `<VideoViralIAPlaybook projectId={params.projectId} />`
 
 ### Referencia completa
 Ver [playbook-templates.md](playbook-templates.md) para instrucciones detalladas de cada archivo.
