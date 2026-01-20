@@ -625,9 +625,11 @@ interface DecisionStepProps {
   stepState: StepState
   onUpdateState: (update: Partial<StepState>) => void
   onContinue: () => void
+  onBack?: () => void
+  onRerunPrevious?: () => void
 }
 
-function DecisionStep({ step, stepState, onUpdateState, onContinue }: DecisionStepProps) {
+function DecisionStep({ step, stepState, onUpdateState, onContinue, onBack, onRerunPrevious }: DecisionStepProps) {
   const config = step.decisionConfig
   // Use fixedOptions from config if optionsFrom is 'fixed', otherwise fall back to stepState.suggestions
   const options = config?.optionsFrom === 'fixed' && config?.fixedOptions
@@ -657,6 +659,30 @@ function DecisionStep({ step, stepState, onUpdateState, onContinue }: DecisionSt
   const canContinue = config?.multiSelect
     ? Array.isArray(selected) && selected.length >= (config?.minSelections || 1)
     : !!selected
+
+  // Handle confirm based on selection
+  const handleConfirm = () => {
+    // Standard decision IDs for review steps
+    if (selected === 'edit' && onBack) {
+      // Go back to previous step to edit
+      onBack()
+      return
+    }
+    if (selected === 'regenerate' && onRerunPrevious) {
+      // Re-execute the previous step
+      onRerunPrevious()
+      return
+    }
+    // Default: approve/continue to next step
+    onContinue()
+  }
+
+  // Get button label based on selection
+  const getButtonLabel = () => {
+    if (selected === 'edit') return 'Volver a editar'
+    if (selected === 'regenerate') return 'Regenerar'
+    return 'Confirmar selección'
+  }
 
   return (
     <div className="space-y-4">
@@ -701,11 +727,11 @@ function DecisionStep({ step, stepState, onUpdateState, onContinue }: DecisionSt
       </div>
 
       <button
-        onClick={onContinue}
+        onClick={handleConfirm}
         disabled={!canContinue}
         className="w-full mt-4 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
-        Confirmar selección
+        {getButtonLabel()}
         <ChevronRight size={16} />
       </button>
     </div>
