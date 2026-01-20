@@ -39,7 +39,7 @@ export async function GET(
 
     const { data: project, error } = await supabase
       .from('projects')
-      .select('id, name, description, variable_definitions, custom_statuses, legacy_flow_config')
+      .select('*')
       .eq('id', projectId)
       .single()
 
