@@ -682,6 +682,7 @@ export default function PlaybookShell({
               let isResuming = false
               let lastCompletedCount = -1 // Track previous poll value
               let stallCount = 0 // Count consecutive stalls
+              let initialCompleted = -1 // Track initial value when polling started
 
               // Clear any existing poll interval
               if (pollIntervalRef.current) {
@@ -707,15 +708,21 @@ export default function PlaybookShell({
                     },
                   })
 
+                  // Track initial value on first poll
+                  if (initialCompleted === -1) {
+                    initialCompleted = completed
+                  }
+
                   // Auto-resume if job was interrupted (still serp_running but not progressing)
                   // This handles Vercel timeout scenarios
                   if (statusData.status === 'serp_running' && completed < total && !isResuming) {
                     // Check if progress has stalled (same value as PREVIOUS poll)
                     if (lastCompletedCount === completed && remaining > 0) {
                       stallCount++
-                      // After 2 consecutive stalls (4+ seconds), trigger resume
-                      if (stallCount >= 2) {
-                        console.log(`[SERP] Job stalled at ${completed}/${total} for ${stallCount * 2}s, auto-resuming...`)
+                      // After 2 consecutive stalls (4+ seconds), OR if no progress since we started polling
+                      const noProgressSinceStart = completed === initialCompleted && stallCount >= 1
+                      if (stallCount >= 2 || noProgressSinceStart) {
+                        console.log(`[SERP] Job stalled at ${completed}/${total} (stallCount=${stallCount}, initialCompleted=${initialCompleted}), auto-resuming...`)
                         isResuming = true
                         stallCount = 0
                         // Resume the job by calling SERP endpoint again
