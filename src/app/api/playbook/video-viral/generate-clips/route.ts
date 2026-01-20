@@ -38,6 +38,41 @@ interface WavespeedResponse {
 const WAVESPEED_API_BASE = 'https://api.wavespeed.ai/api/v3'
 const SEEDANCE_ENDPOINT = `${WAVESPEED_API_BASE}/bytedance/seedance-v1.5-pro/text-to-video`
 
+/**
+ * Sanitize prompt text to remove non-ASCII characters that cause ByteString errors.
+ * Replaces common Unicode symbols with ASCII equivalents or removes them.
+ */
+function sanitizePrompt(text: string): string {
+  return text
+    // Replace arrows with text equivalents
+    .replace(/←/g, '<-')
+    .replace(/→/g, '->')
+    .replace(/↑/g, '^')
+    .replace(/↓/g, 'v')
+    .replace(/↔/g, '<->')
+    // Replace quotes
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'")
+    // Replace dashes
+    .replace(/[–—]/g, '-')
+    // Replace ellipsis
+    .replace(/…/g, '...')
+    // Replace bullet points
+    .replace(/[•●○◦]/g, '-')
+    // Replace other common symbols
+    .replace(/[™®©]/g, '')
+    .replace(/[°]/g, ' degrees')
+    // Remove emojis and other non-ASCII characters
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Emojis
+    .replace(/[\u{2600}-\u{26FF}]/gu, '')   // Misc symbols
+    .replace(/[\u{2700}-\u{27BF}]/gu, '')   // Dingbats
+    // Remove any remaining non-ASCII characters
+    .replace(/[^\x00-\x7F]/g, '')
+    // Clean up extra spaces
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerClient()
@@ -107,7 +142,8 @@ export async function POST(request: NextRequest) {
     }> = []
 
     for (let i = 0; i < scenes.length; i++) {
-      const scenePrompt = scenes[i]
+      const scenePrompt = sanitizePrompt(scenes[i])
+      console.log(`[generate-clips] Scene ${i + 1} prompt (sanitized):`, scenePrompt.substring(0, 100) + '...')
 
       try {
         // Submit video generation request

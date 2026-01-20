@@ -21,7 +21,8 @@ interface UrlSummary {
 }
 
 interface ReviewAndScrapePanelProps {
-  jobId: string // SERP job ID to fetch URLs from
+  jobId?: string // SERP job ID to fetch URLs from (optional, can be fetched from projectId)
+  projectId?: string // Project ID to fetch latest job from if jobId not provided
   onExecute: (selectedUrls: string[]) => void
   onBack: () => void
   isExecuting?: boolean
@@ -37,7 +38,8 @@ interface ReviewAndScrapePanelProps {
 const COST_PER_URL = 0.001 // Firecrawl approximate cost
 
 export function ReviewAndScrapePanel({
-  jobId,
+  jobId: initialJobId,
+  projectId,
   onExecute,
   onBack,
   isExecuting = false,
@@ -47,15 +49,54 @@ export function ReviewAndScrapePanel({
   const [error, setError] = useState<string | null>(null)
   const [urlsBySource, setUrlsBySource] = useState<UrlSummary[]>([])
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set())
+  const [resolvedJobId, setResolvedJobId] = useState<string | null>(initialJobId || null)
+
+  // First, resolve jobId if not provided but projectId is available
+  useEffect(() => {
+    const resolveJobId = async () => {
+      if (initialJobId) {
+        setResolvedJobId(initialJobId)
+        return
+      }
+
+      if (!projectId) {
+        setError('No se puede cargar URLs: falta jobId o projectId')
+        setLoading(false)
+        return
+      }
+
+      try {
+        // Fetch latest job for this project
+        const response = await fetch(`/api/niche-finder/jobs?project_id=${projectId}&status=serp_done&limit=1`)
+        if (!response.ok) {
+          throw new Error('Error buscando job del proyecto')
+        }
+        const data = await response.json()
+        if (data.jobs && data.jobs.length > 0) {
+          setResolvedJobId(data.jobs[0].id)
+        } else {
+          setError('No se encontró un job SERP completado para este proyecto')
+          setLoading(false)
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error buscando job')
+        setLoading(false)
+      }
+    }
+
+    resolveJobId()
+  }, [initialJobId, projectId])
 
   // Fetch URL summary from API
   useEffect(() => {
     const fetchUrls = async () => {
+      if (!resolvedJobId) return
+
       try {
         setLoading(true)
         setError(null)
 
-        const response = await fetch(`/api/niche-finder/jobs/${jobId}/urls/summary`)
+        const response = await fetch(`/api/niche-finder/jobs/${resolvedJobId}/urls/summary`)
         if (!response.ok) {
           throw new Error('Error cargando URLs')
         }
@@ -80,10 +121,10 @@ export function ReviewAndScrapePanel({
       }
     }
 
-    if (jobId) {
+    if (resolvedJobId) {
       fetchUrls()
     }
-  }, [jobId])
+  }, [resolvedJobId])
 
   // Calculate totals
   const stats = useMemo(() => {
