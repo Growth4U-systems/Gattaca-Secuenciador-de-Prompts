@@ -1447,6 +1447,7 @@ export default function WorkArea({
             await onExecute(finalConfig)
           }}
           onBack={onBack}
+          onCancel={onCancel}
           isExecuting={isExecuting}
           progress={stepState.progress}
         />
