@@ -8,6 +8,7 @@ import { getECPPositioningTemplate } from './ecp-positioning-playbook'
 import { getNicheFinderPlaybookTemplate } from './niche-finder-playbook'
 import { getCompetitorAnalysisTemplate } from './competitor-analysis-playbook'
 import { getSignalBasedOutreachTemplate } from './signal-based-outreach-playbook'
+import { getVideoViralIATemplate } from './video-viral-ia-playbook'
 
 // Re-export types
 export * from './types'
@@ -17,6 +18,7 @@ export { getECPPositioningTemplate } from './ecp-positioning-playbook'
 export { getNicheFinderPlaybookTemplate } from './niche-finder-playbook'
 export { getCompetitorAnalysisTemplate } from './competitor-analysis-playbook'
 export { getSignalBasedOutreachTemplate } from './signal-based-outreach-playbook'
+export { getVideoViralIATemplate } from './video-viral-ia-playbook'
 
 // Re-export scraper utilities from niche finder
 export {
@@ -29,7 +31,7 @@ export {
 /**
  * Playbook type literals
  */
-export type PlaybookType = 'ecp' | 'niche_finder' | 'competitor_analysis' | 'signal_based_outreach'
+export type PlaybookType = 'ecp' | 'niche_finder' | 'competitor_analysis' | 'signal_based_outreach' | 'video_viral_ia'
 
 /**
  * Get a playbook template by type
@@ -46,6 +48,8 @@ export function getPlaybookTemplate(type: PlaybookType | string): PlaybookTempla
       return getCompetitorAnalysisTemplate()
     case 'signal_based_outreach':
       return getSignalBasedOutreachTemplate()
+    case 'video_viral_ia':
+      return getVideoViralIATemplate()
     default:
       console.warn(`Unknown playbook type: ${type}`)
       return null
@@ -62,6 +66,7 @@ export function getAllPlaybookTemplates(): PlaybookTemplate[] {
     getNicheFinderPlaybookTemplate(),
     getCompetitorAnalysisTemplate(),
     getSignalBasedOutreachTemplate(),
+    getVideoViralIATemplate(),
   ]
 }
 
@@ -91,7 +96,7 @@ export function getPlaybookTemplatesMeta(): Array<{
  * Check if a playbook type has a template
  */
 export function hasPlaybookTemplate(type: string): boolean {
-  return ['ecp', 'niche_finder', 'competitor_analysis', 'signal_based_outreach'].includes(type)
+  return ['ecp', 'niche_finder', 'competitor_analysis', 'signal_based_outreach', 'video_viral_ia'].includes(type)
 }
 
 /**

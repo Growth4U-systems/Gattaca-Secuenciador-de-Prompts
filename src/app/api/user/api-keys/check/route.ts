@@ -4,7 +4,7 @@ import { getUserApiKey } from '@/lib/getUserApiKey'
 
 export const dynamic = 'force-dynamic'
 
-type ServiceName = 'apify' | 'firecrawl' | 'openrouter' | 'perplexity' | 'phantombuster' | 'linkedin_cookie' | 'serper'
+type ServiceName = 'apify' | 'firecrawl' | 'openrouter' | 'perplexity' | 'phantombuster' | 'linkedin_cookie' | 'serper' | 'wavespeed' | 'fal'
 
 /**
  * Check if specific API keys are configured for the current user

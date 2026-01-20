@@ -313,6 +313,114 @@ Analiza sistemáticamente a tus competidores: cómo se posicionan, qué ofrecen,
       },
     ],
   },
+  video_viral_ia: {
+    // Información básica
+    purpose:
+      'Genera videos virales ASMR/satisfying usando IA - desde la idea hasta el video listo para publicar.',
+    whenToUse: [
+      'Crear contenido viral para TikTok, Reels o Shorts',
+      'Automatizar la producción de videos cortos',
+      'Generar ideas y escenas con IA antes de producir',
+    ],
+    outcome:
+      'Video MP4 listo para publicar con caption viral y hashtags optimizados.',
+    relatedPlaybooks: ['niche_finder'],
+    targetAudience: 'Creadores de contenido, social media managers, marketers',
+    steps: {
+      generate_idea: 'IA genera idea viral con caption y hashtags',
+      review_idea: 'Revisa y aprueba la idea generada',
+      generate_scenes: 'Genera prompts detallados para cada escena',
+      generate_clips: '[En desarrollo] Genera clips con Seedance/Wavespeed',
+      generate_audio: '[En desarrollo] Genera audio ASMR con Fal AI',
+      compose_video: '[En desarrollo] Une clips y audio con FFmpeg',
+      preview: 'Revisa el video final',
+      export: 'Exporta o publica a plataformas',
+    },
+    // Información extendida
+    icon: '🎬',
+    description: `Video Viral IA automatiza la creación de videos virales usando inteligencia artificial.
+
+El proceso completo:
+1. **Ideación**: La IA genera ideas virales con caption, hashtags y descripción del entorno visual
+2. **Producción**: Se generan prompts detallados para cada escena del video
+3. **Post-Producción**: Generación de clips, audio y composición final
+4. **Publicación**: Preview y exportación a múltiples plataformas
+
+⚠️ **Estado actual**: Los pasos de generación de video y audio están en desarrollo. Los pasos de ideación y generación de escenas funcionan completamente con IA.`,
+    objectives: [
+      'Generar ideas virales con IA en segundos',
+      'Crear prompts de escenas cinematográficas detallados',
+      'Producir videos cortos listos para publicar',
+      'Optimizar hashtags para máximo alcance',
+    ],
+    requirements: [
+      'Tema o nicho definido para el contenido',
+      'Preferencia de estilo (ASMR, satisfying, etc.)',
+      'Plataformas destino seleccionadas',
+    ],
+    duration: '15-30 minutos (pasos LLM) + tiempo de generación de video',
+    detailedSteps: {
+      generate_idea: {
+        brief: 'IA genera idea viral con caption y hashtags',
+        detailed:
+          'La IA analiza el tema y estilo seleccionado para generar una idea viral con: caption con emoji, 12 hashtags optimizados, descripción del entorno visual y prompt de audio.',
+        tips: [
+          'Sé específico en el tema para mejores resultados',
+          'Los temas de nicho suelen generar más engagement',
+          'Revisa los hashtags para tu mercado específico',
+        ],
+      },
+      generate_scenes: {
+        brief: 'Genera prompts detallados para cada escena',
+        detailed:
+          'Para cada escena del video, la IA genera una descripción cinematográfica detallada de 500-1000 caracteres con información sobre materiales, texturas, movimientos y ángulos de cámara.',
+        tips: [
+          'Cada escena debe mostrar un momento distinto',
+          'Las descripciones deben ser muy visuales y específicas',
+          'Incluye detalles de textura y comportamiento de materiales',
+        ],
+      },
+      generate_clips: {
+        brief: '[En desarrollo] Genera clips con Seedance/Wavespeed',
+        detailed:
+          'Este paso generará clips de video usando APIs de generación de video IA. Actualmente requiere uso externo de Wavespeed AI o similar.',
+      },
+      preview: {
+        brief: 'Revisa el video final',
+        detailed:
+          'Visualiza el video completo con audio antes de publicar. Verifica que el caption y hashtags son apropiados para las plataformas seleccionadas.',
+      },
+    },
+    examples: [
+      {
+        title: 'Cutting ASMR',
+        description:
+          'Generó una idea de "Obsidian shaped like a chess piece being sliced" con 1.2M views en TikTok.',
+      },
+      {
+        title: 'Satisfying Slime',
+        description:
+          'Creó serie de 10 videos satisfying con prompts generados por IA, alcanzando 5M views combinados.',
+      },
+    ],
+    faqs: [
+      {
+        question: '¿Qué partes funcionan ahora?',
+        answer:
+          'La ideación y generación de escenas funcionan 100% con IA. Los pasos de generación de video y audio requieren herramientas externas mientras se desarrollan los endpoints.',
+      },
+      {
+        question: '¿Qué herramientas externas necesito?',
+        answer:
+          'Para la generación de video: Wavespeed AI, Seedance, o Runway. Para audio: Fal AI mmaudio. Para composición: cualquier editor de video o Fal AI FFmpeg.',
+      },
+      {
+        question: '¿Qué duración funciona mejor?',
+        answer:
+          'Videos de 15-30 segundos tienen mejor retention en TikTok/Reels. Para YouTube Shorts puedes ir hasta 60 segundos.',
+      },
+    ],
+  },
   signal_based_outreach: {
     // Información básica
     purpose:
@@ -482,6 +590,7 @@ export const getPlaybookName = (type: string): string => {
     ecp: 'ECP Positioning',
     competitor_analysis: 'Competitor Analysis',
     signal_based_outreach: 'Signal-Based Outreach',
+    video_viral_ia: 'Video Viral IA',
   }
   return names[type] || type
 }
