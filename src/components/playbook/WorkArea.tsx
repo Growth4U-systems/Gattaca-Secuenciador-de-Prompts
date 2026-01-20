@@ -517,6 +517,7 @@ interface AutoExecutingStepProps {
 
 function AutoExecutingStep({ step, stepState, onCancel }: AutoExecutingStepProps) {
   const progress = stepState.progress
+  const partialResults = stepState.partialResults
 
   return (
     <div className="space-y-4">
@@ -548,6 +549,53 @@ function AutoExecutingStep({ step, stepState, onCancel }: AutoExecutingStepProps
               Tiempo estimado: {progress.estimatedTimeRemaining}
             </p>
           )}
+        </div>
+      )}
+
+      {/* Partial results - show success/failed counts if available */}
+      {partialResults && (partialResults.successCount !== undefined || partialResults.failedCount !== undefined) && (
+        <div className="flex gap-4 text-sm">
+          {partialResults.successCount !== undefined && (
+            <div className="flex items-center gap-1.5 text-green-700">
+              <Check size={14} />
+              <span>{partialResults.successCount} exitosos</span>
+            </div>
+          )}
+          {partialResults.failedCount !== undefined && partialResults.failedCount > 0 && (
+            <div className="flex items-center gap-1.5 text-red-600">
+              <AlertCircle size={14} />
+              <span>{partialResults.failedCount} fallidos</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Last items found - show last few results */}
+      {partialResults?.lastItems && partialResults.lastItems.length > 0 && (
+        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+          <p className="text-xs font-medium text-gray-500 mb-2">Últimos encontrados:</p>
+          <ul className="space-y-1">
+            {partialResults.lastItems.slice(-3).map((item, i) => (
+              <li key={i} className="text-sm text-gray-700 truncate flex items-start gap-2">
+                <span className="text-blue-500">•</span>
+                <span className="truncate">{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Last snippet - show last content extracted */}
+      {partialResults?.lastSnippet && (
+        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+          <p className="text-xs font-medium text-gray-500 mb-1">
+            {partialResults.lastUrl && (
+              <span className="text-blue-600">{new URL(partialResults.lastUrl).hostname}</span>
+            )}
+          </p>
+          <p className="text-sm text-gray-700 italic line-clamp-2">
+            &ldquo;{partialResults.lastSnippet}&rdquo;
+          </p>
         </div>
       )}
 
@@ -811,6 +859,7 @@ interface PendingStepProps {
 
 function PendingStep({ step, onExecute }: PendingStepProps) {
   const isAutoStep = ['auto', 'auto_with_preview', 'auto_with_review'].includes(step.type)
+  const hasExplanation = !!step.executionExplanation
   const [apiKeyStatus, setApiKeyStatus] = useState<{
     loading: boolean
     missing: string[]
@@ -906,6 +955,66 @@ function PendingStep({ step, onExecute }: PendingStepProps) {
     )
   }
 
+  // Render explanation panel if available
+  if (hasExplanation && step.executionExplanation) {
+    const explanation = step.executionExplanation
+    return (
+      <div className="space-y-6">
+        {/* Title with icon */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+            <Play className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">{explanation.title}</h3>
+            <p className="text-sm text-gray-500">Este paso va a:</p>
+          </div>
+        </div>
+
+        {/* Steps list */}
+        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+          <ol className="space-y-2">
+            {explanation.steps.map((stepText, i) => (
+              <li key={i} className="flex items-start gap-3 text-sm">
+                <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0 text-xs font-medium">
+                  {i + 1}
+                </span>
+                <span className="text-gray-700">{stepText}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {/* Cost and time estimates */}
+        {(explanation.estimatedTime || explanation.estimatedCost) && (
+          <div className="flex gap-4">
+            {explanation.estimatedTime && (
+              <div className="flex-1 bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <p className="text-xs text-gray-500">Tiempo estimado</p>
+                <p className="text-sm font-medium text-gray-900">{explanation.estimatedTime}</p>
+              </div>
+            )}
+            {explanation.estimatedCost && (
+              <div className="flex-1 bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <p className="text-xs text-gray-500">Costo ({explanation.costService || 'API'})</p>
+                <p className="text-sm font-medium text-gray-900">{explanation.estimatedCost}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <button
+          onClick={onExecute}
+          className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
+        >
+          <Play size={16} />
+          Ejecutar
+        </button>
+      </div>
+    )
+  }
+
+  // Default simple view
   return (
     <div className="space-y-4">
       <p className="text-gray-600 text-sm">

@@ -94,6 +94,26 @@ export async function POST(request: NextRequest, { params }: Params) {
     let filteredCount = 0
     let totalInputTokens = 0
     let totalOutputTokens = 0
+    let processedCount = 0
+    const lastExtractedProblems: string[] = []
+
+    // Get total count for progress tracking
+    const { count: totalScrapedCount } = await supabase
+      .from('niche_finder_urls')
+      .select('*', { count: 'exact', head: true })
+      .eq('job_id', jobId)
+      .eq('status', 'scraped')
+
+    const totalToExtract = (totalScrapedCount || 0) + scrapedUrls.length
+
+    // Update initial progress
+    await supabase
+      .from('niche_finder_jobs')
+      .update({
+        extract_total: totalToExtract,
+        extract_completed: 0,
+      })
+      .eq('id', jobId)
 
     // Process URLs sequentially to avoid rate limits
     for (const urlRecord of scrapedUrls) {
@@ -162,6 +182,17 @@ export async function POST(request: NextRequest, { params }: Params) {
             .eq('id', urlRecord.id)
 
           extractedCount += niches.length
+
+          // Track last extracted problems for UI feedback
+          for (const niche of niches) {
+            if (niche.problem) {
+              lastExtractedProblems.push(niche.problem)
+              // Keep only last 5
+              if (lastExtractedProblems.length > 5) {
+                lastExtractedProblems.shift()
+              }
+            }
+          }
         } else {
           // No niches found but not explicitly filtered
           await supabase
@@ -174,6 +205,18 @@ export async function POST(request: NextRequest, { params }: Params) {
 
           filteredCount++
         }
+
+        processedCount++
+
+        // Update progress in real-time for UI feedback
+        await supabase
+          .from('niche_finder_jobs')
+          .update({
+            extract_completed: processedCount + (job.extract_completed || 0),
+            last_extracted_problems: lastExtractedProblems,
+            niches_extracted: extractedCount + (job.niches_extracted || 0),
+          })
+          .eq('id', jobId)
 
         // Rate limiting
         await new Promise((resolve) => setTimeout(resolve, 200))

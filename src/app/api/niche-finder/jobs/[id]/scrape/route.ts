@@ -76,9 +76,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     let successCount = 0
     let failCount = 0
     let totalCost = 0
+    let lastScrapedUrl = ''
+    let lastScrapedSnippet = ''
 
-    // Scrape URLs in parallel
-    const scrapePromises = pendingUrls.map(async (urlRecord) => {
+    // Scrape URLs sequentially to update progress in real-time
+    for (const urlRecord of pendingUrls) {
       try {
         const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
           method: 'POST',
@@ -111,6 +113,24 @@ export async function POST(request: NextRequest, { params }: Params) {
 
         successCount++
         totalCost += FIRECRAWL_COST_PER_PAGE
+
+        // Track last successful scrape for UI feedback
+        lastScrapedUrl = urlRecord.url
+        // Get first 200 chars of content as snippet
+        lastScrapedSnippet = markdown.substring(0, 200).replace(/\n/g, ' ').trim()
+        if (markdown.length > 200) lastScrapedSnippet += '...'
+
+        // Update job with partial results for real-time UI feedback
+        await supabase
+          .from('niche_finder_jobs')
+          .update({
+            last_scraped_url: lastScrapedUrl,
+            last_scraped_snippet: lastScrapedSnippet,
+            scrape_success_count: successCount + (job.scrape_success_count || 0),
+            scrape_failed_count: failCount + (job.scrape_failed_count || 0),
+          })
+          .eq('id', jobId)
+
       } catch (error) {
         console.error(`Error scraping ${urlRecord.url}:`, error)
 
@@ -123,10 +143,16 @@ export async function POST(request: NextRequest, { params }: Params) {
           .eq('id', urlRecord.id)
 
         failCount++
-      }
-    })
 
-    await Promise.all(scrapePromises)
+        // Update failed count in real-time too
+        await supabase
+          .from('niche_finder_jobs')
+          .update({
+            scrape_failed_count: failCount + (job.scrape_failed_count || 0),
+          })
+          .eq('id', jobId)
+      }
+    }
 
     // Record cost
     if (totalCost > 0) {
