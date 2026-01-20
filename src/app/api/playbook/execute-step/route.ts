@@ -5,6 +5,7 @@ import { getUserApiKey } from '@/lib/getUserApiKey'
 import { decryptToken } from '@/lib/encryption'
 import { SIGNAL_OUTREACH_FLOW_STEPS } from '@/lib/templates/signal-based-outreach-playbook'
 import { NICHE_FINDER_FLOW_STEPS } from '@/lib/templates/niche-finder-playbook'
+import { VIDEO_VIRAL_IA_FLOW_STEPS } from '@/lib/templates/video-viral-ia-playbook'
 import { getDefaultPromptForStep } from '@/components/playbook/utils/getDefaultPrompts'
 import { APIFY_ACTORS } from '@/lib/scraperTemplates'
 
@@ -68,6 +69,18 @@ const NICHE_FINDER_STEP_ID_MAP: Record<string, string> = {
   'consolidate': 'step-4-consolidate',
 }
 
+// Mapeo de step IDs de UI a template - Video Viral IA
+const VIDEO_VIRAL_IA_STEP_ID_MAP: Record<string, string> = {
+  'generate_idea': 'step-1-1-generate-idea',
+  'review_idea': 'step-1-2-review-idea',
+  'generate_scenes': 'step-2-1-generate-scenes',
+  'generate_clips': 'step-2-2-generate-clips',
+  'generate_audio': 'step-3-1-generate-audio',
+  'compose_video': 'step-3-2-compose-video',
+  'preview': 'step-4-1-preview',
+  'export': 'step-4-2-export',
+}
+
 // Orden de los pasos para saber cuál es el anterior - Signal Outreach
 const SIGNAL_OUTREACH_STEP_ORDER = [
   'map_topics',
@@ -99,6 +112,18 @@ const NICHE_FINDER_STEP_ORDER = [
   'consolidate',
   'select_niches',
   'dashboard',
+  'export',
+]
+
+// Orden de los pasos para Video Viral IA
+const VIDEO_VIRAL_IA_STEP_ORDER = [
+  'generate_idea',
+  'review_idea',
+  'generate_scenes',
+  'generate_clips',
+  'generate_audio',
+  'compose_video',
+  'preview',
   'export',
 ]
 
@@ -235,12 +260,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the template step based on playbook type
-    const isNicheFinder = playbookType === 'niche_finder'
-    const stepIdMap = isNicheFinder ? NICHE_FINDER_STEP_ID_MAP : SIGNAL_OUTREACH_STEP_ID_MAP
-    const stepOrder = isNicheFinder ? NICHE_FINDER_STEP_ORDER : SIGNAL_OUTREACH_STEP_ORDER
-    const flowSteps = isNicheFinder ? NICHE_FINDER_FLOW_STEPS : SIGNAL_OUTREACH_FLOW_STEPS
+    let stepIdMap: Record<string, string>
+    let stepOrder: string[]
+    let flowSteps: typeof NICHE_FINDER_FLOW_STEPS
 
-    // For Niche Finder, we can use promptKey directly from getDefaultPrompts
+    if (playbookType === 'niche_finder') {
+      stepIdMap = NICHE_FINDER_STEP_ID_MAP
+      stepOrder = NICHE_FINDER_STEP_ORDER
+      flowSteps = NICHE_FINDER_FLOW_STEPS
+    } else if (playbookType === 'video_viral_ia') {
+      stepIdMap = VIDEO_VIRAL_IA_STEP_ID_MAP
+      stepOrder = VIDEO_VIRAL_IA_STEP_ORDER
+      flowSteps = VIDEO_VIRAL_IA_FLOW_STEPS
+    } else {
+      // Default to signal_based_outreach
+      stepIdMap = SIGNAL_OUTREACH_STEP_ID_MAP
+      stepOrder = SIGNAL_OUTREACH_STEP_ORDER
+      flowSteps = SIGNAL_OUTREACH_FLOW_STEPS
+    }
+
+    // Initialize prompt variables
     let prompt = ''
     let model = 'google/gemini-2.0-flash-001'
     let maxTokens = 4096
@@ -248,7 +287,7 @@ export async function POST(request: NextRequest) {
 
     const templateStepId = stepIdMap[stepId]
 
-    if (isNicheFinder) {
+    if (playbookType === 'niche_finder') {
       // Niche Finder: Get prompt from getDefaultPrompts utility
       const promptKey = templateStepId || stepId
       prompt = getDefaultPromptForStep(stepId, promptKey)
@@ -268,11 +307,11 @@ export async function POST(request: NextRequest) {
         temperature = flowStep.temperature || temperature
       }
     } else {
-      // Signal Outreach: Use original logic
+      // Signal Outreach & Video Viral IA: Get prompt from flow steps
       if (!templateStepId) {
         return NextResponse.json({
           success: false,
-          error: `Unknown step ID: ${stepId}`
+          error: `Unknown step ID: ${stepId} for playbook type: ${playbookType}`
         }, { status: 400 })
       }
 

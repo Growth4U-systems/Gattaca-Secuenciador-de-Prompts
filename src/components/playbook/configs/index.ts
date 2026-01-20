@@ -3,10 +3,12 @@
 
 import { PlaybookConfig } from '../types'
 import nicheFinderConfig from './niche-finder.config'
+import videoViralIAConfig from './video-viral-ia.config'
 
 // Registry of all playbook configurations
 export const playbookConfigs: Record<string, PlaybookConfig> = {
   niche_finder: nicheFinderConfig,
+  video_viral_ia: videoViralIAConfig,
 }
 
 // Helper to get config by type
@@ -16,3 +18,4 @@ export function getPlaybookConfig(playbookType: string): PlaybookConfig | undefi
 
 // Export individual configs
 export { nicheFinderConfig }
+export { videoViralIAConfig }
