@@ -141,26 +141,35 @@ export async function POST(request: NextRequest) {
       error?: string
     }> = []
 
+    // Validate API key is ASCII-only (required for HTTP headers)
+    const apiKeyAscii = wavespeedApiKey.replace(/[^\x00-\x7F]/g, '')
+    if (apiKeyAscii !== wavespeedApiKey) {
+      console.warn('[generate-clips] API key contains non-ASCII characters, using sanitized version')
+    }
+
     for (let i = 0; i < scenes.length; i++) {
       const scenePrompt = sanitizePrompt(scenes[i])
-      console.log(`[generate-clips] Scene ${i + 1} prompt (sanitized):`, scenePrompt.substring(0, 100) + '...')
+      console.log(`[generate-clips] Scene ${i + 1} prompt (sanitized, ${scenePrompt.length} chars):`, scenePrompt.substring(0, 100) + '...')
 
       try {
+        // Build request body as string first to catch encoding issues
+        const requestBody = JSON.stringify({
+          prompt: scenePrompt,
+          aspect_ratio,
+          duration,
+          resolution,
+          generate_audio,
+          seed: -1,
+        })
+
         // Submit video generation request
         const response = await fetch(SEEDANCE_ENDPOINT, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${wavespeedApiKey}`,
+            Authorization: `Bearer ${apiKeyAscii}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            prompt: scenePrompt,
-            aspect_ratio,
-            duration,
-            resolution,
-            generate_audio,
-            seed: -1,
-          }),
+          body: requestBody,
         })
 
         if (!response.ok) {
