@@ -188,6 +188,14 @@ export const nicheFinderConfig: PlaybookConfig = {
           jobType: 'niche_finder_scrape',
           dependsOn: ['search_and_preview'],
         },
+        {
+          id: 'scrape_results',
+          name: 'Resultados del Scraping',
+          description: 'Revisa el contenido scrapeado y selecciona qué URLs analizar',
+          type: 'display_scrape_results',
+          executor: 'none',
+          dependsOn: ['review_and_scrape'],
+        },
       ],
     },
 
@@ -207,7 +215,7 @@ export const nicheFinderConfig: PlaybookConfig = {
           executor: 'job', // Procesa URL por URL
           jobType: 'niche_finder_extract',
           promptKey: 'step_1_find_problems',
-          dependsOn: ['scrape'],
+          dependsOn: ['scrape_results'],
           executionExplanation: {
             title: 'Extracción de Problemas',
             steps: [

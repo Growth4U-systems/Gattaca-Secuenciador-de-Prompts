@@ -58,12 +58,13 @@ export async function POST(request: NextRequest, { params }: Params) {
       company_name: project?.ecp_name || project?.name || 'nuestra empresa',
     }
 
-    // Get scraped URLs pending extraction
+    // Get scraped URLs pending extraction (only selected ones)
     const { data: scrapedUrls, error: urlsError } = await supabase
       .from('niche_finder_urls')
       .select('*')
       .eq('job_id', jobId)
       .eq('status', 'scraped')
+      .eq('selected', true)  // Only process URLs that user selected
       .not('content_markdown', 'is', null)
       .limit(batchSize)
 

@@ -24,6 +24,7 @@ import { QueryPreviewPanel } from './QueryPreviewPanel'
 import { SerpResultsPanel } from './SerpResultsPanel'
 import { SearchWithPreviewPanel } from './SearchWithPreviewPanel'
 import { ReviewAndScrapePanel } from './ReviewAndScrapePanel'
+import { ScrapeResultsPanel } from './ScrapeResultsPanel'
 
 // Sub-components for different step types
 
@@ -1221,6 +1222,47 @@ export function WorkArea({
           />
         )
       }
+    }
+
+    // display_scrape_results: Shows scraped content for review before extraction
+    if (step.type === 'display_scrape_results') {
+      // Get jobId from context
+      const jobId = playbookContext?.serpJobId as string ||
+                    (playbookContext?.search_and_preview_output as { jobId?: string })?.jobId ||
+                    playbookContext?.latestJobId as string
+
+      if (!jobId) {
+        return (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p className="text-amber-800">
+              No se encontró el ID del job de scraping. Por favor ejecuta el paso de scraping primero.
+            </p>
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="mt-3 px-4 py-2 bg-amber-100 text-amber-800 rounded hover:bg-amber-200"
+              >
+                Volver
+              </button>
+            )}
+          </div>
+        )
+      }
+
+      return (
+        <ScrapeResultsPanel
+          jobId={jobId}
+          onContinue={() => {
+            onUpdateState({
+              status: 'completed',
+              completedAt: new Date(),
+              output: { jobId, reviewed: true },
+            })
+            onContinue()
+          }}
+          onBack={onBack || (() => {})}
+        />
+      )
     }
 
     // LEGACY: Keep old step IDs working for backwards compatibility

@@ -26,6 +26,7 @@ export type StepType =
   | 'auto_with_review'
   | 'decision'
   | 'display'
+  | 'display_scrape_results'
   | 'action'
   | 'manual_research'
   | 'manual_review'
