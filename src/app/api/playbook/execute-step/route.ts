@@ -1328,9 +1328,10 @@ async function handleComposeVideoStep(
 ): Promise<NextResponse> {
   try {
     console.log('[compose_video] Starting video composition')
+    console.log('[compose_video] Looking for clips with:', { projectId, playbookType, stepId: 'generate_clips' })
 
     // Get video clips from generate_clips step
-    const { data: clipsOutput } = await adminClient
+    const { data: clipsOutput, error: clipsError } = await adminClient
       .from('playbook_step_outputs')
       .select('output_content, imported_data')
       .eq('project_id', projectId)
@@ -1338,7 +1339,14 @@ async function handleComposeVideoStep(
       .eq('step_id', 'generate_clips')
       .single()
 
+    console.log('[compose_video] Clips query result:', {
+      hasData: !!clipsOutput,
+      error: clipsError?.message,
+      importedData: clipsOutput?.imported_data ? JSON.stringify(clipsOutput.imported_data).substring(0, 200) : 'null'
+    })
+
     const clipUrls = clipsOutput?.imported_data?.video_urls as string[] || parseVideoUrls(clipsOutput?.output_content || '')
+    console.log('[compose_video] Parsed clipUrls:', clipUrls)
 
     // Get audio from generate_audio step
     const { data: audioOutput } = await adminClient
