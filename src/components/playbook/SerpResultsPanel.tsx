@@ -232,7 +232,7 @@ export function SerpResultsPanel({ jobId, onContinue, onBack }: SerpResultsPanel
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
         >
-          Scrapear {selectedUrls.toLocaleString()} URLs →
+          Continuar con {selectedUrls.toLocaleString()} URLs →
         </button>
       </div>
     </div>

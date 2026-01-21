@@ -299,6 +299,15 @@ export default function PlaybookShell({
             }
           }
 
+          // Also extract serpJobId from review_and_scrape step (the scrape step)
+          // This ensures scrape_results step can find the jobId after scraping completes
+          if (stepState.id === 'review_and_scrape' && stepState.output) {
+            const output = stepState.output as { jobId?: string }
+            if (output.jobId && !context.serpJobId) {
+              context.serpJobId = output.jobId
+            }
+          }
+
           // Special case: Parse sources step output for QueryPreviewPanel
           // The LLM returns a JSON string that needs to be parsed
           if (stepState.id === 'sources' && stepState.output) {
@@ -326,6 +335,14 @@ export default function PlaybookShell({
         // IMPORTANT: Extract serpJobId even from non-completed steps (e.g., after cancel)
         // This allows review_and_scrape to show URLs from a cancelled SERP job
         if ((stepState.id === 'serp_search' || stepState.id === 'search_and_preview') && stepState.output && !context.serpJobId) {
+          const output = stepState.output as { jobId?: string }
+          if (output.jobId) {
+            context.serpJobId = output.jobId
+          }
+        }
+
+        // Also check review_and_scrape for non-completed steps (e.g., in progress or cancelled)
+        if (stepState.id === 'review_and_scrape' && stepState.output && !context.serpJobId) {
           const output = stepState.output as { jobId?: string }
           if (output.jobId) {
             context.serpJobId = output.jobId
