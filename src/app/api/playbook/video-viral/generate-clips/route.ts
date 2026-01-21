@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase-server'
+import { createClient as createAdminClient } from '@/lib/supabase-server-admin'
 import { getUserApiKey } from '@/lib/getUserApiKey'
 
 export const dynamic = 'force-dynamic'
@@ -77,7 +78,6 @@ function sanitizePrompt(text: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerClient()
     const body: GenerateClipsRequest = await request.json()
     const {
       projectId,
@@ -91,13 +91,18 @@ export async function POST(request: NextRequest) {
 
     // Check authentication - support internal server-to-server calls
     let userId: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let supabaseForApiKey: any
 
     if (_internal_user_id) {
       // Internal call from execute-step - trust the userId passed
+      // Use admin client to read user_api_keys (bypasses RLS)
       console.log('[generate-clips] Internal call with userId:', _internal_user_id)
       userId = _internal_user_id
+      supabaseForApiKey = createAdminClient()
     } else {
       // External call - verify via Supabase auth
+      const supabase = await createServerClient()
       const {
         data: { user },
         error: authError,
@@ -107,6 +112,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
       }
       userId = user.id
+      supabaseForApiKey = supabase
     }
 
     if (!projectId || !scenes || scenes.length === 0) {
@@ -121,7 +127,7 @@ export async function POST(request: NextRequest) {
     const userApiKey = await getUserApiKey({
       userId,
       serviceName: 'wavespeed',
-      supabase,
+      supabase: supabaseForApiKey,
     })
     const wavespeedApiKey = userApiKey || process.env.WAVESPEED_API_KEY
 
