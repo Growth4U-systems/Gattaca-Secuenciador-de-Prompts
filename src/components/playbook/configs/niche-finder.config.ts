@@ -173,8 +173,8 @@ export const nicheFinderConfig: PlaybookConfig = {
         {
           id: 'search_and_preview',
           name: 'Buscar URLs',
-          description: 'Configura y ejecuta la búsqueda en Google',
-          type: 'search_with_preview', // Nuevo tipo: preview + auto execution
+          description: 'Ejecuta la búsqueda en Google para encontrar URLs relevantes',
+          type: 'search_with_preview', // Preview queries + execute SERP + show summary
           executor: 'job',
           jobType: 'niche_finder_serp',
           dependsOn: ['sources'],
@@ -182,8 +182,8 @@ export const nicheFinderConfig: PlaybookConfig = {
         {
           id: 'review_and_scrape',
           name: 'Revisar y Scrapear',
-          description: 'Selecciona las URLs a scrapear y descarga el contenido',
-          type: 'review_with_action', // Nuevo tipo: review + auto execution
+          description: 'Revisa las URLs por fuente, selecciona cuáles incluir y descarga el contenido',
+          type: 'review_with_action', // Review URLs + select sources + execute scraping
           executor: 'job',
           jobType: 'niche_finder_scrape',
           dependsOn: ['search_and_preview'],
