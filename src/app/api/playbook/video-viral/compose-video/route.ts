@@ -25,6 +25,8 @@ interface ComposeVideoRequest {
     width: number
     height: number
   }
+  // For internal server-to-server calls
+  _internal_user_id?: string
 }
 
 interface FalMergeResponse {
@@ -43,19 +45,28 @@ const FAL_MERGE_AUDIO_VIDEO = 'https://fal.run/fal-ai/ffmpeg-api/merge-audio-vid
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerClient()
-
-    // Check authentication
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-    }
-
     const body: ComposeVideoRequest = await request.json()
-    const { projectId, video_urls, audio_url, target_fps = 30, resolution } = body
+    const { projectId, video_urls, audio_url, target_fps = 30, resolution, _internal_user_id } = body
+
+    // Check authentication - support internal server-to-server calls
+    let userId: string
+
+    if (_internal_user_id) {
+      // Internal call from execute-step - trust the userId passed
+      console.log('[compose-video] Internal call with userId:', _internal_user_id)
+      userId = _internal_user_id
+    } else {
+      // External call - verify via Supabase auth
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+
+      if (authError || !user) {
+        return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+      }
+      userId = user.id
+    }
 
     if (!projectId || !video_urls || video_urls.length < 1) {
       return NextResponse.json(
@@ -67,7 +78,7 @@ export async function POST(request: NextRequest) {
     // Get Fal AI API key
     const falApiKey =
       (await getUserApiKey({
-        userId: user.id,
+        userId,
         serviceName: 'fal',
         supabase,
       })) || process.env.FAL_API_KEY

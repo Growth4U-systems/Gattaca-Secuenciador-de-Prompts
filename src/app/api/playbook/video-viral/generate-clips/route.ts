@@ -22,6 +22,8 @@ interface GenerateClipsRequest {
   duration?: number // seconds per clip (4-12)
   resolution?: string // 720p or 480p
   generate_audio?: boolean
+  // For internal server-to-server calls
+  _internal_user_id?: string
 }
 
 interface WavespeedResponse {
@@ -76,17 +78,6 @@ function sanitizePrompt(text: string): string {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerClient()
-
-    // Check authentication
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-    }
-
     const body: GenerateClipsRequest = await request.json()
     const {
       projectId,
@@ -95,7 +86,28 @@ export async function POST(request: NextRequest) {
       duration = 5,
       resolution = '720p',
       generate_audio = false,
+      _internal_user_id,
     } = body
+
+    // Check authentication - support internal server-to-server calls
+    let userId: string
+
+    if (_internal_user_id) {
+      // Internal call from execute-step - trust the userId passed
+      console.log('[generate-clips] Internal call with userId:', _internal_user_id)
+      userId = _internal_user_id
+    } else {
+      // External call - verify via Supabase auth
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+
+      if (authError || !user) {
+        return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+      }
+      userId = user.id
+    }
 
     if (!projectId || !scenes || scenes.length === 0) {
       return NextResponse.json(
@@ -105,9 +117,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Get Wavespeed API key
-    console.log('[generate-clips] Getting Wavespeed API key for user:', user.id)
+    console.log('[generate-clips] Getting Wavespeed API key for user:', userId)
     const userApiKey = await getUserApiKey({
-      userId: user.id,
+      userId,
       serviceName: 'wavespeed',
       supabase,
     })

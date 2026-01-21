@@ -1069,7 +1069,6 @@ async function handleGenerateClipsStep(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': `sb-access-token=${await getAccessToken(supabase)}`,
       },
       body: JSON.stringify({
         projectId,
@@ -1078,6 +1077,7 @@ async function handleGenerateClipsStep(
         duration: parseInt(variables.video_duration || '30') / scenes.length,
         resolution: '720p',
         generate_audio: false,
+        _internal_user_id: userId, // Pass userId for internal server-to-server auth
       }),
     })
 
@@ -1390,12 +1390,12 @@ async function handleComposeVideoStep(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': `sb-access-token=${await getAccessToken(supabase)}`,
       },
       body: JSON.stringify({
         projectId,
         video_urls: clipUrls,
         audio_url: audioUrl,
+        _internal_user_id: userId, // Pass userId for internal server-to-server auth
       }),
     })
 
