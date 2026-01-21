@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import dynamic from 'next/dynamic'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
-  ChevronLeft,
+  ChevronDown,
   ChevronRight,
   Play,
   Loader2,
@@ -45,1472 +44,254 @@ interface SuggestionStepProps {
 
 function SuggestionStep({ step, stepState, onUpdateState, onContinue, playbookContext }: SuggestionStepProps) {
   const [newItem, setNewItem] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const suggestions = stepState.suggestions || []
-  const config = step.suggestionConfig
-  const selectedCount = suggestions.filter(s => s.selected).length
-  const canContinue = !config?.minSelections || selectedCount >= config.minSelections
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
 
-  // Ref to prevent infinite re-renders when loading fixed options
-  const hasLoadedFixedRef = useRef(false)
-
-  // Load fixed options based on context_type
-  useEffect(() => {
-    if (config?.generateFrom !== 'fixed') {
-      hasLoadedFixedRef.current = false
-      return
-    }
-    if (hasLoadedFixedRef.current) return
-    if (suggestions.length > 0) return // Already loaded from state
-
-    hasLoadedFixedRef.current = true
-
-    const contextType = playbookContext?.context_type || 'both'
-    let fixedOptions: Array<{ id: string; label: string; category?: string; contextType?: 'b2c' | 'b2b' }> = []
-
-    // Load appropriate lists based on context_type
-    if (contextType === 'personal' || contextType === 'both') {
-      fixedOptions = [...fixedOptions, ...B2C_CONTEXTS]
-    }
-    if (contextType === 'business' || contextType === 'both') {
-      fixedOptions = [...fixedOptions, ...B2B_CONTEXTS]
+  // Get suggestions either from output (after generation) or from fixed options
+  const suggestions = useMemo(() => {
+    // If we have output, use it
+    if (stepState.output && Array.isArray(stepState.output)) {
+      return stepState.output as Array<{
+        id: string
+        label: string
+        selected: boolean
+        category?: string
+      }>
     }
 
-    // Format for suggestions state (include contextType for visual grouping)
-    const formattedSuggestions = fixedOptions.map(opt => ({
-      id: opt.id,
-      label: opt.label,
-      category: opt.category,
-      contextType: opt.contextType,
-      selected: false,
-    }))
+    // For fixed options (like life_contexts), load predefined data
+    if (step.suggestionConfig?.generateFrom === 'fixed') {
+      if (step.suggestionConfig.fixedOptionsKey === 'life_contexts') {
+        // Get context_type from campaign variables (custom_variables)
+        const contextType = playbookContext?.context_type || 'both'
 
-    if (formattedSuggestions.length > 0) {
-      onUpdateState({ suggestions: formattedSuggestions })
-    }
-  }, [config?.generateFrom, suggestions.length, playbookContext?.context_type, onUpdateState])
-
-  // Load suggestions from API if configured
-  useEffect(() => {
-    const loadFromAPI = async () => {
-      if (config?.generateFrom !== 'api' || !config.apiEndpoint) return
-      if (suggestions.length > 0) return // Already loaded
-
-      setLoading(true)
-      setError(null)
-      try {
-        const response = await fetch(config.apiEndpoint)
-        if (!response.ok) throw new Error('Error loading suggestions')
-        const data = await response.json()
-
-        // The API returns { options: [...] } with pre-formatted suggestions
-        if (data.options && Array.isArray(data.options)) {
-          onUpdateState({ suggestions: data.options })
+        let contexts: Array<{ id: string; label: string; category: string; contextType: string }> = []
+        if (contextType === 'personal' || contextType === 'both') {
+          contexts = [...contexts, ...B2C_CONTEXTS]
         }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error loading suggestions')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadFromAPI()
-  }, [config?.generateFrom, config?.apiEndpoint, suggestions.length, onUpdateState])
-
-  // Generate suggestions via LLM if configured
-  useEffect(() => {
-    const generateFromLLM = async () => {
-      if (config?.generateFrom !== 'llm' || !step.promptKey) return
-      if (suggestions.length > 0) return // Already generated
-
-      setLoading(true)
-      setError(null)
-      try {
-        // Get the prompt template
-        let prompt = getDefaultPrompt(step.promptKey)
-        if (!prompt) {
-          throw new Error(`No prompt found for key: ${step.promptKey}`)
+        if (contextType === 'business' || contextType === 'both') {
+          contexts = [...contexts, ...B2B_CONTEXTS]
         }
 
-        // Replace template variables with context values
-        if (playbookContext) {
-          prompt = prompt.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-            const value = playbookContext[key]
-            if (Array.isArray(value)) {
-              return value.join(', ')
-            }
-            return String(value || '')
-          })
-
-          // Handle conditional blocks (simplified)
-          prompt = prompt.replace(/\{\{#if ([^}]+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, condition, content) => {
-            // Simple condition evaluation for context_type
-            const contextType = playbookContext.context_type || 'both'
-            if (condition.includes('personal') && (contextType === 'personal' || contextType === 'both')) {
-              return content
-            }
-            if (condition.includes('business') && (contextType === 'business' || contextType === 'both')) {
-              return content
-            }
-            return ''
-          })
-        }
-
-        // Call the LLM API
-        const response = await fetch('/api/llm/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt,
-            responseFormat: 'json',
-            temperature: 0.7,
-          }),
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          throw new Error(errorData.error || 'Error generating suggestions')
-        }
-
-        const data = await response.json()
-
-        // Parse the LLM response - it should be a JSON array
-        let parsedSuggestions: Array<{ id: string; label: string; description?: string; selected?: boolean }> = []
-
-        if (typeof data.content === 'string') {
-          // Try to extract JSON from the response
-          const jsonMatch = data.content.match(/\[[\s\S]*\]/)
-          if (jsonMatch) {
-            parsedSuggestions = JSON.parse(jsonMatch[0])
-          }
-        } else if (Array.isArray(data.content)) {
-          parsedSuggestions = data.content
-        } else if (data.suggestions) {
-          parsedSuggestions = data.suggestions
-        }
-
-        // Ensure all suggestions have selected: false by default
-        const formattedSuggestions = parsedSuggestions.map((s, i) => ({
-          id: s.id || `suggestion_${i}`,
-          label: s.label,
-          description: s.description,
+        return contexts.map((c) => ({
+          id: c.id,
+          label: c.label,
+          category: c.category,
           selected: false,
         }))
-
-        if (formattedSuggestions.length > 0) {
-          onUpdateState({ suggestions: formattedSuggestions })
-        } else {
-          throw new Error('No suggestions generated')
-        }
-      } catch (err) {
-        console.error('Error generating LLM suggestions:', err)
-        setError(err instanceof Error ? err.message : 'Error generating suggestions')
-      } finally {
-        setLoading(false)
       }
     }
 
-    generateFromLLM()
-  }, [config?.generateFrom, step.promptKey, suggestions.length, onUpdateState, playbookContext])
+    return []
+  }, [stepState.output, step.suggestionConfig, playbookContext])
 
-  const toggleSuggestion = (id: string) => {
-    const updated = suggestions.map(s =>
-      s.id === id ? { ...s, selected: !s.selected } : s
-    )
-    onUpdateState({ suggestions: updated })
+  // Handle LLM generation
+  const generateSuggestions = async () => {
+    if (!step.promptKey) return
+
+    setIsGenerating(true)
+    try {
+      const response = await fetch('/api/playbook/generate-suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          promptKey: step.promptKey,
+          context: playbookContext,
+        }),
+      })
+
+      const data = await response.json()
+      if (data.suggestions) {
+        onUpdateState({
+          output: data.suggestions.map((s: string, i: number) => ({
+            id: `gen_${i}`,
+            label: s,
+            selected: false,
+          })),
+        })
+      }
+    } catch (error) {
+      console.error('Error generating suggestions:', error)
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
-  const addCustomItem = () => {
+  // Auto-generate on mount if LLM-based and no output yet
+  useEffect(() => {
+    if (
+      step.suggestionConfig?.generateFrom === 'llm' &&
+      !stepState.output &&
+      step.executor === 'llm'
+    ) {
+      generateSuggestions()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const toggleItem = (id: string) => {
+    const updated = suggestions.map((s) =>
+      s.id === id ? { ...s, selected: !s.selected } : s
+    )
+    onUpdateState({ output: updated })
+  }
+
+  const addItem = () => {
     if (!newItem.trim()) return
     const updated = [
       ...suggestions,
-      { id: `custom-${Date.now()}`, label: newItem.trim(), selected: true },
+      {
+        id: `custom_${Date.now()}`,
+        label: newItem.trim(),
+        selected: true,
+      },
     ]
-    onUpdateState({ suggestions: updated })
+    onUpdateState({ output: updated })
     setNewItem('')
   }
 
-  // Show loading state
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <p className="text-gray-600 text-sm">
-          {step.description || 'Selecciona las opciones que aplican a tu caso.'}
-        </p>
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
-          <span className="ml-2 text-gray-600">Cargando sugerencias...</span>
-        </div>
-      </div>
-    )
+  const startEdit = (item: { id: string; label: string }) => {
+    setEditingId(item.id)
+    setEditValue(item.label)
   }
 
-  // Show error state
-  if (error) {
-    return (
-      <div className="space-y-4">
-        <div className="bg-red-50 rounded-lg p-4 border border-red-100">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-red-800">Error cargando sugerencias</p>
-              <p className="text-sm text-red-700 mt-1">{error}</p>
-            </div>
-          </div>
-        </div>
-      </div>
+  const saveEdit = () => {
+    if (!editingId) return
+    const updated = suggestions.map((s) =>
+      s.id === editingId ? { ...s, label: editValue } : s
     )
+    onUpdateState({ output: updated })
+    setEditingId(null)
+    setEditValue('')
   }
 
-  // Group suggestions by contextType (B2C/B2B) first, then by category
-  const hasContextTypes = suggestions.some(s => s.contextType)
-  const hasCategories = suggestions.some(s => s.category)
+  const selectedCount = suggestions.filter((s) => s.selected).length
+  const minSelections = step.suggestionConfig?.minSelections || 1
 
-  // Group by contextType then category for visual separation
-  const groupedByContextType = hasContextTypes
-    ? {
-        b2c: suggestions.filter(s => s.contextType === 'b2c'),
-        b2b: suggestions.filter(s => s.contextType === 'b2b'),
-        other: suggestions.filter(s => !s.contextType), // Custom items
-      }
-    : null
+  // Group by category if available
+  const hasCategories = suggestions.some((s) => s.category)
+  const groupedSuggestions = hasCategories
+    ? suggestions.reduce(
+        (acc, s) => {
+          const cat = s.category || 'Otros'
+          if (!acc[cat]) acc[cat] = []
+          acc[cat].push(s)
+          return acc
+        },
+        {} as Record<string, typeof suggestions>
+      )
+    : { '': suggestions }
 
-  // Helper to group items by category
-  const groupByCategory = (items: typeof suggestions) =>
-    items.reduce((acc, suggestion) => {
-      const category = suggestion.category || 'Otros'
-      if (!acc[category]) acc[category] = []
-      acc[category].push(suggestion)
-      return acc
-    }, {} as Record<string, typeof suggestions>)
-
-  // Render chips/tags UI for fixed options with B2C/B2B sections
-  if (config?.generateFrom === 'fixed' && (hasContextTypes || hasCategories)) {
-    const showBothSections = groupedByContextType && groupedByContextType.b2c.length > 0 && groupedByContextType.b2b.length > 0
-
-    return (
-      <div className="space-y-4">
-        <p className="text-gray-600 text-sm">
-          {step.description || 'Selecciona las opciones que aplican a tu caso.'}
-        </p>
-
-        <div className="space-y-6">
-          {/* B2C Section */}
-          {groupedByContextType && groupedByContextType.b2c.length > 0 && (
-            <div>
-              {showBothSections && (
-                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2 border-b border-gray-200 pb-2">
-                  <span>👤</span> Personal (B2C)
-                </h3>
-              )}
-              <div className="space-y-3">
-                {Object.entries(groupByCategory(groupedByContextType.b2c)).map(([category, items]) => (
-                  <div key={`b2c-${category}`}>
-                    <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                      {category}
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {items.map(suggestion => (
-                        <button
-                          key={suggestion.id}
-                          onClick={() => toggleSuggestion(suggestion.id)}
-                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                            suggestion.selected
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {suggestion.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* B2B Section */}
-          {groupedByContextType && groupedByContextType.b2b.length > 0 && (
-            <div>
-              {showBothSections && (
-                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2 border-b border-gray-200 pb-2">
-                  <span>🏢</span> Empresas (B2B)
-                </h3>
-              )}
-              <div className="space-y-3">
-                {Object.entries(groupByCategory(groupedByContextType.b2b)).map(([category, items]) => (
-                  <div key={`b2b-${category}`}>
-                    <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                      {category}
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {items.map(suggestion => (
-                        <button
-                          key={suggestion.id}
-                          onClick={() => toggleSuggestion(suggestion.id)}
-                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                            suggestion.selected
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {suggestion.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Custom items (no contextType) */}
-          {groupedByContextType && groupedByContextType.other.length > 0 && (
-            <div>
-              <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                Personalizados
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {groupedByContextType.other.map(suggestion => (
-                  <button
-                    key={suggestion.id}
-                    onClick={() => toggleSuggestion(suggestion.id)}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                      suggestion.selected
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {suggestion.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {config?.allowAdd && (
-          <div className="flex gap-2 pt-2">
-            <input
-              type="text"
-              value={newItem}
-              onChange={e => setNewItem(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addCustomItem()}
-              placeholder="Agregar contexto personalizado..."
-              className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <button
-              onClick={addCustomItem}
-              disabled={!newItem.trim()}
-              className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50"
-            >
-              <Plus size={16} />
-            </button>
-          </div>
-        )}
-
-        {config?.minSelections && (
-          <p className="text-xs text-gray-500">
-            Mínimo {config.minSelections} selección{config.minSelections > 1 ? 'es' : ''}
-            {selectedCount < config.minSelections && (
-              <span className="text-orange-600 ml-1">
-                (faltan {config.minSelections - selectedCount})
-              </span>
-            )}
-          </p>
-        )}
-
-        <button
-          onClick={onContinue}
-          disabled={!canContinue}
-          className="w-full mt-4 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          Continuar
-          <ChevronRight size={16} />
-        </button>
-      </div>
-    )
-  }
-
-  // Default list UI for API/LLM generated suggestions
   return (
     <div className="space-y-4">
-      <p className="text-gray-600 text-sm">
-        {step.description || 'Selecciona las opciones que aplican a tu caso.'}
-      </p>
-
-      <div className="space-y-2">
-        {suggestions.map(suggestion => (
-          <label
-            key={suggestion.id}
-            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-              suggestion.selected
-                ? 'border-blue-300 bg-blue-50'
-                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-            }`}
+      {/* Header with regenerate button */}
+      {step.suggestionConfig?.generateFrom === 'llm' && (
+        <div className="flex justify-end">
+          <button
+            onClick={generateSuggestions}
+            disabled={isGenerating}
+            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
           >
-            <input
-              type="checkbox"
-              checked={suggestion.selected}
-              onChange={() => toggleSuggestion(suggestion.id)}
-              className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-            />
-            <div className="flex-1">
-              <span className={`text-sm ${suggestion.selected ? 'text-blue-700 font-medium' : 'text-gray-700'}`}>
-                {suggestion.label}
-              </span>
-              {suggestion.description && (
-                <p className="text-xs text-gray-500 mt-0.5">{suggestion.description}</p>
-              )}
-            </div>
-          </label>
-        ))}
-      </div>
+            <RefreshCw size={14} className={isGenerating ? 'animate-spin' : ''} />
+            Regenerar sugerencias
+          </button>
+        </div>
+      )}
 
-      {config?.allowAdd && (
-        <div className="flex gap-2">
+      {/* Suggestions by category */}
+      {isGenerating ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="animate-spin text-blue-500" size={24} />
+          <span className="ml-2 text-gray-600">Generando sugerencias...</span>
+        </div>
+      ) : (
+        Object.entries(groupedSuggestions).map(([category, items]) => (
+          <div key={category} className="space-y-2">
+            {category && (
+              <h4 className="text-sm font-medium text-gray-700">{category}</h4>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {items.map((item) => (
+                <div key={item.id} className="relative group">
+                  {editingId === item.id ? (
+                    <input
+                      type="text"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={saveEdit}
+                      onKeyDown={(e) => e.key === 'Enter' && saveEdit()}
+                      className="px-3 py-1.5 border border-blue-400 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      autoFocus
+                    />
+                  ) : (
+                    <button
+                      onClick={() => toggleItem(item.id)}
+                      className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+                        item.selected
+                          ? 'bg-blue-100 text-blue-800 border-2 border-blue-400'
+                          : 'bg-gray-100 text-gray-700 border-2 border-transparent hover:bg-gray-200'
+                      }`}
+                    >
+                      {item.label}
+                      {step.suggestionConfig?.allowEdit && (
+                        <Edit3
+                          size={12}
+                          className="inline ml-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            startEdit(item)
+                          }}
+                        />
+                      )}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+
+      {/* Add new item */}
+      {step.suggestionConfig?.allowAdd && (
+        <div className="flex gap-2 mt-4">
           <input
             type="text"
             value={newItem}
-            onChange={e => setNewItem(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addCustomItem()}
-            placeholder="Agregar otro..."
-            className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            onChange={(e) => setNewItem(e.target.value)}
+            placeholder="Agregar item personalizado..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            onKeyDown={(e) => e.key === 'Enter' && addItem()}
           />
           <button
-            onClick={addCustomItem}
+            onClick={addItem}
             disabled={!newItem.trim()}
-            className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+            className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             <Plus size={16} />
           </button>
         </div>
       )}
 
-      {config?.minSelections && (
-        <p className="text-xs text-gray-500">
-          Mínimo {config.minSelections} selección{config.minSelections > 1 ? 'es' : ''}
-          {selectedCount < config.minSelections && (
-            <span className="text-orange-600 ml-1">
-              (faltan {config.minSelections - selectedCount})
-            </span>
-          )}
-        </p>
-      )}
-
-      <button
-        onClick={onContinue}
-        disabled={!canContinue}
-        className="w-full mt-4 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-      >
-        Continuar
-        <ChevronRight size={16} />
-      </button>
-    </div>
-  )
-}
-
-interface AutoExecutingStepProps {
-  step: StepDefinition
-  stepState: StepState
-  onCancel?: () => void
-}
-
-function AutoExecutingStep({ step, stepState, onCancel }: AutoExecutingStepProps) {
-  const progress = stepState.progress
-  const partialResults = stepState.partialResults
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
-        <span className="text-gray-700 font-medium">{step.name}</span>
-      </div>
-
-      <p className="text-gray-600 text-sm">
-        {step.description || 'El sistema está procesando...'}
-      </p>
-
-      {progress && (
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">{progress.label || 'Progreso'}</span>
-            <span className="text-gray-700 font-medium">
-              {progress.current} / {progress.total}
-            </span>
-          </div>
-          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-600 rounded-full transition-all duration-300"
-              style={{ width: `${(progress.current / progress.total) * 100}%` }}
-            />
-          </div>
-          {progress.estimatedTimeRemaining && (
-            <p className="text-xs text-gray-500">
-              Tiempo estimado: {progress.estimatedTimeRemaining}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Partial results - show success/failed counts if available */}
-      {partialResults && (partialResults.successCount !== undefined || partialResults.failedCount !== undefined) && (
-        <div className="flex gap-4 text-sm">
-          {partialResults.successCount !== undefined && (
-            <div className="flex items-center gap-1.5 text-green-700">
-              <Check size={14} />
-              <span>{partialResults.successCount} exitosos</span>
-            </div>
-          )}
-          {partialResults.failedCount !== undefined && partialResults.failedCount > 0 && (
-            <div className="flex items-center gap-1.5 text-red-600">
-              <AlertCircle size={14} />
-              <span>{partialResults.failedCount} fallidos</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Last items found - show last few results */}
-      {partialResults?.lastItems && partialResults.lastItems.length > 0 && (
-        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-          <p className="text-xs font-medium text-gray-500 mb-2">Últimos encontrados:</p>
-          <ul className="space-y-1">
-            {partialResults.lastItems.slice(-3).map((item, i) => (
-              <li key={i} className="text-sm text-gray-700 truncate flex items-start gap-2">
-                <span className="text-blue-500">•</span>
-                <span className="truncate">{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Last snippet - show last content extracted */}
-      {partialResults?.lastSnippet && (
-        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-          <p className="text-xs font-medium text-gray-500 mb-1">
-            {partialResults.lastUrl && (
-              <span className="text-blue-600">{new URL(partialResults.lastUrl).hostname}</span>
-            )}
-          </p>
-          <p className="text-sm text-gray-700 italic line-clamp-2">
-            &ldquo;{partialResults.lastSnippet}&rdquo;
-          </p>
-        </div>
-      )}
-
-      <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
-        <p className="text-sm text-blue-700">
-          El sistema continuará automáticamente cuando termine este paso.
-        </p>
-      </div>
-
-      {onCancel && (
+      {/* Continue button */}
+      <div className="flex justify-between items-center pt-4 border-t">
+        <span className="text-sm text-gray-500">
+          {selectedCount} seleccionados {minSelections > 0 && `(mín: ${minSelections})`}
+        </span>
         <button
-          onClick={onCancel}
-          className="w-full px-4 py-2.5 bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100 border border-red-200 flex items-center justify-center gap-2 transition-colors"
-        >
-          <Square size={16} />
-          Cancelar Ejecución
-        </button>
-      )}
-    </div>
-  )
-}
-
-interface DecisionStepProps {
-  step: StepDefinition
-  stepState: StepState
-  onUpdateState: (update: Partial<StepState>) => void
-  onContinue: () => void
-  onBack?: () => void
-  onRerunPrevious?: () => void
-}
-
-function DecisionStep({ step, stepState, onUpdateState, onContinue, onBack, onRerunPrevious }: DecisionStepProps) {
-  const config = step.decisionConfig
-  // Use fixedOptions from config if optionsFrom is 'fixed', otherwise fall back to stepState.suggestions
-  const options = config?.optionsFrom === 'fixed' && config?.fixedOptions
-    ? config.fixedOptions.map(opt => ({ ...opt, selected: false }))
-    : (stepState.suggestions || [])
-  const selected = stepState.decision || (config?.multiSelect ? [] : null)
-
-  const handleSelect = (optionId: string) => {
-    if (config?.multiSelect) {
-      const current = Array.isArray(selected) ? selected : []
-      const updated = current.includes(optionId)
-        ? current.filter((id: string) => id !== optionId)
-        : [...current, optionId]
-      onUpdateState({ decision: updated })
-    } else {
-      onUpdateState({ decision: optionId })
-    }
-  }
-
-  const isSelected = (optionId: string) => {
-    if (config?.multiSelect) {
-      return Array.isArray(selected) && selected.includes(optionId)
-    }
-    return selected === optionId
-  }
-
-  const canContinue = config?.multiSelect
-    ? Array.isArray(selected) && selected.length >= (config?.minSelections || 1)
-    : !!selected
-
-  // Handle confirm based on selection
-  const handleConfirm = () => {
-    // Standard decision IDs for review steps
-    if (selected === 'edit' && onBack) {
-      // Go back to previous step to edit
-      onBack()
-      return
-    }
-    if (selected === 'regenerate' && onRerunPrevious) {
-      // Re-execute the previous step
-      onRerunPrevious()
-      return
-    }
-    // Default: approve/continue to next step
-    onContinue()
-  }
-
-  // Get button label based on selection
-  const getButtonLabel = () => {
-    if (selected === 'edit') return 'Volver a editar'
-    if (selected === 'regenerate') return 'Regenerar'
-    return 'Confirmar selección'
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="bg-orange-50 rounded-lg p-3 border border-orange-100">
-        <p className="text-sm text-orange-800 font-medium">
-          Decisión requerida
-        </p>
-      </div>
-
-      <p className="text-gray-700">
-        {config?.question || step.description || 'Selecciona una opción:'}
-      </p>
-
-      <div className="space-y-2">
-        {options.map(option => (
-          <button
-            key={option.id}
-            onClick={() => handleSelect(option.id)}
-            className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-              isSelected(option.id)
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                isSelected(option.id) ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
-              }`}>
-                {isSelected(option.id) && <Check className="w-3 h-3 text-white" />}
-              </div>
-              <div className="flex-1">
-                <span className={`font-medium ${isSelected(option.id) ? 'text-blue-700' : 'text-gray-700'}`}>
-                  {option.label}
-                </span>
-                {option.description && (
-                  <p className="text-sm text-gray-500 mt-1">{option.description}</p>
-                )}
-              </div>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      <button
-        onClick={handleConfirm}
-        disabled={!canContinue}
-        className="w-full mt-4 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-      >
-        {getButtonLabel()}
-        <ChevronRight size={16} />
-      </button>
-    </div>
-  )
-}
-
-interface DisplayStepProps {
-  step: StepDefinition
-  stepState: StepState
-  onContinue: () => void
-}
-
-function DisplayStep({ step, stepState, onContinue }: DisplayStepProps) {
-  const [copied, setCopied] = useState(false)
-  const output = stepState.output
-
-  const handleCopy = async () => {
-    if (!output) return
-    const text = typeof output === 'string' ? output : JSON.stringify(output, null, 2)
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <div className="space-y-4">
-      {step.description && (
-        <p className="text-gray-600 text-sm">{step.description}</p>
-      )}
-
-      {output && (
-        <div className="relative">
-          <button
-            onClick={handleCopy}
-            className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-          >
-            {copied ? <CheckCheck size={16} className="text-green-600" /> : <Copy size={16} />}
-          </button>
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 overflow-auto max-h-96">
-            {typeof output === 'string' ? (
-              <div className="prose prose-sm max-w-none">
-                <ReactMarkdown>{output}</ReactMarkdown>
-              </div>
-            ) : (
-              <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-                {JSON.stringify(output, null, 2)}
-              </pre>
-            )}
-          </div>
-        </div>
-      )}
-
-      <button
-        onClick={onContinue}
-        className="w-full mt-4 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
-      >
-        Continuar
-        <ChevronRight size={16} />
-      </button>
-    </div>
-  )
-}
-
-interface ErrorStateProps {
-  step: StepDefinition
-  stepState: StepState
-  onRetry: () => void
-}
-
-// Helper to detect API key errors and extract service name
-function detectApiKeyError(error: string | undefined): string | null {
-  if (!error) return null
-  const lowerError = error.toLowerCase()
-
-  // Common patterns for API key errors
-  if (lowerError.includes('api key') && lowerError.includes('no configurada')) {
-    // Extract service name from error like "API key de Wavespeed no configurada"
-    const match = error.match(/API key de (\w+)/i)
-    if (match) {
-      return match[1].toLowerCase()
-    }
-  }
-  if (lowerError.includes('wavespeed') && (lowerError.includes('key') || lowerError.includes('auth'))) {
-    return 'wavespeed'
-  }
-  if (lowerError.includes('openrouter') && (lowerError.includes('key') || lowerError.includes('auth'))) {
-    return 'openrouter'
-  }
-  if (lowerError.includes('serper') && (lowerError.includes('key') || lowerError.includes('auth'))) {
-    return 'serper'
-  }
-  if (lowerError.includes('firecrawl') && (lowerError.includes('key') || lowerError.includes('auth'))) {
-    return 'firecrawl'
-  }
-  if (lowerError.includes('apify') && (lowerError.includes('key') || lowerError.includes('auth'))) {
-    return 'apify'
-  }
-  if (lowerError.includes('fal') && (lowerError.includes('key') || lowerError.includes('auth'))) {
-    return 'fal'
-  }
-
-  return null
-}
-
-function ErrorState({ step, stepState, onRetry }: ErrorStateProps) {
-  const [showSetupModal, setShowSetupModal] = useState(false)
-
-  // Check if this is an API key error
-  const missingService = detectApiKeyError(stepState.error)
-  const isApiKeyError = !!missingService
-
-  const handleSetupComplete = () => {
-    setShowSetupModal(false)
-    // Retry after configuring API key
-    onRetry()
-  }
-
-  return (
-    <>
-      <div className="space-y-4">
-        <div className={`rounded-lg p-4 border ${isApiKeyError ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-100'}`}>
-          <div className="flex items-start gap-3">
-            <AlertCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${isApiKeyError ? 'text-yellow-600' : 'text-red-600'}`} />
-            <div>
-              <p className={`text-sm font-medium ${isApiKeyError ? 'text-yellow-800' : 'text-red-800'}`}>
-                {isApiKeyError ? 'API Key requerida' : `Error en ${step.name}`}
-              </p>
-              <p className={`text-sm mt-1 ${isApiKeyError ? 'text-yellow-700' : 'text-red-700'}`}>
-                {stepState.error || 'Ha ocurrido un error inesperado.'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {isApiKeyError ? (
-          <button
-            onClick={() => setShowSetupModal(true)}
-            className="w-full px-4 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 flex items-center justify-center gap-2"
-          >
-            Configurar API Key
-          </button>
-        ) : (
-          <button
-            onClick={onRetry}
-            className="w-full px-4 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 flex items-center justify-center gap-2"
-          >
-            <RefreshCw size={16} />
-            Reintentar
-          </button>
-        )}
-      </div>
-
-      {/* API Key Setup Modal */}
-      {showSetupModal && missingService && (
-        <ApiKeySetupModal
-          missingServices={[missingService]}
-          onComplete={handleSetupComplete}
-          onCancel={() => setShowSetupModal(false)}
-          title="Configurar API Key"
-          description="Configura la API key para continuar:"
-        />
-      )}
-    </>
-  )
-}
-
-interface InputStepProps {
-  step: StepDefinition
-  stepState: StepState
-  onUpdateState: (update: Partial<StepState>) => void
-  onContinue: () => void
-}
-
-function InputStep({ step, stepState, onUpdateState, onContinue }: InputStepProps) {
-  const [value, setValue] = useState(stepState.input || '')
-
-  const handleContinue = () => {
-    onUpdateState({ input: value })
-    onContinue()
-  }
-
-  return (
-    <div className="space-y-4">
-      <p className="text-gray-600 text-sm">
-        {step.description || 'Ingresa la información requerida.'}
-      </p>
-
-      <textarea
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        placeholder="Escribe aquí..."
-        rows={4}
-        className="w-full px-3 py-2 text-sm !bg-white !text-gray-900 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-      />
-
-      <button
-        onClick={handleContinue}
-        disabled={!value.trim()}
-        className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-      >
-        Continuar
-        <ChevronRight size={16} />
-      </button>
-    </div>
-  )
-}
-
-// Map of step types/jobTypes to required API services
-const STEP_API_REQUIREMENTS: Record<string, string[]> = {
-  // Niche Finder jobs
-  niche_finder_serp: ['serper'],
-  niche_finder_scrape: ['firecrawl'],
-  niche_finder_extract: ['openrouter'],
-  // LLM steps (default to openrouter)
-  llm: ['openrouter'],
-  // Video viral steps
-  generate_clips: ['wavespeed'],
-  generate_audio: ['openrouter'],
-  compose_video: ['openrouter'],
-}
-
-// Lazy import for ApiKeySetupModal to avoid circular deps
-const ApiKeySetupModal = dynamic(() => import('@/components/settings/ApiKeySetupModal'), {
-  ssr: false,
-})
-
-interface PendingStepProps {
-  step: StepDefinition
-  onExecute: () => void
-}
-
-function PendingStep({ step, onExecute }: PendingStepProps) {
-  const isAutoStep = ['auto', 'auto_with_preview', 'auto_with_review'].includes(step.type)
-  const hasExplanation = !!step.executionExplanation
-  const [apiKeyStatus, setApiKeyStatus] = useState<{
-    loading: boolean
-    missing: string[]
-    checked: boolean
-  }>({ loading: false, missing: [], checked: false })
-  const [showSetupModal, setShowSetupModal] = useState(false)
-
-  // Determine which APIs this step requires
-  const requiredApis = step.jobType
-    ? STEP_API_REQUIREMENTS[step.jobType] || []
-    : step.executor === 'llm'
-    ? STEP_API_REQUIREMENTS.llm
-    : []
-
-  // Check API keys when component mounts
-  useEffect(() => {
-    if (requiredApis.length === 0) {
-      setApiKeyStatus({ loading: false, missing: [], checked: true })
-      return
-    }
-
-    const checkApiKeys = async () => {
-      setApiKeyStatus(prev => ({ ...prev, loading: true }))
-      try {
-        const response = await fetch(`/api/user/api-keys/check?services=${requiredApis.join(',')}`)
-        const data = await response.json()
-        setApiKeyStatus({
-          loading: false,
-          missing: data.missing || [],
-          checked: true,
-        })
-      } catch {
-        // If check fails, assume keys are configured to allow execution
-        setApiKeyStatus({ loading: false, missing: [], checked: true })
-      }
-    }
-    checkApiKeys()
-  }, [requiredApis.join(',')])
-
-  // Service name to display name
-  const serviceDisplayName: Record<string, string> = {
-    serper: 'Serper (busqueda Google)',
-    firecrawl: 'Firecrawl (scraping)',
-    openrouter: 'OpenRouter (IA)',
-    apify: 'Apify (scraping social)',
-    perplexity: 'Perplexity (busqueda IA)',
-    fal: 'Fal.ai (video IA)',
-    wavespeed: 'WaveSpeed (imagenes IA)',
-  }
-
-  // Handle setup complete - re-check keys and execute if all configured
-  const handleSetupComplete = async () => {
-    setShowSetupModal(false)
-    // Re-check keys
-    try {
-      const response = await fetch(`/api/user/api-keys/check?services=${requiredApis.join(',')}`)
-      const data = await response.json()
-      if (data.allConfigured) {
-        // All keys are now configured, auto-execute
-        onExecute()
-      } else {
-        // Update missing list
-        setApiKeyStatus({
-          loading: false,
-          missing: data.missing || [],
-          checked: true,
-        })
-      }
-    } catch {
-      // If check fails, try to execute anyway
-      onExecute()
-    }
-  }
-
-  // Show loading while checking
-  if (apiKeyStatus.loading) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 text-gray-500">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          <span className="text-sm">Verificando configuracion...</span>
-        </div>
-      </div>
-    )
-  }
-
-  // Show setup UI if missing API keys
-  if (apiKeyStatus.missing.length > 0) {
-    return (
-      <>
-        <div className="space-y-4">
-          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-yellow-800">
-                  API Keys requeridas
-                </p>
-                <p className="text-sm text-yellow-700 mt-1">
-                  Para ejecutar este paso necesitas configurar:
-                </p>
-                <ul className="mt-2 space-y-1">
-                  {apiKeyStatus.missing.map(service => (
-                    <li key={service} className="text-sm text-yellow-700 flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full" />
-                      {serviceDisplayName[service] || service}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setShowSetupModal(true)}
-            className="w-full px-4 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 flex items-center justify-center gap-2"
-          >
-            Configurar API Keys
-          </button>
-        </div>
-
-        {/* API Key Setup Modal */}
-        {showSetupModal && (
-          <ApiKeySetupModal
-            missingServices={apiKeyStatus.missing}
-            onComplete={handleSetupComplete}
-            onCancel={() => setShowSetupModal(false)}
-            title="Configurar API Keys"
-            description="Configura las keys necesarias para este paso:"
-          />
-        )}
-      </>
-    )
-  }
-
-  // Render explanation panel if available
-  if (hasExplanation && step.executionExplanation) {
-    const explanation = step.executionExplanation
-    return (
-      <div className="space-y-6">
-        {/* Title with icon */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-            <Play className="w-5 h-5 text-blue-600" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-900">{explanation.title}</h3>
-            <p className="text-sm text-gray-500">Este paso va a:</p>
-          </div>
-        </div>
-
-        {/* Steps list */}
-        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-          <ol className="space-y-2">
-            {explanation.steps.map((stepText, i) => (
-              <li key={i} className="flex items-start gap-3 text-sm">
-                <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0 text-xs font-medium">
-                  {i + 1}
-                </span>
-                <span className="text-gray-700">{stepText}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-
-        {/* Cost and time estimates */}
-        {(explanation.estimatedTime || explanation.estimatedCost) && (
-          <div className="flex gap-4">
-            {explanation.estimatedTime && (
-              <div className="flex-1 bg-gray-50 rounded-lg p-3 border border-gray-200">
-                <p className="text-xs text-gray-500">Tiempo estimado</p>
-                <p className="text-sm font-medium text-gray-900">{explanation.estimatedTime}</p>
-              </div>
-            )}
-            {explanation.estimatedCost && (
-              <div className="flex-1 bg-gray-50 rounded-lg p-3 border border-gray-200">
-                <p className="text-xs text-gray-500">Costo ({explanation.costService || 'API'})</p>
-                <p className="text-sm font-medium text-gray-900">{explanation.estimatedCost}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        <button
-          onClick={onExecute}
-          className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
-        >
-          <Play size={16} />
-          Ejecutar
-        </button>
-      </div>
-    )
-  }
-
-  // Default simple view
-  return (
-    <div className="space-y-4">
-      <p className="text-gray-600 text-sm">
-        {step.description || 'Este paso está listo para ejecutarse.'}
-      </p>
-
-      <button
-        onClick={onExecute}
-        className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
-      >
-        <Play size={16} />
-        {isAutoStep ? 'Iniciar' : 'Continuar'}
-      </button>
-    </div>
-  )
-}
-
-interface CompletedStepProps {
-  step: StepDefinition
-  stepState: StepState
-  onContinue: () => void
-  onRerun?: () => void
-  onEdit?: () => void
-}
-
-function CompletedStep({ step, stepState, onContinue, onRerun, onEdit }: CompletedStepProps) {
-  const [copied, setCopied] = useState(false)
-  const output = stepState.output
-  const suggestions = stepState.suggestions
-
-  const handleCopy = async () => {
-    if (!output) return
-    const text = typeof output === 'string' ? output : JSON.stringify(output, null, 2)
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  // Render summary for suggestion steps (show selected items as chips)
-  // REGLA UX: Siempre mostrar algo útil al usuario, nunca dejar la UI vacía
-  const renderSuggestionSummary = () => {
-    if (step.type !== 'suggestion') return null
-
-    // Si no hay suggestions en el state, mostrar mensaje informativo
-    if (!suggestions || suggestions.length === 0) {
-      return (
-        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-          <p className="text-sm text-gray-500 italic">
-            Este paso se completó sin opciones cargadas.
-          </p>
-        </div>
-      )
-    }
-
-    const selected = suggestions.filter(s => s.selected)
-
-    // Si hay opciones pero ninguna seleccionada
-    if (selected.length === 0) {
-      return (
-        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-          <p className="text-sm text-gray-500 italic">
-            No se seleccionó ninguna opción (opcional).
-          </p>
-        </div>
-      )
-    }
-
-    return (
-      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-        <div className="text-sm font-medium text-gray-600 mb-2">
-          {selected.length} seleccionado{selected.length !== 1 ? 's' : ''}:
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {selected.map(s => (
-            <span key={s.id} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">
-              {s.label}
-            </span>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  // Render user-friendly output for auto steps
-  // REGLA UX: Nunca mostrar JSON raw al usuario - siempre presentar datos de forma legible
-  const renderAutoOutput = () => {
-    if (!output || step.type === 'suggestion') return null
-
-    // Helper: render sources config (Fuentes de Datos step)
-    // Supports both LLM format ({ enabled, subreddits/forums }) and array format
-    const renderSourcesConfig = (data: Record<string, unknown>) => {
-      const sections: React.ReactNode[] = []
-
-      // Reddit - support both { enabled, subreddits } and boolean formats
-      if (data.reddit) {
-        let subreddits: string[] = []
-        let isEnabled = false
-
-        if (typeof data.reddit === 'object') {
-          const reddit = data.reddit as { enabled?: boolean; subreddits?: string[] }
-          isEnabled = reddit.enabled ?? false
-          subreddits = reddit.subreddits || []
-        } else if (typeof data.reddit === 'boolean') {
-          isEnabled = data.reddit
-        }
-
-        if (isEnabled || subreddits.length > 0) {
-          sections.push(
-            <div key="reddit" className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-orange-500 font-medium">Reddit</span>
-                {subreddits.length > 0 && (
-                  <span className="text-xs text-gray-500">({subreddits.length} subreddits)</span>
-                )}
-                {isEnabled && subreddits.length === 0 && (
-                  <span className="text-xs text-green-600">Habilitado</span>
-                )}
-              </div>
-              {subreddits.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {subreddits.map((sub: string) => (
-                    <span key={sub} className="px-2 py-1 bg-orange-50 text-orange-700 rounded text-sm border border-orange-200">
-                      r/{sub}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        }
-      }
-
-      // Thematic Forums - support both { enabled, forums/domains } and boolean formats
-      if (data.thematic_forums) {
-        let forums: string[] = []
-        let isEnabled = false
-
-        if (typeof data.thematic_forums === 'object') {
-          const tf = data.thematic_forums as { enabled?: boolean; forums?: string[]; domains?: string[] }
-          isEnabled = tf.enabled ?? false
-          forums = tf.forums || tf.domains || []
-        } else if (typeof data.thematic_forums === 'boolean') {
-          isEnabled = data.thematic_forums
-        }
-
-        if (isEnabled || forums.length > 0) {
-          sections.push(
-            <div key="thematic" className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-purple-600 font-medium">Foros Temáticos</span>
-                {forums.length > 0 && (
-                  <span className="text-xs text-gray-500">({forums.length} sitios)</span>
-                )}
-                {isEnabled && forums.length === 0 && (
-                  <span className="text-xs text-green-600">Habilitado (auto-detecta)</span>
-                )}
-              </div>
-              {forums.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {forums.map((domain: string) => (
-                    <span key={domain} className="px-2 py-1 bg-purple-50 text-purple-700 rounded text-sm border border-purple-200">
-                      {domain}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        }
-      }
-
-      // General Forums - support both { enabled, forums/domains } and string[] formats
-      if (data.general_forums) {
-        let forums: string[] = []
-        let isEnabled = false
-
-        if (Array.isArray(data.general_forums)) {
-          forums = data.general_forums
-          isEnabled = forums.length > 0
-        } else if (typeof data.general_forums === 'object') {
-          const gf = data.general_forums as { enabled?: boolean; forums?: string[]; domains?: string[] }
-          isEnabled = gf.enabled ?? false
-          forums = gf.forums || gf.domains || []
-        }
-
-        if (isEnabled || forums.length > 0) {
-          sections.push(
-            <div key="general" className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-blue-600 font-medium">Foros Generales</span>
-                {forums.length > 0 && (
-                  <span className="text-xs text-gray-500">({forums.length} sitios)</span>
-                )}
-              </div>
-              {forums.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {forums.map((domain: string) => (
-                    <span key={domain} className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-sm border border-blue-200">
-                      {domain}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        }
-      }
-
-      if (sections.length === 0) return null
-
-      return (
-        <div className="space-y-4">
-          {sections}
-        </div>
-      )
-    }
-
-    // Helper: check if output looks like sources config
-    const isSourcesConfig = (data: unknown): data is Record<string, unknown> => {
-      if (typeof data !== 'object' || data === null) return false
-      const obj = data as Record<string, unknown>
-      return 'reddit' in obj || 'thematic_forums' in obj || 'general_forums' in obj
-    }
-
-    // Determine how to render based on output type
-    let content: React.ReactNode
-
-    // First, try to parse JSON if output is a string
-    // LLM outputs often have JSON embedded in text or markdown code blocks
-    let parsedOutput = output
-    if (typeof output === 'string') {
-      const trimmed = output.trim()
-
-      // Try multiple patterns to extract JSON
-      let jsonToParse: string | null = null
-
-      // Pattern 1: Direct JSON object
-      if (trimmed.startsWith('{')) {
-        const match = trimmed.match(/^\{[\s\S]*\}/)
-        if (match) jsonToParse = match[0]
-      }
-
-      // Pattern 2: JSON in markdown code block (```json ... ```)
-      if (!jsonToParse) {
-        const codeBlockMatch = trimmed.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-        if (codeBlockMatch) jsonToParse = codeBlockMatch[1]
-      }
-
-      // Pattern 3: JSON object anywhere in the text
-      if (!jsonToParse) {
-        const anyJsonMatch = trimmed.match(/\{[\s\S]*\}/)
-        if (anyJsonMatch) jsonToParse = anyJsonMatch[0]
-      }
-
-      // Try to parse if we found something
-      if (jsonToParse) {
-        try {
-          parsedOutput = JSON.parse(jsonToParse)
-        } catch {
-          // Keep as string if parsing fails
-          console.log('[WorkArea] Failed to parse JSON from output:', jsonToParse.substring(0, 100))
-        }
-      }
-    }
-
-    if (typeof parsedOutput === 'string') {
-      // String output: render as markdown
-      content = (
-        <div className="prose prose-sm max-w-none">
-          <ReactMarkdown>{parsedOutput}</ReactMarkdown>
-        </div>
-      )
-    } else if (isSourcesConfig(parsedOutput)) {
-      // Sources config: render user-friendly view
-      content = renderSourcesConfig(parsedOutput as Record<string, unknown>)
-    } else if (Array.isArray(parsedOutput)) {
-      // Array: render as list
-      content = (
-        <ul className="space-y-1">
-          {parsedOutput.map((item, i) => (
-            <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
-              <span className="text-blue-500 mt-1">•</span>
-              <span>{typeof item === 'string' ? item : JSON.stringify(item)}</span>
-            </li>
-          ))}
-        </ul>
-      )
-    } else {
-      // Fallback: show JSON but with better formatting
-      content = (
-        <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
-          {JSON.stringify(parsedOutput, null, 2)}
-        </pre>
-      )
-    }
-
-    return (
-      <div className="relative">
-        <button
-          onClick={handleCopy}
-          title="Copiar al portapapeles"
-          className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded z-10"
-        >
-          {copied ? <CheckCheck size={16} className="text-green-600" /> : <Copy size={16} />}
-        </button>
-        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 overflow-auto max-h-80">
-          {content}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 text-green-700">
-        <Check className="w-5 h-5" />
-        <span className="font-medium">Completado</span>
-      </div>
-
-      {/* Show selected items for suggestion steps */}
-      {renderSuggestionSummary()}
-
-      {/* Show output for auto steps */}
-      {renderAutoOutput()}
-
-      <div className="flex gap-2">
-        {/* Botón Editar - solo para pasos editables (no auto ni display) */}
-        {onEdit && !['auto', 'auto_with_preview', 'auto_with_review', 'display'].includes(step.type) && (
-          <button
-            onClick={onEdit}
-            className="flex-1 px-4 py-2.5 bg-amber-50 text-amber-700 rounded-lg font-medium hover:bg-amber-100 border border-amber-200 flex items-center justify-center gap-2 transition-colors"
-          >
-            <Edit3 size={16} />
-            Editar
-          </button>
-        )}
-        {/* Botón Re-ejecutar - solo para pasos auto */}
-        {onRerun && (
-          <button
-            onClick={onRerun}
-            className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 flex items-center justify-center gap-2"
-          >
-            <RefreshCw size={16} />
-            Re-ejecutar
-          </button>
-        )}
-        <button
-          onClick={onContinue}
-          className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
+          onClick={() => {
+            // Store selected items and continue
+            const selected = suggestions.filter((s) => s.selected)
+            onUpdateState({
+              status: 'completed',
+              completedAt: new Date(),
+              output: suggestions, // Keep full list with selection state
+            })
+            onContinue()
+          }}
+          disabled={selectedCount < minSelections}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
         >
           Continuar
           <ChevronRight size={16} />
@@ -1520,82 +301,874 @@ function CompletedStep({ step, stepState, onContinue, onRerun, onEdit }: Complet
   )
 }
 
-// Main WorkArea component
-
-// Props extendidas para soportar manual_research y LLM suggestion generation
-interface ExtendedWorkAreaProps extends WorkAreaProps {
-  previousStepOutput?: string // Output del paso anterior para manual_research
-  projectId?: string
-  playbookContext?: {
-    product?: string
-    target?: string
-    context_type?: string
-    life_contexts?: string[]
-    [key: string]: unknown
-  }
+// Decision step component
+interface DecisionStepProps {
+  step: StepDefinition
+  stepState: StepState
+  onUpdateState: (update: Partial<StepState>) => void
+  onContinue: () => void
+  previousOutput?: unknown
 }
 
-export default function WorkArea({
+function DecisionStep({ step, stepState, onUpdateState, onContinue, previousOutput }: DecisionStepProps) {
+  const [selected, setSelected] = useState<string[]>(
+    (stepState.input as string[] | undefined) || []
+  )
+
+  // Get options from previous step if configured
+  const options = useMemo(() => {
+    if (step.decisionConfig?.optionsFrom === 'previous_step' && previousOutput) {
+      // If previousOutput is CSV data, parse it
+      if (typeof previousOutput === 'string') {
+        // Try to extract options from CSV
+        const lines = previousOutput.split('\n').filter(l => l.trim())
+        if (lines.length > 1) {
+          // Skip header, return data rows
+          return lines.slice(1).map((line, i) => {
+            const cols = line.split(',')
+            return {
+              id: `opt_${i}`,
+              label: cols[0] || line,
+              description: cols.slice(1).join(', ')
+            }
+          })
+        }
+      }
+      // If it's already an array
+      if (Array.isArray(previousOutput)) {
+        return previousOutput.map((item, i) => ({
+          id: `opt_${i}`,
+          label: typeof item === 'string' ? item : item.label || item.name || JSON.stringify(item),
+          description: typeof item === 'object' ? item.description : undefined
+        }))
+      }
+    }
+    return step.decisionConfig?.fixedOptions || []
+  }, [step.decisionConfig, previousOutput])
+
+  const toggleOption = (id: string) => {
+    if (step.decisionConfig?.multiSelect) {
+      setSelected(prev =>
+        prev.includes(id)
+          ? prev.filter(x => x !== id)
+          : [...prev, id]
+      )
+    } else {
+      setSelected([id])
+    }
+  }
+
+  const minSelections = step.decisionConfig?.minSelections || 1
+
+  return (
+    <div className="space-y-4">
+      <p className="text-gray-700 font-medium">{step.decisionConfig?.question}</p>
+
+      <div className="space-y-2">
+        {options.map((opt) => (
+          <button
+            key={opt.id}
+            onClick={() => toggleOption(opt.id)}
+            className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
+              selected.includes(opt.id)
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
+                selected.includes(opt.id)
+                  ? 'border-blue-500 bg-blue-500'
+                  : 'border-gray-300'
+              }`}>
+                {selected.includes(opt.id) && <Check size={12} className="text-white" />}
+              </div>
+              <div>
+                <span className="font-medium">{opt.label}</span>
+                {opt.description && (
+                  <p className="text-sm text-gray-500 mt-1">{opt.description}</p>
+                )}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex justify-between items-center pt-4 border-t">
+        <span className="text-sm text-gray-500">
+          {selected.length} seleccionados {minSelections > 0 && `(mín: ${minSelections})`}
+        </span>
+        <button
+          onClick={() => {
+            onUpdateState({
+              status: 'completed',
+              completedAt: new Date(),
+              input: selected,
+              output: selected,
+            })
+            onContinue()
+          }}
+          disabled={selected.length < minSelections}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          Continuar
+          <ChevronRight size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Auto step with review component
+interface AutoWithReviewStepProps {
+  step: StepDefinition
+  stepState: StepState
+  onUpdateState: (update: Partial<StepState>) => void
+  onExecute: (input?: unknown) => Promise<void>
+  onContinue: () => void
+  onBack?: () => void
+  previousOutput?: unknown
+}
+
+function AutoWithReviewStep({
   step,
   stepState,
+  onUpdateState,
+  onExecute,
   onContinue,
   onBack,
+  previousOutput,
+}: AutoWithReviewStepProps) {
+  const [isExecuting, setIsExecuting] = useState(false)
+  const [showOutput, setShowOutput] = useState(true)
+  const [copied, setCopied] = useState(false)
+  const [editedOutput, setEditedOutput] = useState<string | null>(null)
+  const [isEditing, setIsEditing] = useState(false)
+
+  const handleExecute = async () => {
+    setIsExecuting(true)
+    try {
+      await onExecute(previousOutput)
+    } finally {
+      setIsExecuting(false)
+    }
+  }
+
+  const handleCopy = async () => {
+    const textToCopy = typeof stepState.output === 'string'
+      ? stepState.output
+      : JSON.stringify(stepState.output, null, 2)
+    await navigator.clipboard.writeText(textToCopy)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleSaveEdit = () => {
+    if (editedOutput !== null) {
+      onUpdateState({ output: editedOutput })
+    }
+    setIsEditing(false)
+  }
+
+  // Get the output to display
+  const outputToDisplay = editedOutput !== null ? editedOutput : stepState.output
+
+  // If not yet executed
+  if (!stepState.output && stepState.status !== 'completed') {
+    return (
+      <div className="space-y-4">
+        {/* Execution explanation if available */}
+        {step.executionExplanation && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+            <h4 className="font-medium text-blue-800">
+              {step.executionExplanation.title || 'Este paso va a:'}
+            </h4>
+            <ol className="list-decimal list-inside space-y-1 text-sm text-blue-700">
+              {step.executionExplanation.steps.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ol>
+            {(step.executionExplanation.estimatedCost || step.executionExplanation.costService) && (
+              <p className="text-xs text-blue-600 pt-2 border-t border-blue-200">
+                {step.executionExplanation.estimatedCost && (
+                  <span>Costo estimado: {step.executionExplanation.estimatedCost}</span>
+                )}
+                {step.executionExplanation.estimatedCost && step.executionExplanation.costService && ' • '}
+                {step.executionExplanation.costService && (
+                  <span>Servicio: {step.executionExplanation.costService}</span>
+                )}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-4">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              ← Volver
+            </button>
+          )}
+          <button
+            onClick={handleExecute}
+            disabled={isExecuting}
+            className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-blue-400 transition-colors flex items-center justify-center gap-2"
+          >
+            {isExecuting ? (
+              <>
+                <Loader2 className="animate-spin" size={18} />
+                Ejecutando...
+              </>
+            ) : (
+              <>
+                <Play size={18} />
+                Ejecutar {step.name}
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Progress indicator */}
+        {stepState.progress && (
+          <div className="mt-4">
+            <div className="flex justify-between text-sm text-gray-600 mb-1">
+              <span>{stepState.progress.label || 'Progreso'}</span>
+              <span>{stepState.progress.current}/{stepState.progress.total}</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all"
+                style={{
+                  width: stepState.progress.total > 0
+                    ? `${(stepState.progress.current / stepState.progress.total) * 100}%`
+                    : '0%'
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Show output for review
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setShowOutput(!showOutput)}
+          className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+        >
+          {showOutput ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          Ver resultado
+        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopy}
+            className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+            title="Copiar"
+          >
+            {copied ? <CheckCheck size={16} className="text-green-600" /> : <Copy size={16} />}
+          </button>
+          <button
+            onClick={() => {
+              if (isEditing) {
+                handleSaveEdit()
+              } else {
+                setEditedOutput(typeof stepState.output === 'string'
+                  ? stepState.output
+                  : JSON.stringify(stepState.output, null, 2))
+                setIsEditing(true)
+              }
+            }}
+            className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+            title={isEditing ? "Guardar" : "Editar"}
+          >
+            {isEditing ? <Check size={16} className="text-green-600" /> : <Edit3 size={16} />}
+          </button>
+        </div>
+      </div>
+
+      {showOutput && (
+        <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 max-h-96 overflow-auto">
+          {isEditing ? (
+            <textarea
+              value={editedOutput || ''}
+              onChange={(e) => setEditedOutput(e.target.value)}
+              className="w-full h-64 font-mono text-sm bg-white border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            />
+          ) : (
+            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
+              {typeof outputToDisplay === 'string'
+                ? outputToDisplay
+                : JSON.stringify(outputToDisplay, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-4 pt-2">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          >
+            ← Volver
+          </button>
+        )}
+        <button
+          onClick={handleExecute}
+          disabled={isExecuting}
+          className="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50"
+        >
+          <RefreshCw size={16} className="inline mr-1" />
+          Re-ejecutar
+        </button>
+        <button
+          onClick={() => {
+            onUpdateState({
+              status: 'completed',
+              completedAt: new Date(),
+            })
+            onContinue()
+          }}
+          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
+        >
+          Aprobar y continuar
+          <ChevronRight size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Auto step component (no review needed)
+interface AutoStepProps {
+  step: StepDefinition
+  stepState: StepState
+  onUpdateState: (update: Partial<StepState>) => void
+  onExecute: (input?: unknown) => Promise<void>
+  onBack?: () => void
+  previousOutput?: unknown
+}
+
+function AutoStep({
+  step,
+  stepState,
   onExecute,
+  onBack,
+  previousOutput,
+}: AutoStepProps) {
+  const [isExecuting, setIsExecuting] = useState(false)
+
+  const handleExecute = async () => {
+    setIsExecuting(true)
+    try {
+      await onExecute(previousOutput)
+    } finally {
+      setIsExecuting(false)
+    }
+  }
+
+  // If completed, show success message
+  if (stepState.status === 'completed') {
+    return (
+      <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+        <Check className="text-green-600" size={20} />
+        <div>
+          <p className="text-green-800 font-medium">Completado</p>
+          {stepState.output && (
+            <p className="text-sm text-green-600 mt-1">
+              {typeof stepState.output === 'string'
+                ? stepState.output.slice(0, 100) + (stepState.output.length > 100 ? '...' : '')
+                : 'Resultado guardado'}
+            </p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Execution explanation if available */}
+      {step.executionExplanation && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+          <h4 className="font-medium text-blue-800">
+            {step.executionExplanation.title || 'Este paso va a:'}
+          </h4>
+          <ol className="list-decimal list-inside space-y-1 text-sm text-blue-700">
+            {step.executionExplanation.steps.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ol>
+          {(step.executionExplanation.estimatedCost || step.executionExplanation.costService) && (
+            <p className="text-xs text-blue-600 pt-2 border-t border-blue-200">
+              {step.executionExplanation.estimatedCost && (
+                <span>Costo estimado: {step.executionExplanation.estimatedCost}</span>
+              )}
+              {step.executionExplanation.estimatedCost && step.executionExplanation.costService && ' • '}
+              {step.executionExplanation.costService && (
+                <span>Servicio: {step.executionExplanation.costService}</span>
+              )}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-4">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            ← Volver
+          </button>
+        )}
+        <button
+          onClick={handleExecute}
+          disabled={isExecuting || stepState.status === 'in_progress'}
+          className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-blue-400 transition-colors flex items-center justify-center gap-2"
+        >
+          {isExecuting || stepState.status === 'in_progress' ? (
+            <>
+              <Loader2 className="animate-spin" size={18} />
+              Ejecutando...
+            </>
+          ) : (
+            <>
+              <Play size={18} />
+              Ejecutar {step.name}
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Progress indicator */}
+      {stepState.progress && (
+        <div className="mt-4">
+          <div className="flex justify-between text-sm text-gray-600 mb-1">
+            <span>{stepState.progress.label || 'Progreso'}</span>
+            <span>{stepState.progress.current}/{stepState.progress.total}</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-blue-600 h-2 rounded-full transition-all"
+              style={{
+                width: stepState.progress.total > 0
+                  ? `${(stepState.progress.current / stepState.progress.total) * 100}%`
+                  : '0%'
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Search with Preview Panel component
+interface SearchWithPreviewStepProps {
+  step: StepDefinition
+  stepState: StepState
+  onUpdateState: (update: Partial<StepState>) => void
+  onExecute: (input?: unknown) => Promise<void>
+  onBack?: () => void
+  onCancel?: () => void
+  previousOutput?: unknown
+  playbookContext?: Record<string, unknown>
+  projectId?: string
+  isExecuting?: boolean
+}
+
+function SearchWithPreviewStep({
+  step,
+  stepState,
   onUpdateState,
-  onEdit,
+  onExecute,
+  onBack,
+  onCancel,
+  playbookContext,
+  projectId,
+  isExecuting: externalIsExecuting,
+}: SearchWithPreviewStepProps) {
+  const isExecuting = externalIsExecuting || stepState.status === 'in_progress'
+
+  // Build config from playbook context
+  const config = useMemo(() => {
+    // Ensure arrays and default sources structure
+    return {
+      life_contexts: (playbookContext?.life_contexts as string[]) || [],
+      product_words: (playbookContext?.need_words as string[]) || [],
+      indicators: (playbookContext?.indicators as string[]) || [],
+      sources: (playbookContext?.sources as { reddit: boolean; thematic_forums: boolean; general_forums: string[] }) || {
+        reddit: true,
+        thematic_forums: true,
+        general_forums: ['quora.com']
+      },
+      serp_pages: (playbookContext?.serp_pages as number) || 5,
+    }
+  }, [playbookContext])
+
+  const handleExecute = async () => {
+    onUpdateState({
+      status: 'in_progress',
+      startedAt: new Date(),
+    })
+    await onExecute(config)
+  }
+
+  const handleCancel = () => {
+    if (onCancel) {
+      onCancel()
+    }
+  }
+
+  // Get serpJobId from step output or context for results display
+  const serpJobId = (stepState.output as { jobId?: string })?.jobId ||
+    (playbookContext?.serpJobId as string)
+
+  // Show completed state with results
+  if (stepState.status === 'completed') {
+    return (
+      <div className="space-y-4">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-green-800">
+            <Check size={20} />
+            <span className="font-medium">Búsqueda completada</span>
+          </div>
+          {stepState.output && (
+            <p className="text-sm text-green-600 mt-2">
+              Se encontraron URLs para analizar
+            </p>
+          )}
+        </div>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          >
+            ← Ver resultados
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  // If we have a serpJobId and the step is not error, show SERP results
+  // Note: 'completed' status is already handled above
+  if (serpJobId && stepState.status !== 'error') {
+    return (
+      <SerpResultsPanel
+        jobId={serpJobId}
+        onContinue={() => {
+          onUpdateState({
+            status: 'completed',
+            completedAt: new Date(),
+          })
+        }}
+        onBack={onBack || (() => {})}
+      />
+    )
+  }
+
+  // Show preview panel
+  return (
+    <SearchWithPreviewPanel
+      config={config}
+      onExecute={handleExecute}
+      onBack={onBack || (() => {})}
+      onCancel={handleCancel}
+      isExecuting={isExecuting}
+      progress={stepState.progress}
+    />
+  )
+}
+
+// Manual review step - shows data for user to review without editing
+interface ManualReviewStepProps {
+  step: StepDefinition
+  stepState: StepState
+  onUpdateState: (update: Partial<StepState>) => void
+  onContinue: () => void
+  onBack?: () => void
+  previousOutput?: unknown
+}
+
+function ManualReviewStep({
+  step,
+  stepState,
+  onUpdateState,
+  onContinue,
+  onBack,
+  previousOutput,
+}: ManualReviewStepProps) {
+  const [showOutput, setShowOutput] = useState(true)
+
+  // Use stepState.output if available, otherwise previousOutput
+  const dataToReview = stepState.output || previousOutput
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <h4 className="font-medium text-amber-800 mb-2">Revisión manual requerida</h4>
+        <p className="text-sm text-amber-700">
+          {step.description || 'Revisa los datos a continuación antes de continuar.'}
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setShowOutput(!showOutput)}
+          className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+        >
+          {showOutput ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          Ver datos a revisar
+        </button>
+      </div>
+
+      {showOutput && dataToReview && (
+        <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 max-h-96 overflow-auto">
+          <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
+            {typeof dataToReview === 'string'
+              ? dataToReview
+              : JSON.stringify(dataToReview, null, 2)}
+          </pre>
+        </div>
+      )}
+
+      <div className="flex gap-4 pt-2">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          >
+            ← Volver
+          </button>
+        )}
+        <button
+          onClick={() => {
+            onUpdateState({
+              status: 'completed',
+              completedAt: new Date(),
+              output: dataToReview, // Pass through the data
+            })
+            onContinue()
+          }}
+          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
+        >
+          Aprobar y continuar
+          <ChevronRight size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Display step - just shows results
+interface DisplayStepProps {
+  step: StepDefinition
+  stepState: StepState
+  previousOutput?: unknown
+}
+
+function DisplayStep({ stepState, previousOutput }: DisplayStepProps) {
+  const dataToDisplay = stepState.output || previousOutput
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+        {dataToDisplay ? (
+          <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
+            {typeof dataToDisplay === 'string'
+              ? dataToDisplay
+              : JSON.stringify(dataToDisplay, null, 2)}
+          </pre>
+        ) : (
+          <p className="text-gray-500 italic">No hay datos para mostrar</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Action step - button to trigger an action
+interface ActionStepProps {
+  step: StepDefinition
+  stepState: StepState
+  onUpdateState: (update: Partial<StepState>) => void
+  previousOutput?: unknown
+}
+
+function ActionStep({ step, stepState, onUpdateState, previousOutput }: ActionStepProps) {
+  const [isExecuting, setIsExecuting] = useState(false)
+
+  const handleAction = async () => {
+    setIsExecuting(true)
+    try {
+      // Handle different action types
+      if (step.actionConfig?.actionType === 'export') {
+        // Export functionality
+        const dataToExport = previousOutput || stepState.output
+        if (dataToExport) {
+          const blob = new Blob(
+            [typeof dataToExport === 'string' ? dataToExport : JSON.stringify(dataToExport, null, 2)],
+            { type: 'text/plain' }
+          )
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `export_${Date.now()}.txt`
+          a.click()
+          URL.revokeObjectURL(url)
+        }
+      }
+
+      onUpdateState({
+        status: 'completed',
+        completedAt: new Date(),
+      })
+    } finally {
+      setIsExecuting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <button
+        onClick={handleAction}
+        disabled={isExecuting || stepState.status === 'completed'}
+        className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400 transition-colors flex items-center justify-center gap-2"
+      >
+        {isExecuting ? (
+          <>
+            <Loader2 className="animate-spin" size={18} />
+            Procesando...
+          </>
+        ) : stepState.status === 'completed' ? (
+          <>
+            <Check size={18} />
+            Completado
+          </>
+        ) : (
+          <>
+            <Play size={18} />
+            {step.actionConfig?.label || 'Ejecutar'}
+          </>
+        )}
+      </button>
+    </div>
+  )
+}
+
+// Main WorkArea component
+export function WorkArea({
+  step,
+  stepState,
+  onUpdateState,
+  onExecute,
+  onContinue,
+  onBack,
   onCancel,
   onRerunPrevious,
   isFirst,
   isLast,
   previousStepOutput,
-  projectId,
   playbookContext,
-}: ExtendedWorkAreaProps) {
-  // Render based on step status and type
-  const renderContent = () => {
-    // Error state takes precedence
+  projectId,
+}: WorkAreaProps) {
+  const [isExpanded, setIsExpanded] = useState(true)
+  const prevStepIdRef = useRef<string | null>(null)
+
+  // Auto-expand when step changes
+  useEffect(() => {
+    if (prevStepIdRef.current !== step.id) {
+      setIsExpanded(true)
+      prevStepIdRef.current = step.id
+    }
+  }, [step.id])
+
+  // Render different content based on step type and status
+  const renderStepContent = () => {
+    // Check for error state
     if (stepState.status === 'error') {
-      return <ErrorState step={step} stepState={stepState} onRetry={() => onExecute()} />
-    }
-
-    // In progress for auto steps
-    if (stepState.status === 'in_progress' && ['auto', 'auto_with_preview', 'auto_with_review'].includes(step.type)) {
-      return <AutoExecutingStep step={step} stepState={stepState} onCancel={onCancel} />
-    }
-
-    // SPECIAL HANDLING: New unified step types for simplified flow
-
-    // search_with_preview: Shows config preview with editing, then executes SERP
-    if (step.type === 'search_with_preview' && stepState.status !== 'completed') {
-      const isExecuting = stepState.status === 'in_progress'
-      const config = {
-        life_contexts: (playbookContext?.life_contexts as string[]) || [],
-        product_words: (playbookContext?.need_words as string[]) || [],
-        indicators: (playbookContext?.indicators as string[]) || [],
-        sources: (playbookContext?.sources as { reddit: boolean; thematic_forums: boolean; general_forums: string[] }) || {
-          reddit: true,
-          thematic_forums: false,
-          general_forums: [],
-        },
-        serp_pages: (playbookContext?.serp_pages as number) || 5,
-      }
+      // Check if error is about missing API key
+      const isApiKeyError = stepState.error?.toLowerCase().includes('api key') ||
+                           stepState.error?.toLowerCase().includes('no configurada')
 
       return (
-        <SearchWithPreviewPanel
-          config={config}
-          onExecute={async (finalConfig) => {
-            // Save the edited config and start execution
-            onUpdateState({
-              status: 'in_progress',
-              startedAt: new Date(),
-              input: finalConfig,
-            })
-            await onExecute(finalConfig)
-          }}
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+          <div className="flex items-center gap-2 text-red-800">
+            <AlertCircle size={20} />
+            <span className="font-medium">Error</span>
+          </div>
+          <p className="text-sm text-red-700">{stepState.error || 'Ha ocurrido un error'}</p>
+          <div className="flex gap-2 flex-wrap">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="px-3 py-1.5 border border-red-300 rounded text-red-700 text-sm hover:bg-red-100"
+              >
+                ← Volver
+              </button>
+            )}
+            {isApiKeyError && (
+              <button
+                onClick={() => {
+                  // Navigate to setup tab with API keys section
+                  const currentUrl = new URL(window.location.href)
+                  currentUrl.searchParams.set('tab', 'setup')
+                  window.location.href = currentUrl.toString()
+                }}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-1"
+              >
+                Configurar API Key
+              </button>
+            )}
+            <button
+              onClick={() => {
+                onUpdateState({ status: 'pending', error: undefined })
+              }}
+              className="px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    // DeepResearchManualStep for manual_research type
+    if (step.type === 'manual_research') {
+      return (
+        <DeepResearchManualStep
+          step={step}
+          stepState={stepState}
+          onUpdateState={onUpdateState}
+          onContinue={onContinue}
+          previousStepOutput={typeof previousStepOutput === 'string' ? previousStepOutput : undefined}
+          projectId={projectId || ''}
+        />
+      )
+    }
+
+    // search_with_preview: Preview queries, then execute SERP, then show results
+    if (step.type === 'search_with_preview') {
+      const isExecuting = stepState.status === 'in_progress'
+      return (
+        <SearchWithPreviewStep
+          step={step}
+          stepState={stepState}
+          onUpdateState={onUpdateState}
+          onExecute={onExecute}
           onBack={onBack}
           onCancel={onCancel}
+          previousOutput={previousStepOutput}
+          playbookContext={playbookContext}
+          projectId={projectId}
           isExecuting={isExecuting}
-          progress={stepState.progress}
         />
       )
     }
@@ -1614,18 +1187,29 @@ export default function WorkArea({
           <ReviewAndScrapePanel
             jobId={jobId}
             projectId={projectId} // Pass projectId as fallback for fetching latest job
-            onExecute={async (selectedUrls) => {
-              console.log('[WorkArea] ReviewAndScrapePanel onExecute called with', selectedUrls.length, 'URLs')
+            onExecute={async (selectedSources) => {
+              console.log('[WorkArea] ReviewAndScrapePanel onExecute called')
+              console.log('[WorkArea] Selected sources:', selectedSources)
+              console.log('[WorkArea] jobId:', jobId)
+              console.log('[WorkArea] projectId:', projectId)
+
+              // Update state to show progress
               onUpdateState({
                 status: 'in_progress',
                 startedAt: new Date(),
-                input: { selectedUrls },
+                input: { selectedSources, jobId },
               })
-              console.log('[WorkArea] Calling parent onExecute...')
-              await onExecute({ selectedUrls })
-              console.log('[WorkArea] Parent onExecute finished')
+
+              console.log('[WorkArea] State updated, calling parent onExecute...')
+              try {
+                await onExecute({ selectedSources, jobId })
+                console.log('[WorkArea] Parent onExecute completed successfully')
+              } catch (error) {
+                console.error('[WorkArea] Parent onExecute failed:', error)
+                throw error
+              }
             }}
-            onBack={onBack}
+            onBack={onBack || (() => {})}
             isExecuting={isExecuting}
             progress={stepState.progress ? {
               ...stepState.progress,
@@ -1648,8 +1232,8 @@ export default function WorkArea({
         indicators: (playbookContext?.indicators as string[]) || [],
         sources: (playbookContext?.sources as { reddit: boolean; thematic_forums: boolean; general_forums: string[] }) || {
           reddit: true,
-          thematic_forums: false,
-          general_forums: [],
+          thematic_forums: true,
+          general_forums: ['quora.com']
         },
         serp_pages: (playbookContext?.serp_pages as number) || 5,
       }
@@ -1657,45 +1241,101 @@ export default function WorkArea({
       return (
         <QueryPreviewPanel
           config={config}
-          onApprove={() => {
-            onUpdateState({ status: 'completed', completedAt: new Date() })
-            onContinue()
+          onApprove={async () => {
+            onUpdateState({
+              status: 'in_progress',
+              startedAt: new Date(),
+            })
+            await onExecute(config)
           }}
-          onAdjust={onBack}
+          onAdjust={onBack || (() => {})}
         />
       )
     }
 
-    // SERP Results Panel - shows after SERP completes, before scraping (legacy)
-    if (step.id === 'review_urls' && stepState.status !== 'completed') {
-      const jobId = playbookContext?.serpJobId as string
-      if (jobId) {
+    // SERP Results Panel - shows after SERP execution (legacy)
+    if (step.id === 'serp_results' && stepState.status !== 'completed') {
+      // Get serpJobId from playbookContext (set by serp_search step)
+      const serpJobId = playbookContext?.serpJobId as string
+
+      if (!serpJobId) {
         return (
-          <SerpResultsPanel
-            jobId={jobId}
-            onContinue={(selectedSources) => {
-              onUpdateState({
-                status: 'completed',
-                completedAt: new Date(),
-                output: { selectedSources }
-              })
-              onContinue()
-            }}
-            onBack={onBack}
-          />
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p className="text-amber-800">
+              No se encontró el ID del job de búsqueda. Por favor ejecuta el paso de búsqueda primero.
+            </p>
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="mt-3 px-4 py-2 border border-amber-300 rounded-lg text-amber-700 hover:bg-amber-100"
+              >
+                ← Volver al paso anterior
+              </button>
+            )}
+          </div>
         )
       }
+
+      return (
+        <SerpResultsPanel
+          jobId={serpJobId}
+          onContinue={() => {
+            onUpdateState({
+              status: 'completed',
+              completedAt: new Date(),
+              output: { serpJobId },
+            })
+            onContinue()
+          }}
+          onBack={onBack || (() => {})}
+        />
+      )
     }
 
-    // Completed state
-    if (stepState.status === 'completed') {
+    // Review URLs Panel (legacy - for old campaigns)
+    if (step.id === 'review_urls' && stepState.status !== 'completed') {
+      // Get serpJobId from playbookContext
+      const serpJobId = playbookContext?.serpJobId as string
+
+      if (!serpJobId) {
+        return (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p className="text-amber-800">
+              No se encontró el ID del job de búsqueda. Por favor ejecuta el paso de búsqueda primero.
+            </p>
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="mt-3 px-4 py-2 border border-amber-300 rounded-lg text-amber-700 hover:bg-amber-100"
+              >
+                ← Volver al paso anterior
+              </button>
+            )}
+          </div>
+        )
+      }
+
+      const isExecuting = stepState.status === 'in_progress'
+
       return (
-        <CompletedStep
-          step={step}
-          stepState={stepState}
-          onContinue={onContinue}
-          onRerun={['auto', 'auto_with_preview', 'auto_with_review'].includes(step.type) ? () => onExecute() : undefined}
-          onEdit={onEdit}
+        <ReviewAndScrapePanel
+          jobId={serpJobId}
+          projectId={projectId}
+          onExecute={async (selectedUrls) => {
+            onUpdateState({
+              status: 'in_progress',
+              startedAt: new Date(),
+              input: { selectedUrls },
+            })
+            await onExecute({ selectedUrls })
+          }}
+          onBack={onBack || (() => {})}
+          isExecuting={isExecuting}
+          progress={stepState.progress ? {
+            ...stepState.progress,
+            successCount: stepState.partialResults?.successCount,
+            failedCount: stepState.partialResults?.failedCount,
+          } : undefined}
         />
       )
     }
@@ -1720,8 +1360,45 @@ export default function WorkArea({
             stepState={stepState}
             onUpdateState={onUpdateState}
             onContinue={onContinue}
+            previousOutput={previousStepOutput}
+          />
+        )
+
+      case 'auto_with_preview':
+      case 'auto_with_review':
+        return (
+          <AutoWithReviewStep
+            step={step}
+            stepState={stepState}
+            onUpdateState={onUpdateState}
+            onExecute={onExecute}
+            onContinue={onContinue}
             onBack={onBack}
-            onRerunPrevious={onRerunPrevious}
+            previousOutput={previousStepOutput}
+          />
+        )
+
+      case 'auto':
+        return (
+          <AutoStep
+            step={step}
+            stepState={stepState}
+            onUpdateState={onUpdateState}
+            onExecute={onExecute}
+            onBack={onBack}
+            previousOutput={previousStepOutput}
+          />
+        )
+
+      case 'manual_review':
+        return (
+          <ManualReviewStep
+            step={step}
+            stepState={stepState}
+            onUpdateState={onUpdateState}
+            onContinue={onContinue}
+            onBack={onBack}
+            previousOutput={previousStepOutput}
           />
         )
 
@@ -1730,83 +1407,124 @@ export default function WorkArea({
           <DisplayStep
             step={step}
             stepState={stepState}
-            onContinue={onContinue}
+            previousOutput={previousStepOutput}
           />
         )
 
-      case 'input':
+      case 'action':
         return (
-          <InputStep
+          <ActionStep
             step={step}
             stepState={stepState}
             onUpdateState={onUpdateState}
-            onContinue={onContinue}
+            previousOutput={previousStepOutput}
           />
         )
 
-      case 'manual_research':
-        return (
-          <DeepResearchManualStep
-            step={step}
-            stepState={stepState}
-            onContinue={onContinue}
-            onUpdateState={onUpdateState}
-            previousStepOutput={previousStepOutput}
-            projectId={projectId || ''}
-          />
-        )
-
-      case 'manual_review':
-        // For generic manual_review steps without custom panels
-        return <PendingStep step={step} onExecute={() => onContinue()} />
-
-      case 'search_with_preview':
-      case 'review_with_action':
-        // These are handled above with special components
-        // If we get here, show a pending state
-        return <PendingStep step={step} onExecute={() => onExecute()} />
-
-      case 'auto':
-      case 'auto_with_preview':
-      case 'auto_with_review':
       default:
-        return <PendingStep step={step} onExecute={() => onExecute()} />
+        // Generic fallback for unknown types
+        return (
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-gray-600">
+              Tipo de paso no reconocido: {step.type}
+            </p>
+          </div>
+        )
     }
   }
 
   return (
-    <div className="h-full flex flex-col bg-white">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-900">{step.name}</h2>
-        {step.description && stepState.status !== 'completed' && (
-          <p className="text-sm text-gray-500 mt-1">{step.description}</p>
-        )}
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+      {/* Step header */}
+      <div
+        className="px-6 py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {isExpanded ? (
+              <ChevronDown className="text-gray-400" size={20} />
+            ) : (
+              <ChevronRight className="text-gray-400" size={20} />
+            )}
+            <div>
+              <h3 className="font-semibold text-gray-900">{step.name}</h3>
+              {step.description && (
+                <p className="text-sm text-gray-500 mt-0.5">{step.description}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Status indicator */}
+          <div className="flex items-center gap-2">
+            {stepState.status === 'completed' && (
+              <span className="flex items-center gap-1 text-sm text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                <Check size={14} />
+                Completado
+              </span>
+            )}
+            {stepState.status === 'in_progress' && (
+              <span className="flex items-center gap-1 text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                <Loader2 size={14} className="animate-spin" />
+                En progreso
+              </span>
+            )}
+            {stepState.status === 'error' && (
+              <span className="flex items-center gap-1 text-sm text-red-600 bg-red-50 px-2 py-1 rounded-full">
+                <AlertCircle size={14} />
+                Error
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {renderContent()}
-      </div>
+      {/* Step content */}
+      {isExpanded && (
+        <div className="px-6 py-5">
+          {renderStepContent()}
+        </div>
+      )}
 
-      {/* Footer navigation */}
-      <div className="px-6 py-4 border-t border-gray-200 flex justify-between">
-        <button
-          onClick={onBack}
-          disabled={isFirst}
-          className="px-4 py-2 text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-        >
-          <ChevronLeft size={16} />
-          Atrás
-        </button>
+      {/* Navigation footer for completed steps */}
+      {isExpanded && stepState.status === 'completed' && (
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+          <div className="flex gap-2">
+            {!isFirst && onBack && (
+              <button
+                onClick={onBack}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
+              >
+                ← Anterior
+              </button>
+            )}
+            {onRerunPrevious && !isFirst && (
+              <button
+                onClick={onRerunPrevious}
+                className="px-3 py-1.5 text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              >
+                <RefreshCw size={14} />
+                Re-ejecutar anterior
+              </button>
+            )}
+          </div>
 
-        {isLast && stepState.status === 'completed' && (
-          <span className="text-sm text-green-600 font-medium flex items-center gap-1">
-            <Check size={16} />
-            Playbook completado
-          </span>
-        )}
-      </div>
+          {!isLast ? (
+            <button
+              onClick={onContinue}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-1"
+            >
+              Siguiente
+              <ChevronRight size={16} />
+            </button>
+          ) : (
+            <span className="text-sm text-green-600 font-medium flex items-center gap-1">
+              <Check size={16} />
+              Playbook completado
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }

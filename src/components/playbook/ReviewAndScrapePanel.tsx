@@ -507,9 +507,13 @@ export function ReviewAndScrapePanel({
         <button
           onClick={() => {
             console.log('[ReviewAndScrapePanel] Scrapear button clicked!')
-            console.log('[ReviewAndScrapePanel] Selected URLs count:', stats.selectedUrls)
-            console.log('[ReviewAndScrapePanel] Calling onExecute...')
-            onExecute(getSelectedUrls())
+            console.log('[ReviewAndScrapePanel] Selected sources:', urlsBySource.filter(s => s.selected).map(s => s.source))
+            console.log('[ReviewAndScrapePanel] Total selected URLs count:', stats.selectedUrls)
+            console.log('[ReviewAndScrapePanel] Sample URLs from getSelectedUrls():', getSelectedUrls().slice(0, 5))
+            console.log('[ReviewAndScrapePanel] Calling onExecute with selected sources...')
+            // Pass selected source types so the scraper knows which to process
+            const selectedSources = urlsBySource.filter(s => s.selected).map(s => s.source)
+            onExecute(selectedSources)
           }}
           disabled={stats.selectedUrls === 0}
           className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${

@@ -233,7 +233,7 @@ export interface WorkAreaProps {
   step: StepDefinition
   stepState: StepState
   onContinue: () => void
-  onBack: () => void
+  onBack?: () => void
   onExecute: (input?: any) => Promise<void>
   onUpdateState: (update: Partial<StepState>) => void
   onEdit?: () => void           // Volver a editar un paso completado
@@ -241,4 +241,7 @@ export interface WorkAreaProps {
   onRerunPrevious?: () => void  // Re-ejecutar el paso anterior (para decisiones de regenerar)
   isFirst: boolean
   isLast: boolean
+  previousStepOutput?: unknown  // Output from the previous step
+  projectId?: string            // Project ID for API calls
+  playbookContext?: Record<string, unknown>  // Context with all previous step outputs
 }

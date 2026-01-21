@@ -85,8 +85,7 @@ export const videoViralIAConfig: PlaybookConfig = {
           description:
             'Genera clips de video con Wavespeed/Seedance AI (requiere API key)',
           type: 'auto_with_review',
-          executor: 'api',
-          apiEndpoint: '/api/playbook/video-viral/generate-clips',
+          executor: 'llm', // Routes through execute-step which handles Wavespeed API
           dependsOn: ['generate_scenes'],
         },
       ],
@@ -105,8 +104,7 @@ export const videoViralIAConfig: PlaybookConfig = {
           name: 'Generar Audio',
           description: 'Genera audio ASMR/satisfying con Fal AI (requiere API key)',
           type: 'auto_with_review',
-          executor: 'api',
-          apiEndpoint: '/api/playbook/video-viral/generate-audio',
+          executor: 'llm', // Routes through execute-step which handles Fal AI
           dependsOn: ['generate_clips'],
         },
         {
@@ -114,8 +112,7 @@ export const videoViralIAConfig: PlaybookConfig = {
           name: 'Componer Video Final',
           description: 'Une clips y audio con Fal AI FFmpeg (requiere API key)',
           type: 'auto_with_review',
-          executor: 'api',
-          apiEndpoint: '/api/playbook/video-viral/compose-video',
+          executor: 'llm', // Routes through execute-step which handles Fal AI FFmpeg
           dependsOn: ['generate_audio'],
         },
       ],

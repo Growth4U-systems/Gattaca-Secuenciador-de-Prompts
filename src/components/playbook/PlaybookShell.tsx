@@ -10,7 +10,7 @@ import {
   PhaseDefinition,
 } from './types'
 import NavigationPanel from './NavigationPanel'
-import WorkArea from './WorkArea'
+import { WorkArea } from './WorkArea'
 import ConfigurationMode from './ConfigurationMode'
 import CampaignWizard from './CampaignWizard'
 import CampaignSettings from './CampaignSettings'
@@ -1376,7 +1376,7 @@ export default function PlaybookShell({
           </div>
 
           {/* Work Area - Right side */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
             {!selectedCampaignId ? (
               /* No campaign selected - prompt to select or create */
               <div className="flex flex-col items-center justify-center h-full bg-white p-8 text-center">
