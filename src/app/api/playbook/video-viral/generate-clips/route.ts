@@ -105,12 +105,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Get Wavespeed API key
-    const wavespeedApiKey =
-      (await getUserApiKey({
-        userId: user.id,
-        serviceName: 'wavespeed',
-        supabase,
-      })) || process.env.WAVESPEED_API_KEY
+    console.log('[generate-clips] Getting Wavespeed API key for user:', user.id)
+    const userApiKey = await getUserApiKey({
+      userId: user.id,
+      serviceName: 'wavespeed',
+      supabase,
+    })
+    const wavespeedApiKey = userApiKey || process.env.WAVESPEED_API_KEY
+
+    console.log('[generate-clips] API key source:', userApiKey ? 'user_api_keys table' : 'env WAVESPEED_API_KEY')
+    console.log('[generate-clips] API key found:', !!wavespeedApiKey)
+    if (wavespeedApiKey) {
+      console.log('[generate-clips] API key prefix:', wavespeedApiKey.substring(0, 10) + '...')
+      console.log('[generate-clips] API key length:', wavespeedApiKey.length)
+    }
 
     if (!wavespeedApiKey) {
       return NextResponse.json(
@@ -174,6 +182,27 @@ export async function POST(request: NextRequest) {
 
         if (!response.ok) {
           const errorText = await response.text()
+
+          // Handle 401 specifically - API key is invalid
+          if (response.status === 401) {
+            console.error('[generate-clips] 401 Unauthorized - API key invalid')
+            console.error('[generate-clips] API key prefix:', apiKeyAscii.substring(0, 10) + '...')
+            return NextResponse.json(
+              {
+                error: 'API key de Wavespeed inválida o expirada',
+                details: 'El servidor de Wavespeed rechazó la autenticación (401 Unauthorized).',
+                help: [
+                  '1. Ve a https://wavespeed.ai/dashboard/api y verifica tu API key',
+                  '2. Asegúrate de copiar la key completa (empieza con "wsk_")',
+                  '3. En Gattaca, ve a Settings > APIs y actualiza la key de Wavespeed',
+                  '4. Si la key es nueva, espera unos segundos antes de reintentar',
+                ],
+                api_key_prefix: apiKeyAscii.substring(0, 8) + '...',
+              },
+              { status: 401 }
+            )
+          }
+
           clipResults.push({
             scene_index: i,
             task_id: '',

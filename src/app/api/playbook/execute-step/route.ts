@@ -339,27 +339,69 @@ export async function POST(request: NextRequest) {
       .eq('status', 'completed')
 
     // Build previous_step_output from the immediately previous step
+    // If previous step is a decision step (no output), look back further
     const currentStepIndex = stepOrder.indexOf(stepId)
     let previousStepOutput = ''
 
-    if (currentStepIndex > 0) {
-      const previousStepId = stepOrder[currentStepIndex - 1]
-      const previousStep = previousOutputs?.find(o => o.step_id === previousStepId)
+    // Decision steps don't produce new output, so we need to look back further
+    const DECISION_STEPS = ['review_idea', 'select_creators', 'select_posts', 'review_urls', 'review_extraction', 'select_niches']
 
-      if (previousStep) {
-        // If there's imported data, format it as context
-        if (previousStep.imported_data) {
-          const importedData = previousStep.imported_data as unknown[]
-          previousStepOutput = `## Datos Importados (${importedData.length} registros)\n\n`
-          previousStepOutput += '```json\n' + JSON.stringify(importedData.slice(0, 50), null, 2) + '\n```\n'
-          if (importedData.length > 50) {
-            previousStepOutput += `\n*... y ${importedData.length - 50} registros más*\n`
+    if (currentStepIndex > 0) {
+      // Find the most recent step with actual output (skip decision steps)
+      for (let i = currentStepIndex - 1; i >= 0; i--) {
+        const candidateStepId = stepOrder[i]
+        const candidateStep = previousOutputs?.find(o => o.step_id === candidateStepId)
+
+        // Skip if no output found
+        if (!candidateStep) continue
+
+        // Skip decision steps that have no meaningful output
+        if (DECISION_STEPS.includes(candidateStepId) && !candidateStep.output_content) {
+          continue
+        }
+
+        // Found a step with output
+        if (candidateStep.imported_data) {
+          const importedData = candidateStep.imported_data as unknown[]
+          if (Array.isArray(importedData)) {
+            previousStepOutput = `## Datos Importados (${importedData.length} registros)\n\n`
+            previousStepOutput += '```json\n' + JSON.stringify(importedData.slice(0, 50), null, 2) + '\n```\n'
+            if (importedData.length > 50) {
+              previousStepOutput += `\n*... y ${importedData.length - 50} registros más*\n`
+            }
+          } else {
+            // imported_data is an object, not array
+            previousStepOutput = '```json\n' + JSON.stringify(candidateStep.imported_data, null, 2) + '\n```\n'
           }
         }
-        // Add the LLM output if available
-        if (previousStep.output_content) {
-          previousStepOutput += '\n\n' + previousStep.output_content
+        if (candidateStep.output_content) {
+          previousStepOutput += '\n\n' + candidateStep.output_content
         }
+
+        console.log(`[execute-step] Using output from step "${candidateStepId}" for step "${stepId}"`)
+        break
+      }
+    }
+
+    // Try to parse JSON from previous step output to extract individual fields
+    let parsedPreviousOutput: Record<string, unknown> = {}
+    if (previousStepOutput) {
+      try {
+        // Try to extract JSON from markdown code block
+        const jsonMatch = previousStepOutput.match(/```(?:json)?\s*([\s\S]*?)```/)
+        if (jsonMatch) {
+          parsedPreviousOutput = JSON.parse(jsonMatch[1].trim())
+          console.log('[execute-step] Parsed JSON from previous step:', Object.keys(parsedPreviousOutput))
+        } else {
+          // Try to parse as raw JSON
+          const rawJsonMatch = previousStepOutput.match(/\{[\s\S]*\}/)
+          if (rawJsonMatch) {
+            parsedPreviousOutput = JSON.parse(rawJsonMatch[0])
+            console.log('[execute-step] Parsed raw JSON from previous step:', Object.keys(parsedPreviousOutput))
+          }
+        }
+      } catch (e) {
+        console.log('[execute-step] Could not parse JSON from previous step output')
       }
     }
 
@@ -369,6 +411,14 @@ export async function POST(request: NextRequest) {
       previous_step_output: previousStepOutput || vars?.previous_step_output || '(No hay output del paso anterior)',
     }
 
+    // First, replace nested variables like {{previous_step_output.idea}}
+    for (const [key, value] of Object.entries(parsedPreviousOutput)) {
+      const nestedPattern = new RegExp(`\\{\\{previous_step_output\\.${key}\\}\\}`, 'g')
+      const stringValue = typeof value === 'string' ? value : JSON.stringify(value)
+      prompt = prompt.replace(nestedPattern, stringValue || '')
+    }
+
+    // Then replace regular variables
     for (const [key, value] of Object.entries(allVariables)) {
       prompt = prompt.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value || '')
     }
@@ -403,6 +453,53 @@ export async function POST(request: NextRequest) {
         openrouterApiKey
       )
       return result
+    }
+
+    // ============================================
+    // SPECIAL HANDLING: Video Viral IA steps
+    // ============================================
+    if (playbookType === 'video_viral_ia') {
+      // generate_clips: Call Wavespeed API
+      if (stepId === 'generate_clips') {
+        return await handleGenerateClipsStep(
+          adminClient,
+          projectId,
+          playbookType,
+          stepId,
+          vars,
+          previousStepOutput,
+          session.user.id,
+          supabase
+        )
+      }
+
+      // generate_audio: Call Fal AI MMAudio
+      if (stepId === 'generate_audio') {
+        return await handleGenerateAudioStep(
+          adminClient,
+          projectId,
+          playbookType,
+          stepId,
+          vars,
+          previousStepOutput,
+          session.user.id,
+          supabase
+        )
+      }
+
+      // compose_video: Call Fal AI FFmpeg
+      if (stepId === 'compose_video') {
+        return await handleComposeVideoStep(
+          adminClient,
+          projectId,
+          playbookType,
+          stepId,
+          vars,
+          previousStepOutput,
+          session.user.id,
+          supabase
+        )
+      }
     }
 
     // Execute LLM call
@@ -934,4 +1031,567 @@ ${JSON.stringify({ posts }, null, 2)}
 `
 
   return output
+}
+
+// ============================================
+// VIDEO VIRAL IA STEP HANDLERS
+// ============================================
+
+/**
+ * Handle generate_clips step - calls Wavespeed API
+ */
+async function handleGenerateClipsStep(
+  adminClient: ReturnType<typeof createAdminClient>,
+  projectId: string,
+  playbookType: string,
+  stepId: string,
+  variables: Record<string, string>,
+  previousStepOutput: string,
+  userId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any
+): Promise<NextResponse> {
+  try {
+    console.log('[generate_clips] Starting video clip generation')
+
+    // Parse scenes from previous step output (generate_scenes)
+    const scenes = parseScenes(previousStepOutput)
+
+    if (scenes.length === 0) {
+      throw new Error('No se encontraron escenas en el paso anterior. Ejecuta "Generar Prompts de Escenas" primero.')
+    }
+
+    console.log(`[generate_clips] Found ${scenes.length} scenes to generate`)
+
+    // Call the generate-clips API endpoint
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const response = await fetch(`${baseUrl}/api/playbook/video-viral/generate-clips`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': `sb-access-token=${await getAccessToken(supabase)}`,
+      },
+      body: JSON.stringify({
+        projectId,
+        scenes,
+        aspect_ratio: variables.aspect_ratio || '9:16',
+        duration: parseInt(variables.video_duration || '30') / scenes.length,
+        resolution: '720p',
+        generate_audio: false,
+      }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || `Error generating clips: ${response.status}`)
+    }
+
+    // Format output
+    const output = formatClipsOutput(data)
+
+    // Save to database
+    await adminClient
+      .from('playbook_step_outputs')
+      .upsert({
+        project_id: projectId,
+        playbook_type: playbookType,
+        step_id: stepId,
+        output_content: output,
+        imported_data: data,
+        status: 'completed',
+        variables_used: variables,
+        executed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'project_id,playbook_type,step_id'
+      })
+
+    return NextResponse.json({
+      success: true,
+      output,
+      stepId,
+      clips: data.video_urls,
+    })
+
+  } catch (error) {
+    console.error('[generate_clips] Error:', error)
+
+    await adminClient
+      .from('playbook_step_outputs')
+      .upsert({
+        project_id: projectId,
+        playbook_type: playbookType,
+        step_id: stepId,
+        status: 'error',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'project_id,playbook_type,step_id'
+      })
+
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
+  }
+}
+
+/**
+ * Handle generate_audio step - calls Fal AI MMAudio directly
+ */
+async function handleGenerateAudioStep(
+  adminClient: ReturnType<typeof createAdminClient>,
+  projectId: string,
+  playbookType: string,
+  stepId: string,
+  variables: Record<string, string>,
+  previousStepOutput: string,
+  userId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any
+): Promise<NextResponse> {
+  try {
+    console.log('[generate_audio] Starting audio generation')
+
+    // Get video URL from previous step (generate_clips)
+    const videoUrls = parseVideoUrls(previousStepOutput)
+    const videoUrl = videoUrls.length > 0 ? videoUrls[0] : undefined
+
+    // Get sound description from idea step
+    const { data: ideaOutput } = await adminClient
+      .from('playbook_step_outputs')
+      .select('output_content, imported_data')
+      .eq('project_id', projectId)
+      .eq('playbook_type', playbookType)
+      .eq('step_id', 'generate_idea')
+      .single()
+
+    // Parse sound from idea
+    let soundPrompt = `${variables.content_style || 'ASMR'} soothing sound effects`
+    if (ideaOutput?.imported_data) {
+      const ideaData = ideaOutput.imported_data as { sound?: string }
+      if (ideaData.sound) {
+        soundPrompt = `${variables.content_style || 'ASMR'} ${ideaData.sound}`
+      }
+    } else if (ideaOutput?.output_content) {
+      // Try to parse from JSON in output
+      const soundMatch = ideaOutput.output_content.match(/"sound"\s*:\s*"([^"]+)"/)
+      if (soundMatch) {
+        soundPrompt = `${variables.content_style || 'ASMR'} ${soundMatch[1]}`
+      }
+    }
+
+    console.log(`[generate_audio] Using prompt: ${soundPrompt}`)
+    console.log(`[generate_audio] Video URL: ${videoUrl || 'none'}`)
+
+    // Get Fal AI API key
+    const falApiKey = await getUserApiKey({
+      userId,
+      serviceName: 'fal',
+      supabase,
+    }) || process.env.FAL_API_KEY
+
+    if (!falApiKey) {
+      throw new Error('API key de Fal AI no configurada. Ve a Settings > APIs para configurarla.')
+    }
+
+    // Call Fal AI directly
+    const FAL_API_BASE = 'https://fal.run/fal-ai/mmaudio-v2'
+    const endpoint = videoUrl ? FAL_API_BASE : `${FAL_API_BASE}/text-to-audio`
+    const duration = parseInt(variables.video_duration || '30')
+
+    const requestBody: Record<string, unknown> = {
+      prompt: soundPrompt,
+      num_steps: 25,
+      duration: Math.min(duration, 30), // Max 30 seconds
+      cfg_strength: 4.5,
+      seed: 0,
+    }
+
+    if (videoUrl) {
+      requestBody.video_url = videoUrl
+    }
+
+    console.log(`[generate_audio] Calling Fal AI: ${endpoint}`)
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Key ${falApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Fal AI error: ${response.status} - ${errorText}`)
+    }
+
+    const data = await response.json() as {
+      video?: { url: string; file_name?: string; file_size?: number }
+      audio?: { url: string; file_name?: string; file_size?: number }
+    }
+
+    console.log('[generate_audio] Fal AI response:', JSON.stringify(data, null, 2))
+
+    // Extract URL from the nested structure
+    // If we sent a video_url, we get video back with audio mixed in
+    // If text-to-audio mode, we get just audio
+    const audioUrl = videoUrl ? data.video?.url : data.audio?.url
+    const mode = videoUrl ? 'video_with_audio' : 'audio_only'
+    const fileName = videoUrl ? data.video?.file_name : data.audio?.file_name
+    const fileSize = videoUrl ? data.video?.file_size : data.audio?.file_size
+
+    if (!audioUrl) {
+      throw new Error('Fal AI no generó audio. Respuesta: ' + JSON.stringify(data))
+    }
+
+    // Format output
+    const output = `## Audio Generado
+
+**Modo**: ${mode === 'video_with_audio' ? 'Video + Audio sincronizado' : 'Audio independiente'}
+**Prompt usado**: ${soundPrompt}
+
+### Resultado
+🎵 **Audio URL**: [Descargar audio](${audioUrl})
+
+${fileName ? `**Archivo**: ${fileName}` : ''}
+${fileSize ? `**Tamaño**: ${Math.round(fileSize / 1024)} KB` : ''}
+
+\`\`\`json
+${JSON.stringify({ audio_url: audioUrl, mode, ...data }, null, 2)}
+\`\`\`
+`
+
+    // Save to database
+    await adminClient
+      .from('playbook_step_outputs')
+      .upsert({
+        project_id: projectId,
+        playbook_type: playbookType,
+        step_id: stepId,
+        output_content: output,
+        imported_data: { audio_url: audioUrl, mode, file_name: fileName, file_size: fileSize },
+        status: 'completed',
+        variables_used: variables,
+        executed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'project_id,playbook_type,step_id'
+      })
+
+    return NextResponse.json({
+      success: true,
+      output,
+      stepId,
+      audio_url: audioUrl,
+      mode,
+    })
+
+  } catch (error) {
+    console.error('[generate_audio] Error:', error)
+
+    await adminClient
+      .from('playbook_step_outputs')
+      .upsert({
+        project_id: projectId,
+        playbook_type: playbookType,
+        step_id: stepId,
+        status: 'error',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'project_id,playbook_type,step_id'
+      })
+
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
+  }
+}
+
+/**
+ * Handle compose_video step - calls Fal AI FFmpeg
+ */
+async function handleComposeVideoStep(
+  adminClient: ReturnType<typeof createAdminClient>,
+  projectId: string,
+  playbookType: string,
+  stepId: string,
+  variables: Record<string, string>,
+  previousStepOutput: string,
+  userId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any
+): Promise<NextResponse> {
+  try {
+    console.log('[compose_video] Starting video composition')
+
+    // Get video clips from generate_clips step
+    const { data: clipsOutput } = await adminClient
+      .from('playbook_step_outputs')
+      .select('output_content, imported_data')
+      .eq('project_id', projectId)
+      .eq('playbook_type', playbookType)
+      .eq('step_id', 'generate_clips')
+      .single()
+
+    const clipUrls = clipsOutput?.imported_data?.video_urls as string[] || parseVideoUrls(clipsOutput?.output_content || '')
+
+    // Get audio from generate_audio step
+    const { data: audioOutput } = await adminClient
+      .from('playbook_step_outputs')
+      .select('output_content, imported_data')
+      .eq('project_id', projectId)
+      .eq('playbook_type', playbookType)
+      .eq('step_id', 'generate_audio')
+      .single()
+
+    const audioUrl = audioOutput?.imported_data?.audio_url as string || parseAudioUrl(audioOutput?.output_content || '')
+
+    if (clipUrls.length === 0) {
+      throw new Error('No se encontraron clips de video. Ejecuta "Generar Clips de Video" primero.')
+    }
+
+    console.log(`[compose_video] Found ${clipUrls.length} clips and audio: ${!!audioUrl}`)
+
+    // Call the compose-video API endpoint
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const response = await fetch(`${baseUrl}/api/playbook/video-viral/compose-video`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': `sb-access-token=${await getAccessToken(supabase)}`,
+      },
+      body: JSON.stringify({
+        projectId,
+        video_urls: clipUrls,
+        audio_url: audioUrl,
+      }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || `Error composing video: ${response.status}`)
+    }
+
+    // Format output
+    const finalVideoUrl = data.video_url
+    const output = `## Video Final Compuesto
+
+✅ **Video compuesto exitosamente**
+
+### Detalles
+- **Clips unidos**: ${clipUrls.length}
+- **Audio incluido**: ${audioUrl ? 'Sí' : 'No'}
+
+### Resultado Final
+🎬 **Video URL**: [Ver/Descargar video](${finalVideoUrl})
+
+${data.file_name ? `**Archivo**: ${data.file_name}` : ''}
+${data.duration ? `**Duración**: ${data.duration} segundos` : ''}
+
+---
+
+El video está listo para revisión en el siguiente paso.
+
+\`\`\`json
+${JSON.stringify({ video_url: finalVideoUrl, clips_used: clipUrls.length, has_audio: !!audioUrl, ...data }, null, 2)}
+\`\`\`
+`
+
+    // Save to database
+    await adminClient
+      .from('playbook_step_outputs')
+      .upsert({
+        project_id: projectId,
+        playbook_type: playbookType,
+        step_id: stepId,
+        output_content: output,
+        imported_data: { video_url: finalVideoUrl, ...data },
+        status: 'completed',
+        variables_used: variables,
+        executed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'project_id,playbook_type,step_id'
+      })
+
+    return NextResponse.json({
+      success: true,
+      output,
+      stepId,
+      video_url: finalVideoUrl,
+    })
+
+  } catch (error) {
+    console.error('[compose_video] Error:', error)
+
+    await adminClient
+      .from('playbook_step_outputs')
+      .upsert({
+        project_id: projectId,
+        playbook_type: playbookType,
+        step_id: stepId,
+        status: 'error',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'project_id,playbook_type,step_id'
+      })
+
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
+  }
+}
+
+// ============================================
+// VIDEO VIRAL IA HELPER FUNCTIONS
+// ============================================
+
+/**
+ * Parse scenes from LLM output (generate_scenes step)
+ */
+function parseScenes(output: string): string[] {
+  const scenes: string[] = []
+
+  // Try to parse JSON first
+  try {
+    const jsonMatch = output.match(/```(?:json)?\s*([\s\S]*?)```/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[1])
+      // Extract scene_1, scene_2, scene_3, etc.
+      for (let i = 1; i <= 10; i++) {
+        const sceneKey = `scene_${i}`
+        if (parsed[sceneKey]) {
+          scenes.push(parsed[sceneKey])
+        }
+      }
+    }
+  } catch {
+    // Fall through to regex parsing
+  }
+
+  // If no JSON scenes found, try to extract from markdown
+  if (scenes.length === 0) {
+    const sceneMatches = output.matchAll(/(?:scene[_\s]*\d+|escena[_\s]*\d+)[:\s]*([^\n]+(?:\n(?![#\-*])[^\n]+)*)/gi)
+    for (const match of sceneMatches) {
+      if (match[1]) {
+        scenes.push(match[1].trim())
+      }
+    }
+  }
+
+  return scenes
+}
+
+/**
+ * Parse video URLs from output
+ */
+function parseVideoUrls(output: string): string[] {
+  const urls: string[] = []
+
+  // Parse from JSON
+  try {
+    const jsonMatch = output.match(/```(?:json)?\s*([\s\S]*?)```/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[1])
+      if (parsed.video_urls && Array.isArray(parsed.video_urls)) {
+        return parsed.video_urls
+      }
+      if (parsed.clips && Array.isArray(parsed.clips)) {
+        for (const clip of parsed.clips) {
+          if (clip.video_url) urls.push(clip.video_url)
+        }
+      }
+    }
+  } catch {
+    // Fall through to regex
+  }
+
+  // Extract URLs from text
+  const urlMatches = output.matchAll(/https?:\/\/[^\s"'<>]+\.(?:mp4|webm|mov)/gi)
+  for (const match of urlMatches) {
+    urls.push(match[0])
+  }
+
+  return urls
+}
+
+/**
+ * Parse audio URL from output
+ */
+function parseAudioUrl(output: string): string | undefined {
+  // Parse from JSON
+  try {
+    const jsonMatch = output.match(/```(?:json)?\s*([\s\S]*?)```/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[1])
+      if (parsed.audio_url) return parsed.audio_url
+    }
+  } catch {
+    // Fall through to regex
+  }
+
+  // Extract URL from text
+  const urlMatch = output.match(/https?:\/\/[^\s"'<>]+\.(?:mp3|wav|m4a|aac)/i)
+  return urlMatch?.[0]
+}
+
+/**
+ * Format clips output for display
+ */
+function formatClipsOutput(data: { success: boolean; message?: string; clips?: Array<{ scene_index: number; status: string; video_url?: string; error?: string }>; video_urls?: string[]; errors?: Array<{ scene: number; error: string }> }): string {
+  let output = `## Clips de Video Generados
+
+${data.message || `Se procesaron ${data.clips?.length || 0} escenas`}
+
+### Resultados por Escena
+`
+
+  if (data.clips) {
+    for (const clip of data.clips) {
+      const status = clip.status === 'completed' ? '✅' : clip.status === 'timeout' ? '⏰' : '❌'
+      output += `\n${status} **Escena ${clip.scene_index + 1}**: ${clip.status}`
+      if (clip.video_url) {
+        output += `\n   🎬 [Ver clip](${clip.video_url})`
+      }
+      if (clip.error) {
+        output += `\n   ⚠️ Error: ${clip.error}`
+      }
+    }
+  }
+
+  if (data.video_urls && data.video_urls.length > 0) {
+    output += `\n\n### URLs de Videos Generados
+`
+    data.video_urls.forEach((url, i) => {
+      output += `- Clip ${i + 1}: [${url}](${url})\n`
+    })
+  }
+
+  output += `\n\n\`\`\`json
+${JSON.stringify(data, null, 2)}
+\`\`\`
+`
+
+  return output
+}
+
+/**
+ * Get access token from supabase client for internal API calls
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getAccessToken(supabase: any): Promise<string> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token || ''
+  } catch {
+    return ''
+  }
 }

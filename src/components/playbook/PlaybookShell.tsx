@@ -505,11 +505,18 @@ export default function PlaybookShell({
   // Execute a step
   const executeStep = useCallback(
     async (stepId: string, input?: any) => {
+      console.log('[executeStep] Starting execution for step:', stepId, 'with input:', input)
+
       const step = playbookConfig.phases
         .flatMap(p => p.steps)
         .find(s => s.id === stepId)
 
-      if (!step) return
+      if (!step) {
+        console.error('[executeStep] Step not found:', stepId)
+        return
+      }
+
+      console.log('[executeStep] Found step:', step.id, 'type:', step.type, 'executor:', step.executor, 'jobType:', step.jobType)
 
       // Mark as in progress
       updateStepState(stepId, {
@@ -617,6 +624,8 @@ export default function PlaybookShell({
 
           case 'job':
             // Job-based execution: create job, execute, poll for status
+            console.log('[executeStep] Executor is JOB, jobType:', step.jobType)
+
             if (step.jobType === 'niche_finder_serp') {
               // Check if we have an existing job to resume (from cancelled execution)
               const currentStepForJob = state.phases.flatMap(p => p.steps).find(s => s.id === stepId)
@@ -849,6 +858,135 @@ export default function PlaybookShell({
               // Don't fall through to the completion logic below
               return
             }
+
+            // SCRAPE JOB: Scrape URLs from the SERP results
+            if (step.jobType === 'niche_finder_scrape') {
+              // Get the jobId from the previous step (search_and_preview)
+              const searchStep = state.phases.flatMap(p => p.steps).find(s => s.id === 'search_and_preview')
+              console.log('[SCRAPE] Looking for search_and_preview step:', searchStep)
+              console.log('[SCRAPE] search_and_preview output:', searchStep?.output)
+
+              // Also check for serp_search (legacy step name)
+              const serpStep = state.phases.flatMap(p => p.steps).find(s => s.id === 'serp_search')
+              console.log('[SCRAPE] Looking for serp_search step:', serpStep)
+              console.log('[SCRAPE] serp_search output:', serpStep?.output)
+
+              // Try to get jobId from either step
+              let jobId = (searchStep?.output as { jobId?: string })?.jobId ||
+                          (serpStep?.output as { jobId?: string })?.jobId
+
+              // If still no jobId, try from input (might be passed from ReviewAndScrapePanel)
+              if (!jobId && input?.jobId) {
+                jobId = input.jobId
+                console.log('[SCRAPE] Got jobId from input:', jobId)
+              }
+
+              if (!jobId) {
+                console.error('[SCRAPE] No jobId found. All steps:', state.phases.flatMap(p => p.steps).map(s => ({ id: s.id, output: s.output })))
+                throw new Error('No se encontró el Job ID del paso de búsqueda')
+              }
+
+              console.log('[SCRAPE] Starting scrape for job:', jobId)
+              updateStepState(stepId, {
+                output: { jobId },
+                progress: { current: 0, total: 0, label: 'Iniciando scraping...' }
+              })
+
+              // Get total URLs to scrape
+              const statusResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+              const statusData = await statusResponse.json()
+              const totalUrls = statusData.job?.urls_found || 0
+
+              updateStepState(stepId, {
+                progress: { current: 0, total: totalUrls, label: `Scrapeando 0/${totalUrls} URLs...` }
+              })
+
+              // Start scraping - this will scrape in batches
+              let scrapedCount = 0
+              let failedCount = 0
+              let hasMore = true
+
+              while (hasMore) {
+                try {
+                  const scrapeResponse = await fetch(`/api/niche-finder/jobs/${jobId}/scrape`, {
+                    method: 'POST',
+                  })
+
+                  // Handle non-JSON responses (e.g., Vercel timeout)
+                  const contentType = scrapeResponse.headers.get('content-type')
+                  if (!contentType || !contentType.includes('application/json')) {
+                    console.error('[SCRAPE] Non-JSON response, continuing...')
+                    // Wait a bit and continue polling
+                    await new Promise(resolve => setTimeout(resolve, 2000))
+
+                    // Check current status
+                    const checkResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+                    const checkData = await checkResponse.json()
+
+                    if (checkData.status === 'scrape_done') {
+                      hasMore = false
+                      scrapedCount = checkData.job?.scrape_success_count || 0
+                      failedCount = checkData.job?.scrape_failed_count || 0
+                    }
+                    continue
+                  }
+
+                  const scrapeData = await scrapeResponse.json()
+                  console.log('[SCRAPE] Batch response:', scrapeData)
+
+                  if (scrapeData.error) {
+                    throw new Error(scrapeData.error)
+                  }
+
+                  scrapedCount += scrapeData.scraped || 0
+                  failedCount += scrapeData.failed || 0
+                  hasMore = scrapeData.has_more || false
+
+                  // Update progress
+                  updateStepState(stepId, {
+                    progress: {
+                      current: scrapedCount + failedCount,
+                      total: totalUrls,
+                      label: `Scrapeando ${scrapedCount + failedCount}/${totalUrls} URLs...`,
+                    },
+                    partialResults: {
+                      successCount: scrapedCount,
+                      failedCount: failedCount,
+                    },
+                  })
+
+                } catch (scrapeError) {
+                  console.error('[SCRAPE] Batch error:', scrapeError)
+                  // Don't throw - try to continue with next batch
+                  // The endpoint will mark failed URLs and continue
+                  await new Promise(resolve => setTimeout(resolve, 2000))
+
+                  // Check if we should stop
+                  const checkResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+                  const checkData = await checkResponse.json()
+                  if (checkData.status === 'scrape_done' || checkData.status === 'failed') {
+                    hasMore = false
+                    if (checkData.status === 'failed') {
+                      throw new Error(checkData.job?.error_message || 'Scraping failed')
+                    }
+                  }
+                }
+              }
+
+              // Mark as completed
+              updateStepState(stepId, {
+                status: 'completed',
+                completedAt: new Date(),
+                output: {
+                  jobId,
+                  scrapedCount,
+                  failedCount,
+                },
+              })
+              setTimeout(goToNextStep, 500)
+              return
+            }
+
             // For other job types, just mark as pending
             result = input
             break
