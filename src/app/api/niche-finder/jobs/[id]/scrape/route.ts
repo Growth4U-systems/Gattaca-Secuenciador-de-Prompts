@@ -21,32 +21,27 @@ export async function POST(request: NextRequest, { params }: Params) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
   const { id: jobId } = await params
 
-  // Get user's Firecrawl API key from their settings or fall back to env
-  let firecrawlApiKey: string | null = null
-  try {
-    const supabaseAuth = await createServerClient()
-    const { data: { session } } = await supabaseAuth.auth.getSession()
+  // Get authenticated user
+  const serverClient = await createServerClient()
+  const { data: { session } } = await serverClient.auth.getSession()
 
-    if (session?.user?.id) {
-      firecrawlApiKey = await getUserApiKey({
-        userId: session.user.id,
-        serviceName: 'firecrawl',
-        supabase,
-      })
-    }
-  } catch (authError) {
-    console.log('[Scrape] Auth error, trying env fallback:', authError)
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Fall back to environment variable
-  if (!firecrawlApiKey) {
-    firecrawlApiKey = process.env.FIRECRAWL_API_KEY || null
-  }
+  // Get Firecrawl API key (user's personal key or env fallback)
+  const firecrawlApiKey = await getUserApiKey({
+    userId: session.user.id,
+    serviceName: 'firecrawl',
+    supabase: serverClient,
+  })
 
   if (!firecrawlApiKey) {
     return NextResponse.json({
-      error: 'Firecrawl API key not configured. Please add your API key in Settings > API Keys or contact support.'
-    }, { status: 500 })
+      error: 'Firecrawl API key not configured. Please add your API key in Settings > API Keys.',
+      code: 'MISSING_API_KEY',
+      service: 'firecrawl',
+    }, { status: 400 })
   }
 
   try {
