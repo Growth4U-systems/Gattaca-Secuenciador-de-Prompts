@@ -359,6 +359,9 @@ export async function POST(request: NextRequest, { params }: Params) {
       remaining: remainingCount || 0,
       cost_usd: totalCost,
       has_more: hasMore,
+      // Real-time feedback for UI
+      last_scraped_url: lastScrapedUrl,
+      last_scraped_snippet: lastScrapedSnippet,
     })
   } catch (error) {
     console.error('Error in scrape route:', error)
