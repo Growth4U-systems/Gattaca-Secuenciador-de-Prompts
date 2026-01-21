@@ -1091,7 +1091,8 @@ async function handleGenerateClipsStep(
     const output = formatClipsOutput(data)
 
     // Save to database
-    await adminClient
+    console.log('[generate_clips] Saving to DB with:', { projectId, playbookType, stepId })
+    const { error: upsertError } = await adminClient
       .from('playbook_step_outputs')
       .upsert({
         project_id: projectId,
@@ -1106,6 +1107,12 @@ async function handleGenerateClipsStep(
       }, {
         onConflict: 'project_id,playbook_type,step_id'
       })
+
+    if (upsertError) {
+      console.error('[generate_clips] UPSERT ERROR:', upsertError)
+      throw new Error(`Error saving clips to database: ${upsertError.message}`)
+    }
+    console.log('[generate_clips] Saved successfully to DB')
 
     return NextResponse.json({
       success: true,
@@ -1329,6 +1336,18 @@ async function handleComposeVideoStep(
   try {
     console.log('[compose_video] Starting video composition')
     console.log('[compose_video] Looking for clips with:', { projectId, playbookType, stepId: 'generate_clips' })
+
+    // Debug: List all steps for this project to see what's stored
+    const { data: allSteps, error: debugError } = await adminClient
+      .from('playbook_step_outputs')
+      .select('step_id, playbook_type, status, created_at')
+      .eq('project_id', projectId)
+
+    console.log('[compose_video] DEBUG - All steps for project:', {
+      count: allSteps?.length || 0,
+      steps: allSteps?.map(s => ({ step_id: s.step_id, playbook_type: s.playbook_type, status: s.status })),
+      error: debugError?.message
+    })
 
     // Get video clips from generate_clips step
     const { data: clipsOutput, error: clipsError } = await adminClient
