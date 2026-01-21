@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase-server'
+import { createClient as createAdminClient } from '@/lib/supabase-server-admin'
 import { getUserApiKey } from '@/lib/getUserApiKey'
 
 export const dynamic = 'force-dynamic'
@@ -44,19 +45,23 @@ const FAL_MERGE_AUDIO_VIDEO = 'https://fal.run/fal-ai/ffmpeg-api/merge-audio-vid
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerClient()
     const body: ComposeVideoRequest = await request.json()
     const { projectId, video_urls, audio_url, target_fps = 30, resolution, _internal_user_id } = body
 
     // Check authentication - support internal server-to-server calls
     let userId: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let supabaseForApiKey: any
 
     if (_internal_user_id) {
       // Internal call from execute-step - trust the userId passed
+      // Use admin client to read user_api_keys (bypasses RLS)
       console.log('[compose-video] Internal call with userId:', _internal_user_id)
       userId = _internal_user_id
+      supabaseForApiKey = createAdminClient()
     } else {
       // External call - verify via Supabase auth
+      const supabase = await createServerClient()
       const {
         data: { user },
         error: authError,
@@ -66,6 +71,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
       }
       userId = user.id
+      supabaseForApiKey = supabase
     }
 
     if (!projectId || !video_urls || video_urls.length < 1) {
@@ -80,7 +86,7 @@ export async function POST(request: NextRequest) {
       (await getUserApiKey({
         userId,
         serviceName: 'fal',
-        supabase,
+        supabase: supabaseForApiKey,
       })) || process.env.FAL_API_KEY
 
     if (!falApiKey) {
