@@ -8,6 +8,74 @@ export const dynamic = 'force-dynamic'
 // Firecrawl cost per page
 const FIRECRAWL_COST_PER_PAGE = 0.001
 
+// Reddit scraper using public JSON API
+async function scrapeRedditUrl(url: string): Promise<{ success: boolean; markdown?: string; error?: string }> {
+  try {
+    // Convert Reddit URL to JSON endpoint
+    // https://www.reddit.com/r/sub/comments/id/title -> https://www.reddit.com/r/sub/comments/id/title.json
+    let jsonUrl = url.replace(/\?.*$/, '') // Remove query params
+    if (!jsonUrl.endsWith('.json')) {
+      jsonUrl = jsonUrl.replace(/\/$/, '') + '.json'
+    }
+
+    console.log(`[SCRAPE-REDDIT] Fetching: ${jsonUrl}`)
+
+    const response = await fetch(jsonUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; NicheFinderBot/1.0)',
+      },
+    })
+
+    if (!response.ok) {
+      return { success: false, error: `Reddit API error: ${response.status}` }
+    }
+
+    const data = await response.json()
+
+    // Reddit returns an array: [post, comments]
+    if (!Array.isArray(data) || data.length < 2) {
+      return { success: false, error: 'Invalid Reddit response format' }
+    }
+
+    const post = data[0]?.data?.children?.[0]?.data
+    const comments = data[1]?.data?.children || []
+
+    if (!post) {
+      return { success: false, error: 'Could not extract post data' }
+    }
+
+    // Build markdown content
+    let markdown = `# ${post.title}\n\n`
+    markdown += `**Subreddit:** r/${post.subreddit}\n`
+    markdown += `**Score:** ${post.score} | **Comments:** ${post.num_comments}\n\n`
+
+    if (post.selftext) {
+      markdown += `## Post Content\n\n${post.selftext}\n\n`
+    }
+
+    // Add top comments (limit to 20)
+    if (comments.length > 0) {
+      markdown += `## Top Comments\n\n`
+      let commentCount = 0
+      for (const comment of comments) {
+        if (comment.kind === 't1' && comment.data?.body && commentCount < 20) {
+          const body = comment.data.body
+          const score = comment.data.score || 0
+          markdown += `---\n**Score: ${score}**\n\n${body}\n\n`
+          commentCount++
+        }
+      }
+    }
+
+    console.log(`[SCRAPE-REDDIT] Success: ${url.substring(0, 50)}... (${markdown.length} chars)`)
+    return { success: true, markdown }
+
+  } catch (error) {
+    console.error(`[SCRAPE-REDDIT] Error for ${url}:`, error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
 type Params = { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, { params }: Params) {
@@ -98,13 +166,29 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     let successCount = 0
     let failCount = 0
+    let skippedCount = 0
     let totalCost = 0
     let lastScrapedUrl = ''
     let lastScrapedSnippet = ''
 
-    // Scrape URLs sequentially to update progress in real-time
-    for (const urlRecord of pendingUrls) {
-      try {
+    // Rate limiting: Firecrawl free tier is ~100 req/min, so we add 600ms delay
+    const DELAY_BETWEEN_REQUESTS_MS = 600
+
+    // Helper to check if URL is a Reddit URL
+    const isRedditUrl = (url: string): boolean => {
+      return url.includes('reddit.com')
+    }
+
+    // Helper to check if URL should be skipped entirely
+    const shouldSkipUrl = (url: string): boolean => {
+      // Google Translate URLs are not useful
+      if (url.includes('translate.google.com')) return true
+      return false
+    }
+
+    // Helper for rate-limited retries
+    const scrapeWithRetry = async (url: string, maxRetries = 3): Promise<{ success: boolean; markdown?: string; error?: string }> => {
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
         const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
           method: 'POST',
           headers: {
@@ -112,7 +196,7 @@ export async function POST(request: NextRequest, { params }: Params) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            url: urlRecord.url,
+            url,
             formats: ['markdown'],
             onlyMainContent: true,
           }),
@@ -120,13 +204,65 @@ export async function POST(request: NextRequest, { params }: Params) {
 
         const data = await response.json()
 
-        if (!response.ok) {
-          const errorMsg = data?.error || data?.message || `HTTP ${response.status}`
-          console.error(`[SCRAPE] Firecrawl error for ${urlRecord.url}: ${errorMsg}`)
-          throw new Error(`Firecrawl: ${errorMsg}`)
+        if (response.ok) {
+          return { success: true, markdown: data.data?.markdown || '' }
         }
 
-        const markdown = data.data?.markdown || ''
+        const errorMsg = data?.error || data?.message || `HTTP ${response.status}`
+
+        // Check if rate limited
+        if (errorMsg.includes('Rate limit') || response.status === 429) {
+          // Extract wait time from error message or use default
+          const waitMatch = errorMsg.match(/retry after (\d+)s/)
+          const waitSeconds = waitMatch ? parseInt(waitMatch[1]) : 30
+          console.log(`[SCRAPE] Rate limited, waiting ${waitSeconds}s before retry ${attempt + 1}/${maxRetries}`)
+          await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000))
+          continue
+        }
+
+        // Non-retryable error
+        return { success: false, error: errorMsg }
+      }
+      return { success: false, error: 'Max retries exceeded due to rate limiting' }
+    }
+
+    // Scrape URLs sequentially to update progress in real-time
+    for (const urlRecord of pendingUrls) {
+      try {
+        // Skip URLs that should be ignored
+        if (shouldSkipUrl(urlRecord.url)) {
+          console.log(`[SCRAPE] Skipping unsupported URL: ${urlRecord.url.substring(0, 60)}...`)
+          await supabase
+            .from('niche_finder_urls')
+            .update({
+              status: 'skipped',
+              error_message: 'URL not supported (Google Translate)',
+            })
+            .eq('id', urlRecord.id)
+          skippedCount++
+          continue
+        }
+
+        // Rate limiting delay
+        await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_REQUESTS_MS))
+
+        let result: { success: boolean; markdown?: string; error?: string }
+
+        // Use appropriate scraper based on URL
+        if (isRedditUrl(urlRecord.url)) {
+          // Use Reddit JSON API scraper
+          result = await scrapeRedditUrl(urlRecord.url)
+        } else {
+          // Use Firecrawl for other URLs
+          result = await scrapeWithRetry(urlRecord.url)
+        }
+
+        if (!result.success) {
+          console.error(`[SCRAPE] Error for ${urlRecord.url}: ${result.error}`)
+          throw new Error(result.error || 'Unknown scrape error')
+        }
+
+        const markdown = result.markdown || ''
 
         // Log successful scrape
         console.log(`[SCRAPE] Success: ${urlRecord.url.substring(0, 60)}... (${markdown.length} chars)`)
@@ -219,6 +355,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       success: true,
       scraped: successCount,
       failed: failCount,
+      skipped: skippedCount,
       remaining: remainingCount || 0,
       cost_usd: totalCost,
       has_more: hasMore,
