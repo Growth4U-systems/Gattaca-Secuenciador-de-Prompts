@@ -44,10 +44,14 @@ export function ReviewAndScrapePanel({
   projectId,
   onExecute,
   onBack,
-  isExecuting = false,
+  isExecuting: externalIsExecuting = false,
   progress,
 }: ReviewAndScrapePanelProps) {
   const [loading, setLoading] = useState(true)
+  const [localIsExecuting, setLocalIsExecuting] = useState(false)
+
+  // Use either external or local executing state
+  const isExecuting = externalIsExecuting || localIsExecuting
   const [error, setError] = useState<string | null>(null)
   const [urlsBySource, setUrlsBySource] = useState<UrlSummary[]>([])
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set())
@@ -282,13 +286,24 @@ export function ReviewAndScrapePanel({
           </div>
         )}
 
-        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-          <p className="text-sm text-blue-700">
-            {progress?.lastUrl
-              ? 'Extrayendo contenido...'
-              : 'Descargando contenido de foros y redes sociales...'}
-          </p>
-        </div>
+        {/* Show "starting" message when no progress yet */}
+        {!progress && (
+          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+            <p className="text-sm text-yellow-700">
+              Iniciando scraping... El primer batch puede tardar unos segundos.
+            </p>
+          </div>
+        )}
+
+        {progress && (
+          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+            <p className="text-sm text-blue-700">
+              {progress?.lastUrl
+                ? 'Extrayendo contenido...'
+                : 'Procesando batch de URLs...'}
+            </p>
+          </div>
+        )}
       </div>
     )
   }
@@ -530,13 +545,13 @@ export function ReviewAndScrapePanel({
             console.log('[ReviewAndScrapePanel] Scrapear button clicked!')
             console.log('[ReviewAndScrapePanel] Selected sources:', urlsBySource.filter(s => s.selected).map(s => s.source))
             console.log('[ReviewAndScrapePanel] Total selected URLs count:', stats.selectedUrls)
-            console.log('[ReviewAndScrapePanel] Sample URLs from getSelectedUrls():', getSelectedUrls().slice(0, 5))
-            console.log('[ReviewAndScrapePanel] Calling onExecute with selected sources...')
+            // Set local executing state IMMEDIATELY to show progress UI
+            setLocalIsExecuting(true)
             // Pass selected source types so the scraper knows which to process
             const selectedSources = urlsBySource.filter(s => s.selected).map(s => s.source)
             onExecute(selectedSources)
           }}
-          disabled={stats.selectedUrls === 0}
+          disabled={stats.selectedUrls === 0 || isExecuting}
           className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
             stats.selectedUrls === 0
               ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
