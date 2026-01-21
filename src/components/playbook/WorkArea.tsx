@@ -770,6 +770,131 @@ function AutoStep({
   )
 }
 
+// SERP Results Summary - Simple view after search completes
+// Shows count and allows continuing to next step (where actual scraping happens)
+interface SerpResultsSummaryProps {
+  jobId: string
+  onContinue: () => void
+  onBack: () => void
+}
+
+function SerpResultsSummary({ jobId, onContinue, onBack }: SerpResultsSummaryProps) {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [summary, setSummary] = useState<{ totalUrls: number; sourceCount: number } | null>(null)
+
+  useEffect(() => {
+    async function loadSummary() {
+      try {
+        setLoading(true)
+        const response = await fetch(`/api/niche-finder/jobs/${jobId}/urls/summary`)
+        if (!response.ok) {
+          throw new Error('Error cargando resumen')
+        }
+        const data = await response.json()
+        const totalUrls = (data.sources || []).reduce(
+          (sum: number, s: { count: number }) => sum + s.count,
+          0
+        )
+        setSummary({
+          totalUrls,
+          sourceCount: data.sources?.length || 0,
+        })
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error desconocido')
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadSummary()
+  }, [jobId])
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-3 py-8">
+        <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+        <span className="text-gray-600">Cargando resultados...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <p className="text-red-800">{error}</p>
+        <button
+          onClick={onBack}
+          className="mt-3 px-4 py-2 border border-red-300 rounded-lg text-red-700 hover:bg-red-100"
+        >
+          ← Volver
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Success message */}
+      <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+            <Check className="w-5 h-5 text-green-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-green-800">Búsqueda completada</h3>
+            <p className="text-sm text-green-600">
+              Las URLs están listas para revisar y scrapear
+            </p>
+          </div>
+        </div>
+
+        {/* Stats */}
+        {summary && (
+          <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-green-200">
+            <div className="text-center">
+              <p className="text-3xl font-bold text-green-700">
+                {summary.totalUrls.toLocaleString()}
+              </p>
+              <p className="text-sm text-green-600">URLs encontradas</p>
+            </div>
+            <div className="text-center">
+              <p className="text-3xl font-bold text-green-700">
+                {summary.sourceCount}
+              </p>
+              <p className="text-sm text-green-600">Fuentes diferentes</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Info about next step */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <p className="text-sm text-blue-800">
+          <strong>Siguiente paso:</strong> Podrás revisar las URLs por fuente, seleccionar cuáles
+          incluir, y ejecutar el scraping para descargar el contenido.
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-4">
+        <button
+          onClick={onBack}
+          className="px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          ← Volver
+        </button>
+        <button
+          onClick={onContinue}
+          className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+        >
+          Continuar a Revisar URLs
+          <ChevronRight size={18} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // Search with Preview Panel component
 interface SearchWithPreviewStepProps {
   step: StepDefinition
@@ -858,18 +983,18 @@ function SearchWithPreviewStep({
     )
   }
 
-  // If we have a serpJobId and the step is not error, show SERP results
-  // Note: 'completed' status is already handled above
+  // If we have a serpJobId and the step is not error, show simple summary
+  // The detailed URL selection happens in the next step (review_and_scrape)
   if (serpJobId && stepState.status !== 'error') {
     return (
-      <SerpResultsPanel
+      <SerpResultsSummary
         jobId={serpJobId}
         onContinue={() => {
           // IMPORTANT: Save jobId in output so next step (review_and_scrape) can access it
           onUpdateState({
             status: 'completed',
             completedAt: new Date(),
-            output: { jobId: serpJobId }, // Fix: preserve jobId for next step
+            output: { jobId: serpJobId },
           })
         }}
         onBack={onBack || (() => {})}
