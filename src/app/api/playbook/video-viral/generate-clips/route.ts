@@ -83,11 +83,14 @@ export async function POST(request: NextRequest) {
       projectId,
       scenes,
       aspect_ratio = '9:16',
-      duration = 5,
+      duration: rawDuration = 5,
       resolution = '720p',
       generate_audio = false,
       _internal_user_id,
     } = body
+
+    // Ensure duration is an integer (API requires integer, may come as string or float)
+    const duration = Math.round(Number(rawDuration) || 5)
 
     // Check authentication - support internal server-to-server calls
     let userId: string
@@ -179,11 +182,10 @@ export async function POST(request: NextRequest) {
 
       try {
         // Build request body as string first to catch encoding issues
-        // Ensure duration is an integer as required by Wavespeed API
         const requestBody = JSON.stringify({
           prompt: scenePrompt,
           aspect_ratio,
-          duration: Math.round(duration),
+          duration,
           resolution,
           generate_audio,
           seed: -1,
