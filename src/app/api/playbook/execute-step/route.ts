@@ -1192,11 +1192,11 @@ async function handleGenerateAudioStep(
     console.log(`[generate_audio] Using prompt: ${soundPrompt}`)
     console.log(`[generate_audio] Video URL: ${videoUrl || 'none'}`)
 
-    // Get Fal AI API key
+    // Get Fal AI API key - use adminClient to bypass RLS
     const falApiKey = await getUserApiKey({
       userId,
       serviceName: 'fal',
-      supabase,
+      supabase: adminClient,
     }) || process.env.FAL_API_KEY
 
     if (!falApiKey) {
