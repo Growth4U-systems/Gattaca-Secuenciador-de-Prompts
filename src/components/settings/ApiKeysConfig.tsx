@@ -50,6 +50,27 @@ const SERVICE_INFO: Record<string, ServiceInfo> = {
     docsUrl: 'https://openrouter.ai/keys',
     placeholder: 'sk-or-v1-xxxxxxxxxxxx',
   },
+  wavespeed: {
+    name: 'wavespeed',
+    label: 'Wavespeed AI',
+    description: 'Generación de videos IA (Seedance) para Video Viral IA',
+    docsUrl: 'https://wavespeed.ai/dashboard',
+    placeholder: 'ws_xxxxxxxxxxxx',
+  },
+  fal: {
+    name: 'fal',
+    label: 'Fal AI',
+    description: 'Audio y composición de video (MMAudio, FFmpeg) para Video Viral IA',
+    docsUrl: 'https://fal.ai/dashboard/keys',
+    placeholder: 'fal_xxxxxxxxxxxx',
+  },
+  blotato: {
+    name: 'blotato',
+    label: 'Blotato',
+    description: 'Publicación automática a redes sociales (TikTok, Instagram, YouTube, etc.)',
+    docsUrl: 'https://my.blotato.com/settings',
+    placeholder: 'blotato_xxxxxxxxxxxx',
+  },
 };
 
 export default function ApiKeysConfig() {

@@ -54,6 +54,13 @@ const SERVICE_INFO: Record<string, ServiceInfo> = {
     docsUrl: 'https://fal.ai/dashboard/keys',
     placeholder: 'fal_xxxxxxxxxxxx',
   },
+  blotato: {
+    name: 'blotato',
+    label: 'Blotato',
+    description: 'Publicación automática a redes sociales (TikTok, Instagram, YouTube, etc.)',
+    docsUrl: 'https://my.blotato.com/settings',
+    placeholder: 'blotato_xxxxxxxxxxxx',
+  },
 };
 
 interface ApiKeySetupModalProps {

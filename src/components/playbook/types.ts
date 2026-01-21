@@ -50,6 +50,10 @@ export interface StepDefinition {
   type: StepType
   executor: ExecutorType
 
+  // Required API keys - will show setup modal if not configured
+  // e.g., ['blotato', 'wavespeed'] or ['serper', 'firecrawl']
+  requiredApiKeys?: string[]
+
   // For LLM executor
   promptKey?: string
 

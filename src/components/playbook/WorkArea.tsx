@@ -25,6 +25,7 @@ import { SerpResultsPanel } from './SerpResultsPanel'
 import { SearchWithPreviewPanel } from './SearchWithPreviewPanel'
 import { ReviewAndScrapePanel } from './ReviewAndScrapePanel'
 import { ScrapeResultsPanel } from './ScrapeResultsPanel'
+import ApiKeySetupModal from '../settings/ApiKeySetupModal'
 
 // Sub-components for different step types
 
@@ -471,11 +472,15 @@ function AutoWithReviewStep({
     setIsEditing(false)
   }
 
-  // Get the output to display
-  const outputToDisplay = editedOutput !== null ? editedOutput : stepState.output
+  // Check if this is a review-only step (executor: none with previousOutput)
+  const isReviewOnlyStep = step.executor === 'none' && previousOutput && !stepState.output
 
-  // If not yet executed
-  if (!stepState.output && stepState.status !== 'completed') {
+  // Get the output to display - prefer stepState.output, fall back to previousOutput for review steps
+  const dataToDisplay = stepState.output || (isReviewOnlyStep ? previousOutput : null)
+  const outputToDisplay = editedOutput !== null ? editedOutput : dataToDisplay
+
+  // If not yet executed and not a review-only step
+  if (!stepState.output && stepState.status !== 'completed' && !isReviewOnlyStep) {
     return (
       <div className="space-y-4">
         {/* Execution explanation if available */}
@@ -673,20 +678,64 @@ function AutoStep({
     }
   }
 
-  // If completed, show success message
+  // If completed, show success message with useful context
   if (stepState.status === 'completed') {
+    // Check if output is a CSV/table (common for extraction steps)
+    const output = stepState.output
+    const isTableOutput = typeof output === 'string' && (
+      output.includes('|') || // Markdown table
+      output.includes(',') && output.includes('\n') // CSV
+    )
+
+    // Count rows if it's table data
+    let rowCount = 0
+    if (isTableOutput && typeof output === 'string') {
+      const lines = output.split('\n').filter(line => line.trim())
+      // Subtract header row(s)
+      rowCount = Math.max(0, lines.length - 2) // Header + separator
+    }
+
     return (
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
-        <Check className="text-green-600" size={20} />
-        <div>
-          <p className="text-green-800 font-medium">Completado</p>
-          {stepState.output && (
-            <p className="text-sm text-green-600 mt-1">
-              {typeof stepState.output === 'string'
-                ? stepState.output.slice(0, 100) + (stepState.output.length > 100 ? '...' : '')
-                : 'Resultado guardado'}
-            </p>
-          )}
+      <div className="space-y-4">
+        {/* Success message */}
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+              <Check className="text-green-600" size={20} />
+            </div>
+            <div>
+              <p className="text-green-800 font-medium">Paso completado</p>
+              {isTableOutput && rowCount > 0 && (
+                <p className="text-sm text-green-600 mt-1">
+                  Se extrajeron {rowCount} registros
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Show preview of output if it's substantial */}
+        {output && typeof output === 'string' && output.length > 50 && (
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">Vista previa del resultado</span>
+              <span className="text-xs text-gray-500">
+                {output.length.toLocaleString()} caracteres
+              </span>
+            </div>
+            <div className="p-4 max-h-48 overflow-auto bg-white">
+              <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono">
+                {output.slice(0, 1000)}{output.length > 1000 ? '\n...(truncado)' : ''}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        {/* Next step hint */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800">
+            <strong>Siguiente:</strong> Haz clic en "Siguiente" para continuar al próximo paso del análisis.
+          </p>
         </div>
       </div>
     )
@@ -901,6 +950,7 @@ interface SearchWithPreviewStepProps {
   stepState: StepState
   onUpdateState: (update: Partial<StepState>) => void
   onExecute: (input?: unknown) => Promise<void>
+  onContinue: () => void
   onBack?: () => void
   onCancel?: () => void
   previousOutput?: unknown
@@ -914,10 +964,10 @@ function SearchWithPreviewStep({
   stepState,
   onUpdateState,
   onExecute,
+  onContinue,
   onBack,
   onCancel,
   playbookContext,
-  projectId,
   isExecuting: externalIsExecuting,
 }: SearchWithPreviewStepProps) {
   const isExecuting = externalIsExecuting || stepState.status === 'in_progress'
@@ -996,6 +1046,8 @@ function SearchWithPreviewStep({
             completedAt: new Date(),
             output: { jobId: serpJobId },
           })
+          // Call the parent's onContinue to advance to next step
+          onContinue()
         }}
         onBack={onBack || (() => {})}
       />
@@ -1210,6 +1262,47 @@ export function WorkArea({
   const [isExpanded, setIsExpanded] = useState(true)
   const prevStepIdRef = useRef<string | null>(null)
 
+  // API key verification state
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false)
+  const [missingApiKeys, setMissingApiKeys] = useState<string[]>([])
+  const [apiKeysChecked, setApiKeysChecked] = useState(false)
+
+  // Check required API keys when step changes
+  useEffect(() => {
+    const checkApiKeys = async () => {
+      if (!step.requiredApiKeys || step.requiredApiKeys.length === 0) {
+        setApiKeysChecked(true)
+        setMissingApiKeys([])
+        return
+      }
+
+      try {
+        const services = step.requiredApiKeys.join(',')
+        const response = await fetch(`/api/user/api-keys/check?services=${services}`)
+        const data = await response.json()
+
+        if (data.missing && data.missing.length > 0) {
+          setMissingApiKeys(data.missing)
+          setShowApiKeyModal(true)
+        } else {
+          setMissingApiKeys([])
+        }
+        setApiKeysChecked(true)
+      } catch (error) {
+        console.error('Error checking API keys:', error)
+        setApiKeysChecked(true)
+      }
+    }
+
+    // Reset state when step changes
+    if (prevStepIdRef.current !== step.id) {
+      setApiKeysChecked(false)
+      setMissingApiKeys([])
+      setShowApiKeyModal(false)
+      checkApiKeys()
+    }
+  }, [step.id, step.requiredApiKeys])
+
   // Auto-expand when step changes
   useEffect(() => {
     if (prevStepIdRef.current !== step.id) {
@@ -1291,6 +1384,7 @@ export function WorkArea({
           stepState={stepState}
           onUpdateState={onUpdateState}
           onExecute={onExecute}
+          onContinue={onContinue}
           onBack={onBack}
           onCancel={onCancel}
           previousOutput={previousStepOutput}
@@ -1749,6 +1843,22 @@ export function WorkArea({
             </span>
           )}
         </div>
+      )}
+
+      {/* API Key Setup Modal */}
+      {showApiKeyModal && missingApiKeys.length > 0 && (
+        <ApiKeySetupModal
+          missingServices={missingApiKeys}
+          onComplete={() => {
+            setShowApiKeyModal(false)
+            setMissingApiKeys([])
+          }}
+          onCancel={() => {
+            setShowApiKeyModal(false)
+          }}
+          title="Configurar API Keys"
+          description={`Este paso requiere las siguientes API keys para funcionar:`}
+        />
       )}
     </div>
   )

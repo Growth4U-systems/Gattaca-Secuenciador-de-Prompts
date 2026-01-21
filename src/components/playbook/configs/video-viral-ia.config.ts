@@ -87,6 +87,7 @@ export const videoViralIAConfig: PlaybookConfig = {
           type: 'auto_with_review',
           executor: 'llm', // Routes through execute-step which handles Wavespeed API
           dependsOn: ['generate_scenes'],
+          requiredApiKeys: ['wavespeed'],
         },
       ],
     },
@@ -106,6 +107,7 @@ export const videoViralIAConfig: PlaybookConfig = {
           type: 'auto_with_review',
           executor: 'llm', // Routes through execute-step which handles Fal AI
           dependsOn: ['generate_clips'],
+          requiredApiKeys: ['fal'],
         },
         {
           id: 'compose_video',
@@ -114,6 +116,7 @@ export const videoViralIAConfig: PlaybookConfig = {
           type: 'auto_with_review',
           executor: 'llm', // Routes through execute-step which handles Fal AI FFmpeg
           dependsOn: ['generate_audio'],
+          requiredApiKeys: ['fal'],
         },
       ],
     },
@@ -136,14 +139,15 @@ export const videoViralIAConfig: PlaybookConfig = {
         },
         {
           id: 'export',
-          name: 'Exportar/Publicar',
+          name: 'Publicar en Redes',
           description:
-            'Exporta el video o publica directamente a las plataformas',
-          type: 'action',
-          executor: 'none', // Will be 'api' when Blotato is integrated
+            'Publica el video a las plataformas seleccionadas via Blotato',
+          type: 'auto_with_review',
+          executor: 'api',
           dependsOn: ['preview'],
+          requiredApiKeys: ['blotato'],
           actionConfig: {
-            label: 'Exportar Video',
+            label: 'Publicar Video',
             actionType: 'export',
           },
         },
