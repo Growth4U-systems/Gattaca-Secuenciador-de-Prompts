@@ -104,11 +104,12 @@ export function ReviewAndScrapePanel({
         const data = await response.json()
 
         // Transform to our format - all sources selected by default
-        const summaries: UrlSummary[] = Object.entries(data.bySource || {}).map(
-          ([source, urls]) => ({
-            source,
-            count: (urls as string[]).length,
-            urls: urls as string[],
+        // API returns { sources: [{ source_type, count, sampleUrls }] }
+        const summaries: UrlSummary[] = (data.sources || []).map(
+          (source: { source_type: string; count: number; sampleUrls: { url: string }[] }) => ({
+            source: source.source_type,
+            count: source.count,
+            urls: source.sampleUrls.map((u: { url: string }) => u.url),
             selected: true,
           })
         )
