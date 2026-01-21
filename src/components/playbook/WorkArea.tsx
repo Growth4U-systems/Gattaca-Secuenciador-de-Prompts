@@ -1608,7 +1608,8 @@ export default function WorkArea({
                     (playbookContext?.search_and_preview_output as { jobId?: string })?.jobId ||
                     playbookContext?.latestJobId as string
 
-      if (jobId || isExecuting) {
+      // Show panel if we have jobId, projectId (to fetch job), or if executing
+      if (jobId || projectId || isExecuting) {
         return (
           <ReviewAndScrapePanel
             jobId={jobId}
