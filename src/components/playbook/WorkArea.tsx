@@ -1615,12 +1615,15 @@ export default function WorkArea({
             jobId={jobId}
             projectId={projectId} // Pass projectId as fallback for fetching latest job
             onExecute={async (selectedUrls) => {
+              console.log('[WorkArea] ReviewAndScrapePanel onExecute called with', selectedUrls.length, 'URLs')
               onUpdateState({
                 status: 'in_progress',
                 startedAt: new Date(),
                 input: { selectedUrls },
               })
+              console.log('[WorkArea] Calling parent onExecute...')
               await onExecute({ selectedUrls })
+              console.log('[WorkArea] Parent onExecute finished')
             }}
             onBack={onBack}
             isExecuting={isExecuting}

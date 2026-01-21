@@ -54,12 +54,16 @@ export function ReviewAndScrapePanel({
   // First, resolve jobId if not provided but projectId is available
   useEffect(() => {
     const resolveJobId = async () => {
+      console.log('[ReviewPanel] resolveJobId called, initialJobId:', initialJobId, 'projectId:', projectId)
+
       if (initialJobId) {
+        console.log('[ReviewPanel] Using initialJobId:', initialJobId)
         setResolvedJobId(initialJobId)
         return
       }
 
       if (!projectId) {
+        console.log('[ReviewPanel] No projectId available')
         setError('No se puede cargar URLs: falta jobId o projectId')
         setLoading(false)
         return
@@ -67,18 +71,23 @@ export function ReviewAndScrapePanel({
 
       try {
         // Fetch latest job for this project
+        console.log('[ReviewPanel] Fetching job for projectId:', projectId)
         const response = await fetch(`/api/niche-finder/jobs?project_id=${projectId}&status=serp_done&limit=1`)
         if (!response.ok) {
           throw new Error('Error buscando job del proyecto')
         }
         const data = await response.json()
+        console.log('[ReviewPanel] Jobs response:', data)
         if (data.jobs && data.jobs.length > 0) {
+          console.log('[ReviewPanel] Found job:', data.jobs[0].id)
           setResolvedJobId(data.jobs[0].id)
         } else {
+          console.log('[ReviewPanel] No jobs found')
           setError('No se encontró un job SERP completado para este proyecto')
           setLoading(false)
         }
       } catch (err) {
+        console.error('[ReviewPanel] Error resolving job:', err)
         setError(err instanceof Error ? err.message : 'Error buscando job')
         setLoading(false)
       }
@@ -90,18 +99,21 @@ export function ReviewAndScrapePanel({
   // Fetch URL summary from API
   useEffect(() => {
     const fetchUrls = async () => {
+      console.log('[ReviewPanel] fetchUrls called, resolvedJobId:', resolvedJobId)
       if (!resolvedJobId) return
 
       try {
         setLoading(true)
         setError(null)
 
+        console.log('[ReviewPanel] Fetching URLs for job:', resolvedJobId)
         const response = await fetch(`/api/niche-finder/jobs/${resolvedJobId}/urls/summary`)
         if (!response.ok) {
           throw new Error('Error cargando URLs')
         }
 
         const data = await response.json()
+        console.log('[ReviewPanel] URLs response:', data)
 
         // Transform to our format - all sources selected by default
         // API returns { sources: [{ source_type, count, sampleUrls }] }
@@ -114,6 +126,7 @@ export function ReviewAndScrapePanel({
           })
         )
 
+        console.log('[ReviewPanel] Summaries:', summaries)
         setUrlsBySource(summaries)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error desconocido')
@@ -492,7 +505,12 @@ export function ReviewAndScrapePanel({
           ← Volver
         </button>
         <button
-          onClick={() => onExecute(getSelectedUrls())}
+          onClick={() => {
+            console.log('[ReviewAndScrapePanel] Scrapear button clicked!')
+            console.log('[ReviewAndScrapePanel] Selected URLs count:', stats.selectedUrls)
+            console.log('[ReviewAndScrapePanel] Calling onExecute...')
+            onExecute(getSelectedUrls())
+          }}
           disabled={stats.selectedUrls === 0}
           className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
             stats.selectedUrls === 0
