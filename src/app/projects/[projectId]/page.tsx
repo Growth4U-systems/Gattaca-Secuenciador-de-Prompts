@@ -26,6 +26,7 @@ import NicheFinderPlaybookV2 from '@/components/niche-finder/NicheFinderPlaybook
 import SignalBasedOutreachPlaybook from '@/components/signal-outreach/SignalBasedOutreachPlaybook'
 import { VideoViralIAPlaybook } from '@/components/video-viral-ia'
 import { Video } from 'lucide-react'
+import ClientSidebar from '@/components/layout/ClientSidebar'
 
 type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder' | 'signal-outreach' | 'video-viral-ia'
 
@@ -248,29 +249,24 @@ export default function ProjectPage({
   // Get current tab info
   const currentTab = tabs.find(t => t.id === activeTab)
 
-  return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
-      {/* Top Navigation Bar */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Breadcrumbs */}
-          <nav className="flex items-center gap-2 py-3 text-sm" aria-label="Breadcrumb">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 text-gray-500 hover:text-blue-600 transition-colors"
-            >
-              <Home size={14} />
-              <span>Proyectos</span>
-            </Link>
-            <ChevronRight size={14} className="text-gray-300" />
-            <span className="text-gray-900 font-medium truncate max-w-[200px]" title={project.name}>
-              {project.name}
-            </span>
-          </nav>
-        </div>
-      </div>
+  // Create client object for sidebar
+  const clientForSidebar = project.client ? {
+    id: project.client.id,
+    name: project.client.name,
+    industry: project.client.industry || null,
+    status: 'active' as const,
+  } : null
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex">
+      {/* Sidebar */}
+      {clientForSidebar && (
+        <ClientSidebar client={clientForSidebar} currentProjectId={params.projectId} />
+      )}
+
+      {/* Main Content */}
+      <div className="flex-1 min-w-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Project Header Card */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
           <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 px-6 py-5">
@@ -500,6 +496,7 @@ export default function ProjectPage({
             )}
           </div>
         </div>
+      </div>
       </div>
 
       {/* Share Modal */}

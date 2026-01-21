@@ -36,7 +36,7 @@ import DocumentList from '@/components/documents/DocumentList'
 import DocumentFolderView from '@/components/documents/DocumentFolderView'
 import { useToast } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
-import { Growth4ULogo } from '@/components/ui/Growth4ULogo'
+import ClientSidebar from '@/components/layout/ClientSidebar'
 
 type TabType = 'overview' | 'context-lake' | 'projects' | 'playbooks' | 'settings'
 
@@ -186,118 +186,7 @@ export default function ClientPage({
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-100 flex flex-col min-h-screen sticky top-0">
-        {/* Logo */}
-        <div className="p-4 border-b border-gray-100">
-          <Link href="/" className="block">
-            <Growth4ULogo size="lg" />
-          </Link>
-        </div>
-
-        {/* Client Info */}
-        <div className="p-4 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-xl">
-              <Building2 className="w-5 h-5 text-indigo-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="font-semibold text-gray-900 truncate">{client.name}</h2>
-              {client.industry && (
-                <p className="text-xs text-gray-500 truncate">{client.industry}</p>
-              )}
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-              client.status === 'active' ? 'bg-green-100 text-green-700' :
-              client.status === 'inactive' ? 'bg-gray-100 text-gray-600' :
-              'bg-amber-100 text-amber-700'
-            }`}>
-              {client.status === 'active' ? 'Activo' :
-               client.status === 'inactive' ? 'Inactivo' : 'Archivado'}
-            </span>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 p-3">
-          <div className="space-y-1">
-            {tabs.map((tab) => {
-              const Icon = tab.icon
-              const isActive = activeTab === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => handleTabChange(tab.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <Icon size={18} className={isActive ? 'text-indigo-600' : 'text-gray-400'} />
-                  {tab.label}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Projects Section */}
-          <div className="mt-6">
-            <div className="flex items-center justify-between px-3 mb-2">
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                Proyectos ({projects.length})
-              </span>
-              <Link
-                href={`/projects/new?clientId=${params.clientId}`}
-                className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                title="Nuevo proyecto"
-              >
-                <Plus size={14} />
-              </Link>
-            </div>
-            <div className="space-y-1">
-              {loadingProjects ? (
-                <div className="px-3 py-2">
-                  <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
-                </div>
-              ) : projects.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-gray-400">Sin proyectos</p>
-              ) : (
-                projects.slice(0, 5).map((project) => (
-                  <Link
-                    key={project.id}
-                    href={`/projects/${project.id}`}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors"
-                  >
-                    <FolderOpen size={14} className="text-gray-400 flex-shrink-0" />
-                    <span className="truncate">{project.name}</span>
-                  </Link>
-                ))
-              )}
-              {projects.length > 5 && (
-                <button
-                  onClick={() => handleTabChange('overview')}
-                  className="w-full px-3 py-1.5 text-xs text-indigo-600 hover:text-indigo-700 text-left"
-                >
-                  Ver todos ({projects.length})
-                </button>
-              )}
-            </div>
-          </div>
-        </nav>
-
-        {/* Back to Clients */}
-        <div className="p-3 border-t border-gray-100">
-          <Link
-            href="/clients"
-            className="flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors"
-          >
-            <ChevronLeft size={18} className="text-gray-400" />
-            Todos los clientes
-          </Link>
-        </div>
-      </aside>
+      <ClientSidebar client={client} />
 
       {/* Main Content */}
       <div className="flex-1 min-w-0">

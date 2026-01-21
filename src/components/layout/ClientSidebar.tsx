@@ -11,11 +11,15 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Plus,
-  Home,
   Loader2,
+  LayoutDashboard,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { Growth4ULogo } from '@/components/ui/Growth4ULogo'
 
 interface Project {
   id: string
@@ -23,18 +27,44 @@ interface Project {
   playbook_type: string
 }
 
-interface ClientSidebarProps {
-  clientId: string
-  clientName: string
+interface Client {
+  id: string
+  name: string
+  industry?: string | null
+  status?: string
 }
 
-export default function ClientSidebar({ clientId, clientName }: ClientSidebarProps) {
+interface ClientSidebarProps {
+  client: Client
+  currentProjectId?: string
+}
+
+export default function ClientSidebar({
+  client,
+  currentProjectId,
+}: ClientSidebarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const currentTab = searchParams.get('tab')
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [projectsExpanded, setProjectsExpanded] = useState(true)
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
+  // Load collapsed state from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('clientSidebarCollapsed')
+    if (saved !== null) {
+      setIsCollapsed(saved === 'true')
+    }
+  }, [])
+
+  // Save collapsed state to localStorage
+  const toggleCollapsed = () => {
+    const newState = !isCollapsed
+    setIsCollapsed(newState)
+    localStorage.setItem('clientSidebarCollapsed', String(newState))
+  }
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -42,7 +72,7 @@ export default function ClientSidebar({ clientId, clientName }: ClientSidebarPro
         const { data, error } = await supabase
           .from('projects')
           .select('id, name, playbook_type')
-          .eq('client_id', clientId)
+          .eq('client_id', client.id)
           .order('updated_at', { ascending: false })
           .limit(10)
 
@@ -56,127 +86,218 @@ export default function ClientSidebar({ clientId, clientName }: ClientSidebarPro
     }
 
     loadProjects()
-  }, [clientId])
+  }, [client.id])
 
   const navItems = [
-    { href: `/clients/${clientId}`, label: 'Resumen', icon: Building2, exact: true },
-    { href: `/clients/${clientId}?tab=context-lake`, label: 'Context Lake', icon: Database },
-    { href: `/clients/${clientId}?tab=playbooks`, label: 'Playbooks', icon: Book },
-    { href: `/clients/${clientId}?tab=settings`, label: 'Configuración', icon: Settings },
+    { id: 'overview', href: `/clients/${client.id}`, label: 'Resumen', icon: LayoutDashboard, exact: true },
+    { id: 'context-lake', href: `/clients/${client.id}?tab=context-lake`, label: 'Context Lake', icon: Database },
+    { id: 'playbooks', href: `/clients/${client.id}?tab=playbooks`, label: 'Playbooks', icon: Book },
+    { id: 'settings', href: `/clients/${client.id}?tab=settings`, label: 'Configuración', icon: Settings },
   ]
 
-  const isActive = (href: string, exact?: boolean) => {
-    const isClientPage = pathname === `/clients/${clientId}`
+  const isNavActive = (item: typeof navItems[0]) => {
+    const isClientPage = pathname === `/clients/${client.id}`
 
-    if (exact) {
-      // "Resumen" is active when no tab parameter
+    if (item.exact) {
       return isClientPage && !currentTab
     }
 
-    // For other tabs, check if the tab matches
-    const hrefTab = href.includes('?tab=') ? href.split('?tab=')[1] : null
+    const hrefTab = item.href.includes('?tab=') ? item.href.split('?tab=')[1] : null
     return isClientPage && currentTab === hrefTab
   }
 
+  if (isCollapsed) {
+    return (
+      <aside className="w-12 bg-white border-r border-gray-100 flex flex-col min-h-screen sticky top-0 flex-shrink-0">
+        {/* Toggle Button */}
+        <div className="p-2 border-b border-gray-100">
+          <button
+            onClick={toggleCollapsed}
+            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Expandir sidebar"
+          >
+            <PanelLeft size={18} />
+          </button>
+        </div>
+
+        {/* Client Icon */}
+        <div className="p-2 border-b border-gray-100">
+          <Link
+            href={`/clients/${client.id}`}
+            className="w-8 h-8 flex items-center justify-center bg-gradient-to-br from-indigo-100 to-purple-100 rounded-lg"
+            title={client.name}
+          >
+            <Building2 className="w-4 h-4 text-indigo-600" />
+          </Link>
+        </div>
+
+        {/* Nav Icons */}
+        <nav className="flex-1 p-2 space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const active = isNavActive(item)
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+                  active
+                    ? 'bg-indigo-50 text-indigo-600'
+                    : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'
+                }`}
+                title={item.label}
+              >
+                <Icon size={18} />
+              </Link>
+            )
+          })}
+        </nav>
+
+        {/* Back to Clients */}
+        <div className="p-2 border-t border-gray-100">
+          <Link
+            href="/clients"
+            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-gray-600 rounded-lg transition-colors"
+            title="Todos los clientes"
+          >
+            <ChevronLeft size={18} />
+          </Link>
+        </div>
+      </aside>
+    )
+  }
+
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 min-h-[calc(100vh-64px)] flex-shrink-0">
-      {/* Client Header */}
-      <div className="p-4 border-b border-gray-100">
-        <Link href="/clients" className="flex items-center gap-2 text-sm text-gray-500 hover:text-blue-600 mb-3">
-          <Home size={14} />
-          <span>Todos los clientes</span>
+    <aside className="w-64 bg-white border-r border-gray-100 flex flex-col min-h-screen sticky top-0 flex-shrink-0">
+      {/* Logo + Toggle */}
+      <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+        <Link href="/clients" className="block">
+          <Growth4ULogo size="lg" />
         </Link>
+        <button
+          onClick={toggleCollapsed}
+          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          title="Colapsar sidebar"
+        >
+          <PanelLeftClose size={18} />
+        </button>
+      </div>
+
+      {/* Client Info */}
+      <div className="p-4 border-b border-gray-100">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg">
-            <Building2 className="w-5 h-5 text-white" />
+          <div className="p-2 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-xl">
+            <Building2 className="w-5 h-5 text-indigo-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="font-semibold text-gray-900 truncate">{clientName}</h2>
+            <h2 className="font-semibold text-gray-900 truncate">{client.name}</h2>
+            {client.industry && (
+              <p className="text-xs text-gray-500 truncate">{client.industry}</p>
+            )}
           </div>
         </div>
+        {client.status && (
+          <div className="mt-3">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+              client.status === 'active' ? 'bg-green-100 text-green-700' :
+              client.status === 'inactive' ? 'bg-gray-100 text-gray-600' :
+              'bg-amber-100 text-amber-700'
+            }`}>
+              {client.status === 'active' ? 'Activo' :
+               client.status === 'inactive' ? 'Inactivo' : 'Archivado'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Navigation */}
-      <nav className="p-3 space-y-1">
-        {navItems.map((item) => {
-          const Icon = item.icon
-          const active = isActive(item.href, item.exact)
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                active
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <Icon size={18} className={active ? 'text-indigo-600' : 'text-gray-400'} />
-              {item.label}
-            </Link>
-          )
-        })}
+      <nav className="flex-1 p-3">
+        <div className="space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const active = isNavActive(item)
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  active
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <Icon size={18} className={active ? 'text-indigo-600' : 'text-gray-400'} />
+                {item.label}
+              </Link>
+            )
+          })}
+        </div>
 
         {/* Projects Section */}
-        <div className="pt-3">
-          <button
-            onClick={() => setProjectsExpanded(!projectsExpanded)}
-            className="flex items-center justify-between w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg"
-          >
-            <div className="flex items-center gap-3">
-              <FolderOpen size={18} className="text-gray-400" />
-              <span>Proyectos</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-                {projects.length}
-              </span>
+        <div className="mt-6">
+          <div className="flex items-center justify-between px-3 mb-2">
+            <button
+              onClick={() => setProjectsExpanded(!projectsExpanded)}
+              className="flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-600"
+            >
+              <span>Proyectos ({projects.length})</span>
               {projectsExpanded ? (
-                <ChevronDown size={16} className="text-gray-400" />
+                <ChevronDown size={14} />
               ) : (
-                <ChevronRight size={16} className="text-gray-400" />
+                <ChevronRight size={14} />
               )}
-            </div>
-          </button>
+            </button>
+            <Link
+              href={`/projects/new?clientId=${client.id}`}
+              className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+              title="Nuevo proyecto"
+            >
+              <Plus size={14} />
+            </Link>
+          </div>
 
           {projectsExpanded && (
-            <div className="mt-1 ml-6 pl-3 border-l border-gray-200 space-y-1">
+            <div className="space-y-1">
               {loading ? (
-                <div className="py-2 flex items-center gap-2 text-gray-400">
-                  <Loader2 size={14} className="animate-spin" />
-                  <span className="text-xs">Cargando...</span>
+                <div className="px-3 py-2">
+                  <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
                 </div>
               ) : projects.length === 0 ? (
-                <p className="text-xs text-gray-400 py-2">Sin proyectos</p>
+                <p className="px-3 py-2 text-xs text-gray-400">Sin proyectos</p>
               ) : (
-                projects.map((project) => (
-                  <Link
-                    key={project.id}
-                    href={`/projects/${project.id}`}
-                    className={`block px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                      pathname === `/projects/${project.id}`
-                        ? 'bg-blue-50 text-blue-700'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
-                  >
-                    <div className="truncate">{project.name}</div>
-                    <div className="text-xs text-gray-400 truncate">{project.playbook_type}</div>
-                  </Link>
-                ))
+                projects.map((project) => {
+                  const isCurrentProject = currentProjectId === project.id || pathname === `/projects/${project.id}`
+                  return (
+                    <Link
+                      key={project.id}
+                      href={`/projects/${project.id}`}
+                      className={`flex items-center gap-2 px-3 py-2 text-sm rounded-xl transition-colors ${
+                        isCurrentProject
+                          ? 'bg-blue-50 text-blue-700 font-medium'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <FolderOpen size={14} className={isCurrentProject ? 'text-blue-500' : 'text-gray-400'} />
+                      <span className="truncate">{project.name}</span>
+                    </Link>
+                  )
+                })
               )}
-
-              {/* New Project Button */}
-              <Link
-                href={`/projects/new?clientId=${clientId}`}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
-              >
-                <Plus size={14} />
-                <span>Nuevo proyecto</span>
-              </Link>
             </div>
           )}
         </div>
       </nav>
+
+      {/* Back to Clients */}
+      <div className="p-3 border-t border-gray-100">
+        <Link
+          href="/clients"
+          className="flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors"
+        >
+          <ChevronLeft size={18} className="text-gray-400" />
+          Todos los clientes
+        </Link>
+      </div>
     </aside>
   )
 }
