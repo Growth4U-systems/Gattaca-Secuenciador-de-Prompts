@@ -99,6 +99,78 @@ type ExecutorType = 'llm' | 'job' | 'api' | 'custom' | 'none'
 
 ---
 
+## API Keys Requeridas
+
+### Best Practice: Verificación Pre-Ejecución
+
+Cuando un paso del playbook requiere una API key externa (ej: Blotato, Wavespeed, Fal, Serper), se debe configurar `requiredApiKeys` en el step. Esto activa una verificación **antes** de ejecutar el paso, mostrando un modal de configuración si faltan API keys.
+
+### Cómo Implementar
+
+**1. En el config visual del playbook** (`src/components/playbook/configs/[nombre].config.ts`):
+
+```typescript
+{
+  id: 'export',
+  name: 'Publicar en Redes',
+  description: 'Publica el video via Blotato',
+  type: 'auto_with_review',
+  executor: 'api',
+  dependsOn: ['preview'],
+  requiredApiKeys: ['blotato'], // ← Agregar esta línea
+},
+```
+
+**2. Servicios soportados:**
+
+| Servicio | Clave | Uso |
+|----------|-------|-----|
+| `apify` | Scraping redes sociales | Niche Finder, Signal Outreach |
+| `firecrawl` | Scraping sitios web | Niche Finder |
+| `serper` | Búsquedas Google (SERP) | Niche Finder |
+| `openrouter` | IA (LLM) | Todos los playbooks |
+| `wavespeed` | Generación de video | Video Viral IA |
+| `fal` | Audio/composición video | Video Viral IA |
+| `blotato` | Publicación a redes | Video Viral IA |
+
+**3. Flujo de usuario:**
+
+1. Usuario llega al paso con `requiredApiKeys`
+2. Sistema verifica via `/api/user/api-keys/check?services=blotato`
+3. Si faltan keys → se muestra `ApiKeySetupModal`
+4. Usuario configura las keys en el modal
+5. Al completar → paso se ejecuta normalmente
+
+### Agregar un Nuevo Servicio
+
+Si necesitas agregar un nuevo servicio de API:
+
+**1. En `src/lib/getUserApiKey.ts`:**
+```typescript
+type ServiceName = 'apify' | 'firecrawl' | ... | 'nuevo_servicio'
+```
+
+**2. En `src/app/api/user/api-keys/check/route.ts`:**
+```typescript
+type ServiceName = 'apify' | 'firecrawl' | ... | 'nuevo_servicio'
+```
+
+**3. En `src/components/settings/ApiKeysConfig.tsx`:**
+```typescript
+nuevo_servicio: {
+  name: 'nuevo_servicio',
+  label: 'Nuevo Servicio',
+  description: 'Descripción de para qué se usa',
+  docsUrl: 'https://nuevo-servicio.com/api-keys',
+  placeholder: 'ns_xxxxxxxxxxxx',
+},
+```
+
+**4. En `src/components/settings/ApiKeySetupModal.tsx`:**
+Agregar la misma entrada al objeto `SERVICE_INFO`.
+
+---
+
 ## Estructura de un PlaybookTemplate
 
 Cada template debe implementar la interface `PlaybookTemplate` definida en `src/lib/templates/types.ts`:
@@ -144,6 +216,7 @@ interface PlaybookTemplate {
 | `description` | Descripción para UI | ⚠️ Recomendado |
 | `auto_receive_from` | IDs de pasos anteriores | ⚠️ Opcional |
 | `base_doc_ids` | Categorías de docs sugeridos | ⚠️ Opcional |
+| `requiredApiKeys` | API keys externas necesarias (ver [API Keys Requeridas](#api-keys-requeridas)) | ⚠️ Opcional |
 
 ### Variables del Proyecto (VariableDefinition)
 
@@ -511,8 +584,9 @@ export const nuevoPlaybookConfig: PlaybookConfig = {
           id: 'exportar',
           name: 'Exportar',
           type: 'action',
-          executor: 'none',
+          executor: 'api',
           dependsOn: ['seleccionar'],
+          requiredApiKeys: ['blotato'], // ← Muestra modal si falta la API key
           actionConfig: {
             label: 'Exportar Resultados',
             actionType: 'export',

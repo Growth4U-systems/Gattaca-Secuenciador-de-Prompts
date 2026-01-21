@@ -213,18 +213,18 @@ Verifica que:
 - El caption y hashtags son apropiados para {{target_platforms}}`
 
 /**
- * Step 4.2: Export/Publish (placeholder - requires Blotato API)
+ * Step 4.2: Export/Publish - Blotato API Integration
  */
-export const STEP_4_2_EXPORT_DESCRIPTION = `Exporta o publica el video a las plataformas seleccionadas.
+export const STEP_4_2_EXPORT_DESCRIPTION = `Publica el video a las plataformas seleccionadas usando Blotato.
 
 **Plataformas:** {{target_platforms}}
+**Cuentas Blotato:** {{blotato_accounts}}
 
-**Estado actual:** GAP - Integración Blotato pendiente.
+Este paso publicará automáticamente el video generado a todas las cuentas configuradas en Blotato.
 
-**MVP Export:**
-- URL del video final para descargar
-- Caption y hashtags para copiar
-- Instrucciones de publicación manual por plataforma`
+**Requisitos:**
+- API key de Blotato configurada en Settings > APIs
+- Account IDs de Blotato configurados en las variables del proyecto`
 
 // ============================================
 // VARIABLE DEFINITIONS
@@ -272,6 +272,12 @@ export const VIDEO_VIRAL_IA_VARIABLE_DEFINITIONS: VariableDefinition[] = [
     default_value: '12',
     required: false,
     description: 'Número de hashtags para el caption',
+  },
+  {
+    name: 'blotato_accounts',
+    default_value: '',
+    required: false,
+    description: 'IDs de cuentas de Blotato separados por coma (ej: acc_12345, acc_67890). Obtén los IDs en my.blotato.com/settings',
   },
 ]
 

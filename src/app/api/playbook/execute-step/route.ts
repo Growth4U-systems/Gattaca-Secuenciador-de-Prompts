@@ -500,6 +500,20 @@ export async function POST(request: NextRequest) {
           supabase
         )
       }
+
+      // export: Publish to Blotato
+      if (stepId === 'export') {
+        return await handleExportStep(
+          adminClient,
+          projectId,
+          playbookType,
+          stepId,
+          vars,
+          previousStepOutput,
+          session.user.id,
+          supabase
+        )
+      }
     }
 
     // Execute LLM call
@@ -1039,6 +1053,9 @@ ${JSON.stringify({ posts }, null, 2)}
 
 /**
  * Handle generate_clips step - calls Wavespeed API
+ *
+ * Supports resuming: If task_ids exist from a previous run, it will poll those
+ * instead of creating new video generation tasks.
  */
 async function handleGenerateClipsStep(
   adminClient: ReturnType<typeof createAdminClient>,
@@ -1054,31 +1071,71 @@ async function handleGenerateClipsStep(
   try {
     console.log('[generate_clips] Starting video clip generation')
 
-    // Parse scenes from previous step output (generate_scenes)
-    const scenes = parseScenes(previousStepOutput)
+    // Check if we have existing task_ids from a previous run
+    const { data: existingOutput } = await adminClient
+      .from('playbook_step_outputs')
+      .select('imported_data, status')
+      .eq('project_id', projectId)
+      .eq('playbook_type', playbookType)
+      .eq('step_id', stepId)
+      .single()
 
-    if (scenes.length === 0) {
-      throw new Error('No se encontraron escenas en el paso anterior. Ejecuta "Generar Prompts de Escenas" primero.')
+    const existingTaskIds = existingOutput?.imported_data?.task_ids as Array<{ scene_index: number; task_id: string }> | undefined
+    const hasIncompleteClips = existingOutput?.imported_data?.clips?.some(
+      (c: { status: string }) => c.status === 'pending' || c.status === 'processing'
+    )
+    const allCompleted = existingOutput?.imported_data?.all_done === true
+
+    // If all clips are already completed, return the existing data
+    if (allCompleted && existingOutput?.imported_data?.video_urls?.length > 0) {
+      console.log('[generate_clips] All clips already completed, returning existing data')
+      return NextResponse.json({
+        success: true,
+        output: existingOutput?.imported_data?.output_content || formatClipsOutput(existingOutput?.imported_data),
+        stepId,
+        clips: existingOutput.imported_data.video_urls,
+        message: 'Videos ya generados anteriormente',
+      })
     }
 
-    console.log(`[generate_clips] Found ${scenes.length} scenes to generate`)
-
-    // Call the generate-clips API endpoint
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const response = await fetch(`${baseUrl}/api/playbook/video-viral/generate-clips`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    let requestBody: Record<string, unknown>
+
+    // If we have existing task_ids and clips are incomplete, resume polling
+    if (existingTaskIds && existingTaskIds.length > 0 && (hasIncompleteClips || !allCompleted)) {
+      console.log(`[generate_clips] Resuming - polling ${existingTaskIds.length} existing tasks`)
+      requestBody = {
+        projectId,
+        existing_task_ids: existingTaskIds,
+        _internal_user_id: userId,
+      }
+    } else {
+      // Parse scenes and start fresh generation
+      const scenes = parseScenes(previousStepOutput)
+
+      if (scenes.length === 0) {
+        throw new Error('No se encontraron escenas en el paso anterior. Ejecuta "Generar Prompts de Escenas" primero.')
+      }
+
+      console.log(`[generate_clips] Starting fresh - generating ${scenes.length} new clips`)
+      requestBody = {
         projectId,
         scenes,
         aspect_ratio: variables.aspect_ratio || '9:16',
         duration: parseInt(variables.video_duration || '30') / scenes.length,
         resolution: '720p',
         generate_audio: false,
-        _internal_user_id: userId, // Pass userId for internal server-to-server auth
-      }),
+        _internal_user_id: userId,
+      }
+    }
+
+    // Call the generate-clips API endpoint
+    const response = await fetch(`${baseUrl}/api/playbook/video-viral/generate-clips`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
     })
 
     const data = await response.json()
@@ -1090,8 +1147,11 @@ async function handleGenerateClipsStep(
     // Format output
     const output = formatClipsOutput(data)
 
-    // Save to database
-    console.log('[generate_clips] Saving to DB with:', { projectId, playbookType, stepId })
+    // Determine status based on completion
+    const status = data.all_done ? 'completed' : 'processing'
+
+    // Save to database (including task_ids for future resume)
+    console.log('[generate_clips] Saving to DB with:', { projectId, playbookType, stepId, status })
     const { error: upsertError } = await adminClient
       .from('playbook_step_outputs')
       .upsert({
@@ -1099,8 +1159,11 @@ async function handleGenerateClipsStep(
         playbook_type: playbookType,
         step_id: stepId,
         output_content: output,
-        imported_data: data,
-        status: 'completed',
+        imported_data: {
+          ...data,
+          output_content: output, // Store formatted output for quick retrieval
+        },
+        status,
         variables_used: variables,
         executed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -1114,6 +1177,18 @@ async function handleGenerateClipsStep(
     }
     console.log('[generate_clips] Saved successfully to DB')
 
+    // If still processing, inform the user to retry
+    if (!data.all_done) {
+      return NextResponse.json({
+        success: true,
+        output,
+        stepId,
+        clips: data.video_urls,
+        processing: true,
+        message: 'Videos en proceso. Ejecuta el paso de nuevo en unos minutos para verificar el estado.',
+      })
+    }
+
     return NextResponse.json({
       success: true,
       output,
@@ -1124,6 +1199,7 @@ async function handleGenerateClipsStep(
   } catch (error) {
     console.error('[generate_clips] Error:', error)
 
+    // Don't overwrite existing task_ids on error - just update status
     await adminClient
       .from('playbook_step_outputs')
       .upsert({
@@ -1620,5 +1696,236 @@ async function getAccessToken(supabase: any): Promise<string> {
     return session?.access_token || ''
   } catch {
     return ''
+  }
+}
+
+// ============================================
+// EXPORT STEP HANDLER (Blotato Publishing)
+// ============================================
+
+/**
+ * Handle the export step for Video Viral IA - publishes to social media via Blotato
+ */
+async function handleExportStep(
+  adminClient: ReturnType<typeof createAdminClient>,
+  projectId: string,
+  playbookType: string,
+  stepId: string,
+  variables: Record<string, string>,
+  previousStepOutput: string,
+  userId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any
+): Promise<NextResponse> {
+  try {
+    console.log('[export] Starting Blotato publish flow')
+
+    // Get video URL from compose_video step
+    const { data: composeOutput } = await adminClient
+      .from('playbook_step_outputs')
+      .select('output_content, imported_data')
+      .eq('project_id', projectId)
+      .eq('playbook_type', playbookType)
+      .eq('step_id', 'compose_video')
+      .single()
+
+    const videoUrl = composeOutput?.imported_data?.video_url as string
+    if (!videoUrl) {
+      throw new Error('No se encontró la URL del video. Ejecuta "Componer Video Final" primero.')
+    }
+
+    console.log('[export] Video URL:', videoUrl)
+
+    // Get caption from generate_idea step
+    const { data: ideaOutput } = await adminClient
+      .from('playbook_step_outputs')
+      .select('output_content, imported_data')
+      .eq('project_id', projectId)
+      .eq('playbook_type', playbookType)
+      .eq('step_id', 'generate_idea')
+      .single()
+
+    // Parse caption from idea output
+    let caption = ''
+    let hashtags = ''
+
+    if (ideaOutput?.imported_data?.caption) {
+      caption = ideaOutput.imported_data.caption as string
+      hashtags = ideaOutput.imported_data.hashtags as string || ''
+    } else if (ideaOutput?.output_content) {
+      // Try to parse from output content
+      const jsonMatch = ideaOutput.output_content.match(/```(?:json)?\s*([\s\S]*?)```/)
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[1])
+          caption = parsed.caption || parsed.description || ''
+          hashtags = parsed.hashtags || ''
+        } catch {
+          // Fallback: use first 280 chars of output
+          caption = ideaOutput.output_content.substring(0, 280)
+        }
+      } else {
+        caption = ideaOutput.output_content.substring(0, 280)
+      }
+    }
+
+    // Combine caption with hashtags
+    const fullCaption = hashtags ? `${caption}\n\n${hashtags}` : caption
+    console.log('[export] Caption:', fullCaption.substring(0, 100) + '...')
+
+    // Get blotato_accounts from variables
+    const blotatoAccountsRaw = variables.blotato_accounts || ''
+    const blotatoAccounts = blotatoAccountsRaw
+      .split(',')
+      .map(acc => acc.trim())
+      .filter(acc => acc.length > 0)
+
+    if (blotatoAccounts.length === 0) {
+      throw new Error('No hay Account IDs de Blotato configurados. Agrega los IDs en las variables del proyecto (ej: acc_12345, acc_67890)')
+    }
+
+    console.log('[export] Blotato accounts:', blotatoAccounts)
+
+    // Get target platforms from variables
+    const targetPlatformsRaw = variables.target_platforms || 'tiktok,instagram,youtube'
+    const targetPlatforms = targetPlatformsRaw
+      .split(',')
+      .map(p => p.trim().toLowerCase())
+      .filter(p => p.length > 0)
+
+    console.log('[export] Target platforms:', targetPlatforms)
+
+    // Call the publish endpoint
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const response = await fetch(`${baseUrl}/api/playbook/video-viral/publish`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectId,
+        video_url: videoUrl,
+        caption: fullCaption,
+        platforms: targetPlatforms,
+        blotato_accounts: blotatoAccounts,
+        _internal_user_id: userId,
+      }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || `Error publicando video: ${response.status}`)
+    }
+
+    // Format output
+    const successCount = data.summary?.successful || 0
+    const failedCount = data.summary?.failed || 0
+    const totalCount = data.summary?.total || 0
+
+    let output = `## Publicación a Redes Sociales
+
+${successCount === totalCount ? '✅' : '⚠️'} **Publicación ${successCount === totalCount ? 'completada' : 'parcial'}**
+
+### Resumen
+- **Total de publicaciones**: ${totalCount}
+- **Exitosas**: ${successCount}
+- **Fallidas**: ${failedCount}
+
+### Detalles por Plataforma
+`
+
+    if (data.results && Array.isArray(data.results)) {
+      for (const result of data.results) {
+        const statusIcon = result.success ? '✅' : '❌'
+        output += `\n${statusIcon} **${result.platform}** (${result.accountId})`
+        if (result.success && result.postSubmissionId) {
+          output += `\n   📝 Post ID: ${result.postSubmissionId}`
+        }
+        if (!result.success && result.error) {
+          output += `\n   ⚠️ Error: ${result.error}`
+        }
+      }
+    }
+
+    output += `
+
+### Video Publicado
+🎬 **URL**: [Ver video](${videoUrl})
+
+### Caption Usado
+\`\`\`
+${fullCaption.substring(0, 500)}${fullCaption.length > 500 ? '...' : ''}
+\`\`\`
+
+---
+
+\`\`\`json
+${JSON.stringify(data, null, 2)}
+\`\`\`
+`
+
+    // Save to database
+    await adminClient
+      .from('playbook_step_outputs')
+      .upsert({
+        project_id: projectId,
+        playbook_type: playbookType,
+        step_id: stepId,
+        output_content: output,
+        imported_data: {
+          video_url: videoUrl,
+          caption: fullCaption,
+          platforms: targetPlatforms,
+          accounts: blotatoAccounts,
+          results: data.results,
+          summary: data.summary,
+        },
+        status: failedCount === 0 ? 'completed' : 'partial',
+        variables_used: variables,
+        executed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'project_id,playbook_type,step_id'
+      })
+
+    return NextResponse.json({
+      success: failedCount === 0,
+      output,
+      stepId,
+      results: data.results,
+      summary: data.summary,
+    })
+
+  } catch (error) {
+    console.error('[export] Error:', error)
+
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+    // Provide helpful error messages
+    let helpfulError = errorMessage
+    if (errorMessage.includes('API key')) {
+      helpfulError = `${errorMessage}\n\nPara configurar tu API key de Blotato:\n1. Ve a Settings > APIs\n2. Agrega tu key de Blotato (obtener en my.blotato.com/settings)`
+    } else if (errorMessage.includes('Account IDs')) {
+      helpfulError = `${errorMessage}\n\nPara configurar tus Account IDs:\n1. Ve a my.blotato.com y conecta tus redes sociales\n2. Copia los Account IDs de cada cuenta\n3. En las variables del proyecto, agrega los IDs separados por coma`
+    }
+
+    await adminClient
+      .from('playbook_step_outputs')
+      .upsert({
+        project_id: projectId,
+        playbook_type: playbookType,
+        step_id: stepId,
+        status: 'error',
+        error_message: helpfulError,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'project_id,playbook_type,step_id'
+      })
+
+    return NextResponse.json({
+      success: false,
+      error: helpfulError
+    }, { status: 500 })
   }
 }
