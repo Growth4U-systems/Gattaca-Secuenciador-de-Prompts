@@ -32,6 +32,8 @@ interface ReviewAndScrapePanelProps {
     label?: string
     successCount?: number
     failedCount?: number
+    lastUrl?: string // Last URL being scraped
+    lastSnippet?: string // Content snippet from last scrape
   }
 }
 
@@ -260,12 +262,31 @@ export function ReviewAndScrapePanel({
                 )}
               </div>
             )}
+
+            {/* Real-time feedback: Last scraped URL and content snippet */}
+            {progress.lastUrl && (
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
+                <div className="flex items-start gap-2">
+                  <Globe size={14} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-gray-500 break-all line-clamp-1">
+                    {progress.lastUrl}
+                  </p>
+                </div>
+                {progress.lastSnippet && (
+                  <p className="text-sm text-gray-700 line-clamp-2 italic">
+                    "{progress.lastSnippet}"
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
         <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
           <p className="text-sm text-blue-700">
-            Descargando contenido de foros y redes sociales...
+            {progress?.lastUrl
+              ? 'Extrayendo contenido...'
+              : 'Descargando contenido de foros y redes sociales...'}
           </p>
         </div>
       </div>

@@ -942,7 +942,7 @@ export default function PlaybookShell({
                   failedCount += scrapeData.failed || 0
                   hasMore = scrapeData.has_more || false
 
-                  // Update progress
+                  // Update progress with real-time feedback
                   updateStepState(stepId, {
                     progress: {
                       current: scrapedCount + failedCount,
@@ -952,6 +952,8 @@ export default function PlaybookShell({
                     partialResults: {
                       successCount: scrapedCount,
                       failedCount: failedCount,
+                      lastUrl: scrapeData.last_scraped_url,
+                      lastSnippet: scrapeData.last_scraped_snippet,
                     },
                   })
 

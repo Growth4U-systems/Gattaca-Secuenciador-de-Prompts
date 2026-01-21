@@ -1215,6 +1215,8 @@ export function WorkArea({
               ...stepState.progress,
               successCount: stepState.partialResults?.successCount,
               failedCount: stepState.partialResults?.failedCount,
+              lastUrl: stepState.partialResults?.lastUrl,
+              lastSnippet: stepState.partialResults?.lastSnippet,
             } : undefined}
           />
         )
@@ -1335,6 +1337,8 @@ export function WorkArea({
             ...stepState.progress,
             successCount: stepState.partialResults?.successCount,
             failedCount: stepState.partialResults?.failedCount,
+            lastUrl: stepState.partialResults?.lastUrl,
+            lastSnippet: stepState.partialResults?.lastSnippet,
           } : undefined}
         />
       )
