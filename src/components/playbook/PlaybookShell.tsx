@@ -1006,6 +1006,144 @@ export default function PlaybookShell({
               return
             }
 
+            if (step.jobType === 'niche_finder_extract') {
+              // Get jobId from previous steps (review_and_scrape or scrape_results)
+              const scrapeResultsStep = state.phases.flatMap(p => p.steps).find(s => s.id === 'scrape_results')
+              const reviewAndScrapeStep = state.phases.flatMap(p => p.steps).find(s => s.id === 'review_and_scrape')
+              const searchStep = state.phases.flatMap(p => p.steps).find(s => s.id === 'search_and_preview')
+
+              console.log('[EXTRACT] Looking for jobId from steps:', {
+                scrape_results: scrapeResultsStep?.output,
+                review_and_scrape: reviewAndScrapeStep?.output,
+                search_and_preview: searchStep?.output,
+              })
+
+              let jobId = (scrapeResultsStep?.output as { jobId?: string })?.jobId ||
+                          (reviewAndScrapeStep?.output as { jobId?: string })?.jobId ||
+                          (searchStep?.output as { jobId?: string })?.jobId
+
+              // Also try from input
+              if (!jobId && input?.jobId) {
+                jobId = input.jobId
+              }
+
+              if (!jobId) {
+                console.error('[EXTRACT] No jobId found')
+                throw new Error('No se encontró el Job ID. Por favor ejecuta los pasos anteriores primero.')
+              }
+
+              console.log('[EXTRACT] Starting extraction for job:', jobId)
+              updateStepState(stepId, {
+                output: { jobId },
+                progress: { current: 0, total: 0, label: 'Iniciando extracción de problemas...' }
+              })
+
+              // Get total URLs to extract from job status
+              const statusResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+              const statusData = await statusResponse.json()
+              const totalUrls = statusData.job?.scrape_success_count || 0
+
+              console.log('[EXTRACT] Total URLs to process:', totalUrls)
+              updateStepState(stepId, {
+                progress: { current: 0, total: totalUrls, label: `Extrayendo problemas de 0/${totalUrls} URLs...` }
+              })
+
+              // Call extract endpoint in batches until has_more=false
+              let hasMore = true
+              let extractedTotal = 0
+              let filteredTotal = 0
+              let processedTotal = 0
+
+              while (hasMore) {
+                try {
+                  const extractResponse = await fetch(`/api/niche-finder/jobs/${jobId}/extract`, {
+                    method: 'POST',
+                  })
+
+                  // Handle non-JSON responses (e.g., Vercel timeout)
+                  const contentType = extractResponse.headers.get('content-type')
+                  if (!contentType || !contentType.includes('application/json')) {
+                    console.error('[EXTRACT] Non-JSON response, polling status...')
+                    await new Promise(resolve => setTimeout(resolve, 2000))
+
+                    // Check current status
+                    const checkResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+                    const checkData = await checkResponse.json()
+
+                    if (checkData.status === 'completed') {
+                      hasMore = false
+                      extractedTotal = checkData.job?.niches_extracted || 0
+                    }
+                    continue
+                  }
+
+                  const extractData = await extractResponse.json()
+                  console.log('[EXTRACT] Batch response:', extractData)
+
+                  if (extractData.error) {
+                    throw new Error(extractData.error)
+                  }
+
+                  extractedTotal += extractData.extracted || 0
+                  filteredTotal += extractData.filtered || 0
+                  processedTotal = extractedTotal + filteredTotal
+                  hasMore = extractData.has_more || false
+
+                  updateStepState(stepId, {
+                    progress: {
+                      current: processedTotal,
+                      total: totalUrls,
+                      label: `Extrayendo problemas... ${extractedTotal} encontrados de ${processedTotal}/${totalUrls} URLs`,
+                    },
+                    partialResults: {
+                      successCount: extractedTotal,
+                      failedCount: filteredTotal,
+                    },
+                  })
+                } catch (extractError) {
+                  console.error('[EXTRACT] Batch error:', extractError)
+                  await new Promise(resolve => setTimeout(resolve, 2000))
+
+                  // Check if we should stop
+                  const checkResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+                  const checkData = await checkResponse.json()
+                  if (checkData.status === 'completed' || checkData.status === 'failed') {
+                    hasMore = false
+                    if (checkData.status === 'failed') {
+                      throw new Error(checkData.job?.error_message || 'Extraction failed')
+                    }
+                  }
+                }
+              }
+
+              // Get extracted problems and format as CSV
+              console.log('[EXTRACT] Getting results...')
+              const resultsResponse = await fetch(`/api/niche-finder/results/${jobId}`)
+              const resultsData = await resultsResponse.json()
+
+              // Format niches as CSV string
+              const niches = resultsData.niches || []
+              let csvOutput = 'problema,contexto,evidencia,url\n'
+              for (const niche of niches) {
+                const problem = (niche.problem || '').replace(/"/g, '""')
+                const context = (niche.context || '').replace(/"/g, '""')
+                const evidence = (niche.evidence || '').replace(/"/g, '""')
+                const url = niche.source_url || ''
+                csvOutput += `"${problem}","${context}","${evidence}","${url}"\n`
+              }
+
+              console.log('[EXTRACT] Completed. Total problems:', niches.length)
+
+              // Mark as completed with CSV output
+              updateStepState(stepId, {
+                status: 'completed',
+                completedAt: new Date(),
+                output: csvOutput,
+              })
+              setTimeout(goToNextStep, 500)
+              return
+            }
+
             // For other job types, just mark as pending
             result = input
             break
