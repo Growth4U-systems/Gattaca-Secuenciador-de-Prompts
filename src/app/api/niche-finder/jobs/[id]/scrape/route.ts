@@ -44,6 +44,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     }, { status: 400 })
   }
 
+  // Log API key prefix for debugging (first 8 chars only)
+  console.log(`[SCRAPE] Using Firecrawl API key: ${firecrawlApiKey.substring(0, 8)}...`)
+
   try {
     // Get job
     const { data: job, error: jobError } = await supabase
@@ -115,12 +118,18 @@ export async function POST(request: NextRequest, { params }: Params) {
           }),
         })
 
+        const data = await response.json()
+
         if (!response.ok) {
-          throw new Error(`Firecrawl error: ${response.status}`)
+          const errorMsg = data?.error || data?.message || `HTTP ${response.status}`
+          console.error(`[SCRAPE] Firecrawl error for ${urlRecord.url}: ${errorMsg}`)
+          throw new Error(`Firecrawl: ${errorMsg}`)
         }
 
-        const data = await response.json()
         const markdown = data.data?.markdown || ''
+
+        // Log successful scrape
+        console.log(`[SCRAPE] Success: ${urlRecord.url.substring(0, 60)}... (${markdown.length} chars)`)
 
         // Update URL record with content
         await supabase
