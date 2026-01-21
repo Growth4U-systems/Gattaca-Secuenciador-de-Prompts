@@ -179,10 +179,11 @@ export async function POST(request: NextRequest) {
 
       try {
         // Build request body as string first to catch encoding issues
+        // Ensure duration is an integer as required by Wavespeed API
         const requestBody = JSON.stringify({
           prompt: scenePrompt,
           aspect_ratio,
-          duration,
+          duration: Math.round(duration),
           resolution,
           generate_audio,
           seed: -1,
