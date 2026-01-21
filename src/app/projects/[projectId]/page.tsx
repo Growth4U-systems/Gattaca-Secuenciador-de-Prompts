@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { FileText, Rocket, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Folder, Calendar, MoreVertical, Share2, Building2, Table2, Globe, Search, List, Plus, Users } from 'lucide-react'
 import { useToast, useModal } from '@/components/ui'
 import { useProject } from '@/hooks/useProjects'
@@ -70,6 +70,7 @@ export default function ProjectPage({
   params: { projectId: string }
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const toast = useToast()
   const modal = useModal()
 
@@ -83,17 +84,23 @@ export default function ProjectPage({
   const [showMenu, setShowMenu] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
 
-  // Set initial tab based on project type
+  // Set initial tab based on URL param or project type
   useEffect(() => {
     if (project && activeTab === null) {
-      setActiveTab(
-        project.playbook_type === 'niche_finder' ? 'niche-finder' :
-        project.playbook_type === 'signal_based_outreach' ? 'signal-outreach' :
-        project.playbook_type === 'video_viral_ia' ? 'video-viral-ia' :
-        'documents'
-      )
+      // Check for tab query parameter first
+      const tabParam = searchParams.get('tab') as TabType | null
+      if (tabParam && ['documents', 'setup', 'campaigns', 'export', 'niche-finder', 'signal-outreach', 'video-viral-ia'].includes(tabParam)) {
+        setActiveTab(tabParam)
+      } else {
+        setActiveTab(
+          project.playbook_type === 'niche_finder' ? 'niche-finder' :
+          project.playbook_type === 'signal_based_outreach' ? 'signal-outreach' :
+          project.playbook_type === 'video_viral_ia' ? 'video-viral-ia' :
+          'documents'
+        )
+      }
     }
-  }, [project, activeTab])
+  }, [project, activeTab, searchParams])
 
   // Base tabs available for all projects (Setup unifies Variables + Flow)
   const baseTabs = [
@@ -118,6 +125,7 @@ export default function ProjectPage({
   const videoViralIATabs = [
     { id: 'video-viral-ia' as TabType, label: 'Video Viral IA', icon: Video, description: 'Crear videos virales' },
     { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
+    { id: 'setup' as TabType, label: 'API Keys', icon: Sliders, description: 'Configurar APIs' },
   ]
 
   // Add Export tab only for ECP projects

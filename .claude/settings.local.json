@@ -30,7 +30,9 @@
       "Bash(echo:*)",
       "Bash(docker exec:*)",
       "Skill(merge-and-deploy)",
-      "Skill(merge-and-deploy:*)"
+      "Skill(merge-and-deploy:*)",
+      "Skill(deploy)",
+      "Skill(deploy:*)"
     ]
   }
 }
