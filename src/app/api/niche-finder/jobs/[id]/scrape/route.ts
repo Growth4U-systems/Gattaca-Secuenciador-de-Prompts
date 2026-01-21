@@ -140,6 +140,20 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const batchSize = job.config?.batch_size || 10
 
+    // Debug: Check URL status distribution
+    const { data: urlStatusCheck } = await supabase
+      .from('niche_finder_urls')
+      .select('status')
+      .eq('job_id', jobId)
+      .limit(100)
+
+    const statusCounts = urlStatusCheck?.reduce((acc, u) => {
+      acc[u.status] = (acc[u.status] || 0) + 1
+      return acc
+    }, {} as Record<string, number>) || {}
+
+    console.log(`[SCRAPE] URL status distribution for job ${jobId}:`, JSON.stringify(statusCounts))
+
     // Get pending URLs
     const { data: pendingUrls, error: urlsError } = await supabase
       .from('niche_finder_urls')
@@ -148,12 +162,15 @@ export async function POST(request: NextRequest, { params }: Params) {
       .eq('status', 'pending')
       .limit(batchSize)
 
+    console.log(`[SCRAPE] Found ${pendingUrls?.length || 0} pending URLs for job ${jobId}`)
+
     if (urlsError) {
       throw new Error(`Failed to fetch URLs: ${urlsError.message}`)
     }
 
     if (!pendingUrls || pendingUrls.length === 0) {
       // No more URLs to scrape, update status
+      console.log(`[SCRAPE] No pending URLs found, marking job as scrape_done`)
       await supabase.from('niche_finder_jobs').update({ status: 'scrape_done' }).eq('id', jobId)
 
       return NextResponse.json({
@@ -330,12 +347,28 @@ export async function POST(request: NextRequest, { params }: Params) {
       })
     }
 
-    // Update job counters using RPC for atomic update
-    await supabase.rpc('increment_niche_finder_counters', {
-      p_job_id: jobId,
-      p_urls_scraped: successCount,
-      p_urls_failed: failCount,
-    })
+    // Update job counters - try RPC first, fallback to direct update
+    try {
+      await supabase.rpc('increment_niche_finder_counters', {
+        p_job_id: jobId,
+        p_urls_scraped: successCount,
+        p_urls_failed: failCount,
+      })
+    } catch (rpcError) {
+      console.log('[SCRAPE] RPC failed, using direct update:', rpcError)
+      // Fallback: direct update
+      const newScrapedCount = (job.urls_scraped || 0) + successCount
+      const newFailedCount = (job.urls_failed || 0) + failCount
+      await supabase
+        .from('niche_finder_jobs')
+        .update({
+          urls_scraped: newScrapedCount,
+          urls_failed: newFailedCount,
+        })
+        .eq('id', jobId)
+    }
+
+    console.log(`[SCRAPE] Batch complete: ${successCount} success, ${failCount} failed`)
 
     // Check if more URLs remain
     const { count: remainingCount } = await supabase
