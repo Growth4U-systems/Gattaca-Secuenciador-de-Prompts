@@ -542,14 +542,22 @@ export function ReviewAndScrapePanel({
         </button>
         <button
           onClick={() => {
-            console.log('[ReviewAndScrapePanel] Scrapear button clicked!')
+            console.log('='.repeat(50))
+            console.log('[ReviewAndScrapePanel] *** SCRAPEAR BUTTON CLICKED ***')
             console.log('[ReviewAndScrapePanel] Selected sources:', urlsBySource.filter(s => s.selected).map(s => s.source))
             console.log('[ReviewAndScrapePanel] Total selected URLs count:', stats.selectedUrls)
+            console.log('[ReviewAndScrapePanel] isExecuting:', isExecuting)
+            console.log('[ReviewAndScrapePanel] externalIsExecuting:', externalIsExecuting)
+            console.log('[ReviewAndScrapePanel] localIsExecuting:', localIsExecuting)
+            console.log('='.repeat(50))
+
             // Set local executing state IMMEDIATELY to show progress UI
             setLocalIsExecuting(true)
             // Pass selected source types so the scraper knows which to process
             const selectedSources = urlsBySource.filter(s => s.selected).map(s => s.source)
+            console.log('[ReviewAndScrapePanel] Calling onExecute with:', selectedSources)
             onExecute(selectedSources)
+            console.log('[ReviewAndScrapePanel] onExecute called successfully')
           }}
           disabled={stats.selectedUrls === 0 || isExecuting}
           className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${

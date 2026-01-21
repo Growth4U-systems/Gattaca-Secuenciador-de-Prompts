@@ -865,9 +865,11 @@ function SearchWithPreviewStep({
       <SerpResultsPanel
         jobId={serpJobId}
         onContinue={() => {
+          // IMPORTANT: Save jobId in output so next step (review_and_scrape) can access it
           onUpdateState({
             status: 'completed',
             completedAt: new Date(),
+            output: { jobId: serpJobId }, // Fix: preserve jobId for next step
           })
         }}
         onBack={onBack || (() => {})}
@@ -1224,25 +1226,77 @@ export function WorkArea({
       }
     }
 
+    // review_with_action: Show completed state when scraping is done
+    if (step.type === 'review_with_action' && stepState.status === 'completed') {
+      const output = stepState.output as { jobId?: string; scrapedCount?: number; failedCount?: number } | undefined
+      return (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
+          <div className="flex items-center gap-2 text-green-800">
+            <Check size={20} />
+            <span className="font-medium">Scraping completado</span>
+          </div>
+          {output && (
+            <div className="text-sm text-green-700">
+              <p>{output.scrapedCount ?? 0} URLs scrapeadas exitosamente</p>
+              {(output.failedCount ?? 0) > 0 && (
+                <p className="text-amber-700">{output.failedCount} URLs fallidas</p>
+              )}
+            </div>
+          )}
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={onContinue}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Continuar →
+            </button>
+          </div>
+        </div>
+      )
+    }
+
     // display_scrape_results: Shows scraped content for review before extraction
     if (step.type === 'display_scrape_results') {
-      // Get jobId from context
+      // Debug log for troubleshooting jobId resolution
+      console.log('[SCRAPE_RESULTS] playbookContext:', {
+        serpJobId: playbookContext?.serpJobId,
+        review_and_scrape_output: playbookContext?.review_and_scrape_output,
+        search_and_preview_output: playbookContext?.search_and_preview_output,
+        allKeys: playbookContext ? Object.keys(playbookContext) : [],
+      })
+
+      // Get jobId from context - check multiple sources for robustness
       const jobId = playbookContext?.serpJobId as string ||
-                    (playbookContext?.search_and_preview_output as { jobId?: string })?.jobId ||
-                    playbookContext?.latestJobId as string
+                    (playbookContext?.review_and_scrape_output as { jobId?: string })?.jobId ||
+                    (playbookContext?.search_and_preview_output as { jobId?: string })?.jobId
 
       if (!jobId) {
+        console.error('[SCRAPE_RESULTS] No jobId found. Full context:', playbookContext)
         return (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <p className="text-amber-800">
-              No se encontró el ID del job de scraping. Por favor ejecuta el paso de scraping primero.
+            <p className="text-amber-800 font-medium">
+              No se encontró el ID del job de scraping.
             </p>
+            <p className="text-amber-700 text-sm mt-2">
+              Por favor verifica que el paso anterior (Revisar y Scrapear) se completó correctamente.
+            </p>
+            {process.env.NODE_ENV === 'development' && (
+              <details className="mt-3 text-xs text-gray-500">
+                <summary className="cursor-pointer hover:text-gray-700">Debug info</summary>
+                <pre className="mt-2 p-2 bg-gray-100 rounded overflow-auto text-xs">
+                  {JSON.stringify({
+                    serpJobId: playbookContext?.serpJobId,
+                    contextKeys: playbookContext ? Object.keys(playbookContext) : [],
+                  }, null, 2)}
+                </pre>
+              </details>
+            )}
             {onBack && (
               <button
                 onClick={onBack}
                 className="mt-3 px-4 py-2 bg-amber-100 text-amber-800 rounded hover:bg-amber-200"
               >
-                Volver
+                Volver al paso anterior
               </button>
             )}
           </div>
@@ -1327,7 +1381,7 @@ export function WorkArea({
             onUpdateState({
               status: 'completed',
               completedAt: new Date(),
-              output: { serpJobId },
+              output: { jobId: serpJobId }, // Use 'jobId' key for consistency
             })
             onContinue()
           }}
