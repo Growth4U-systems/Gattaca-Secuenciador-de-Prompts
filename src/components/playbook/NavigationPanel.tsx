@@ -21,9 +21,7 @@ function PhaseItem({
   currentStepIndex,
   onStepClick,
 }: PhaseItemProps) {
-  const [isExpanded, setIsExpanded] = useState(
-    phaseIndex === currentPhaseIndex || phaseState.status === 'in_progress'
-  )
+  const [isExpanded, setIsExpanded] = useState(true)
 
   const completedSteps = phaseState.steps.filter(s => s.status === 'completed').length
   const totalSteps = phase.steps.length
@@ -43,21 +41,21 @@ function PhaseItem({
   }
 
   return (
-    <div className="border-b border-gray-100 last:border-b-0">
+    <div className="border-b border-gray-200">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
-          isCurrentPhase ? 'bg-blue-50/50' : ''
+        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+          isCurrentPhase ? 'bg-blue-50 hover:bg-blue-100/70' : 'bg-gray-50 hover:bg-gray-100'
         }`}
       >
         <span className="text-gray-400">
           {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         </span>
         <span className="flex-shrink-0">{getPhaseIcon()}</span>
-        <span className={`flex-1 text-sm font-medium ${
+        <span className={`flex-1 text-xs font-semibold uppercase tracking-wide ${
           phaseState.status === 'completed' ? 'text-green-700' :
           isCurrentPhase ? 'text-blue-700' :
-          'text-gray-700'
+          'text-gray-600'
         }`}>
           {phase.name}
         </span>
@@ -67,7 +65,7 @@ function PhaseItem({
       </button>
 
       {isExpanded && (
-        <div className="pb-2">
+        <div className="bg-white py-1">
           {phase.steps.map((step, stepIndex) => (
             <StepItem
               key={step.id}
@@ -128,16 +126,16 @@ function StepItem({ step, stepState, isCurrentStep, onClick }: StepItemProps) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2 pl-11 pr-4 py-2 text-left hover:bg-gray-50 transition-colors ${
-        isCurrentStep ? 'bg-blue-50 border-l-2 border-blue-600' : ''
+      className={`w-full flex items-center gap-2 pl-10 pr-4 py-1.5 text-left hover:bg-blue-50/50 transition-colors ${
+        isCurrentStep ? 'bg-blue-50 border-l-2 border-blue-500' : 'border-l-2 border-transparent'
       }`}
     >
       <span className="flex-shrink-0">{getStepIcon()}</span>
       <span className={`flex-1 text-sm ${
-        stepState.status === 'completed' ? 'text-green-700' :
+        stepState.status === 'completed' ? 'text-green-600' :
         isCurrentStep ? 'text-blue-700 font-medium' :
-        stepState.status === 'error' ? 'text-red-700' :
-        'text-gray-600'
+        stepState.status === 'error' ? 'text-red-600' :
+        'text-gray-500'
       }`}>
         {step.name}
       </span>

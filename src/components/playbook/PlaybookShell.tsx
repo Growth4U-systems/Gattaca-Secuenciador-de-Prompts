@@ -348,6 +348,14 @@ export default function PlaybookShell({
             context.serpJobId = output.jobId
           }
         }
+
+        // Also extract serpJobId from scrape_results step (for extraction step)
+        if (stepState.id === 'scrape_results' && stepState.output && !context.serpJobId) {
+          const output = stepState.output as { jobId?: string }
+          if (output.jobId) {
+            context.serpJobId = output.jobId
+          }
+        }
       }
     }
 
@@ -1117,22 +1125,37 @@ export default function PlaybookShell({
               }
 
               // Get extracted problems and format as CSV
-              console.log('[EXTRACT] Getting results...')
+              console.log('[EXTRACT] Getting results from /api/niche-finder/results/', jobId)
               const resultsResponse = await fetch(`/api/niche-finder/results/${jobId}`)
-              const resultsData = await resultsResponse.json()
 
-              // Format niches as CSV string
-              const niches = resultsData.niches || []
-              let csvOutput = 'problema,contexto,evidencia,url\n'
-              for (const niche of niches) {
-                const problem = (niche.problem || '').replace(/"/g, '""')
-                const context = (niche.context || '').replace(/"/g, '""')
-                const evidence = (niche.evidence || '').replace(/"/g, '""')
-                const url = niche.source_url || ''
-                csvOutput += `"${problem}","${context}","${evidence}","${url}"\n`
+              if (!resultsResponse.ok) {
+                console.error('[EXTRACT] Failed to get results:', resultsResponse.status, resultsResponse.statusText)
+                throw new Error(`Error obteniendo resultados: ${resultsResponse.status}`)
               }
 
-              console.log('[EXTRACT] Completed. Total problems:', niches.length)
+              const resultsData = await resultsResponse.json()
+              console.log('[EXTRACT] Results data:', {
+                hasNiches: !!resultsData.niches,
+                nichesCount: resultsData.niches?.length || 0,
+                status: resultsData.status,
+                urls: resultsData.urls,
+              })
+
+              // Format niches as CSV string with all relevant columns
+              const niches = resultsData.niches || []
+              let csvOutput = 'problema,persona,causa_funcional,carga_emocional,evidencia,alternativas,url_fuente\n'
+              for (const niche of niches) {
+                const problem = (niche.problem || '').replace(/"/g, '""')
+                const persona = (niche.persona || '').replace(/"/g, '""')
+                const functionalCause = (niche.functional_cause || '').replace(/"/g, '""')
+                const emotionalLoad = (niche.emotional_load || '').replace(/"/g, '""')
+                const evidence = (niche.evidence || '').replace(/"/g, '""')
+                const alternatives = (niche.alternatives || '').replace(/"/g, '""')
+                const url = niche.source_url || ''
+                csvOutput += `"${problem}","${persona}","${functionalCause}","${emotionalLoad}","${evidence}","${alternatives}","${url}"\n`
+              }
+
+              console.log('[EXTRACT] Completed. Total problems:', niches.length, 'CSV preview:', csvOutput.substring(0, 200))
 
               // Mark as completed with CSV output
               updateStepState(stepId, {
