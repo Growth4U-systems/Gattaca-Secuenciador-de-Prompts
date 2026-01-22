@@ -26,6 +26,17 @@ import { SearchWithPreviewPanel } from './SearchWithPreviewPanel'
 import { ReviewAndScrapePanel } from './ReviewAndScrapePanel'
 import { ScrapeResultsPanel } from './ScrapeResultsPanel'
 import ApiKeySetupModal from '../settings/ApiKeySetupModal'
+import CSVTableViewer from '../documents/CSVTableViewer'
+
+// Helper to detect if a string is CSV content
+function isCSVContent(content: string | null | undefined): boolean {
+  if (!content || typeof content !== 'string') return false
+  const lines = content.trim().split('\n')
+  if (lines.length < 1) return false
+  // Check if first line looks like CSV headers (has commas)
+  const firstLine = lines[0]
+  return firstLine.includes(',') && !firstLine.startsWith('{') && !firstLine.startsWith('[')
+}
 
 // Sub-components for different step types
 
@@ -598,15 +609,30 @@ function AutoWithReviewStep({
       </div>
 
       {showOutput && (
-        <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 max-h-96 overflow-auto">
-          {isEditing ? (
+        <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 overflow-hidden" style={{ maxHeight: '500px' }}>
+          {/* Empty or null state */}
+          {(!outputToDisplay || outputToDisplay === 'null' || (typeof outputToDisplay === 'string' && outputToDisplay.trim() === '')) ? (
+            <div className="text-center py-8 text-gray-500">
+              <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+              <p>No hay datos para mostrar.</p>
+              <p className="text-sm mt-1">Ejecuta el paso anterior para generar resultados.</p>
+            </div>
+          ) : isEditing ? (
             <textarea
               value={editedOutput || ''}
               onChange={(e) => setEditedOutput(e.target.value)}
               className="w-full h-64 font-mono text-sm bg-white border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
+          ) : typeof outputToDisplay === 'string' && isCSVContent(outputToDisplay) ? (
+            /* Render CSV as interactive table */
+            <div className="h-[450px]">
+              <CSVTableViewer
+                content={outputToDisplay}
+                filename={`${step.name || 'output'}.csv`}
+              />
+            </div>
           ) : (
-            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
+            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono overflow-auto max-h-[400px]">
               {typeof outputToDisplay === 'string'
                 ? outputToDisplay
                 : JSON.stringify(outputToDisplay, null, 2)}

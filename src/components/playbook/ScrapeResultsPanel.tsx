@@ -96,16 +96,24 @@ export function ScrapeResultsPanel({
 
       const data = await response.json()
 
+      // Debug: Log response to see what we're getting
+      console.log('[ScrapeResultsPanel] API response:', {
+        urlsCount: data.urls?.length,
+        failedCount: data.failedUrls?.length,
+        summary: data.summary,
+        pagination: data.pagination,
+      })
+
       if (append) {
         setUrls(prev => [...prev, ...data.urls])
       } else {
-        setUrls(data.urls)
+        setUrls(data.urls || [])
         setFailedUrls(data.failedUrls || [])
       }
 
       setSummary(data.summary)
       setHasMore(data.pagination?.hasMore || false)
-      setOffset(newOffset + data.urls.length)
+      setOffset(newOffset + (data.urls?.length || 0))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido')
     } finally {
@@ -353,9 +361,25 @@ export function ScrapeResultsPanel({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto space-y-3 min-h-0"
-        style={{ maxHeight: '400px' }}
+        className="overflow-y-auto space-y-3 border rounded-lg p-2 bg-gray-50"
+        style={{ maxHeight: '400px', minHeight: '150px' }}
       >
+        {/* Debug info for development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="text-xs text-gray-400 mb-2">
+            Debug: {filteredUrls.length} URLs cargadas, filter: {sourceFilter || 'ninguno'}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {filteredUrls.length === 0 && !loading && (
+          <div className="text-center py-8 text-gray-500">
+            <FileText className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+            <p>No hay URLs para mostrar.</p>
+            <p className="text-sm mt-1">Verifica que el scraping se completó correctamente.</p>
+          </div>
+        )}
+
         {filteredUrls.map(url => (
           <div
             key={url.id}
