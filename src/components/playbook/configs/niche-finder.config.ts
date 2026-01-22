@@ -209,10 +209,10 @@ export const nicheFinderConfig: PlaybookConfig = {
       steps: [
         {
           id: 'extract_problems',
-          name: 'Extraer Problemas (Step 1)',
-          description: 'Analiza cada markdown del scraping y extrae pain points como CSV',
-          type: 'auto',
-          executor: 'job', // Procesa URL por URL
+          name: 'Extraer Problemas',
+          description: 'Analiza cada markdown del scraping y extrae pain points. Muestra tabla interactiva al completar.',
+          type: 'auto_with_review', // Changed to show results directly
+          executor: 'job',
           jobType: 'niche_finder_extract',
           promptKey: 'step_1_find_problems',
           dependsOn: ['scrape_results'],
@@ -222,19 +222,11 @@ export const nicheFinderConfig: PlaybookConfig = {
               'Lee el contenido de cada página scrapeada',
               'Identifica quejas, frustraciones y necesidades',
               'Extrae problema, contexto y evidencia textual',
-              'Genera tabla CSV con todos los pain points',
+              'Genera tabla interactiva con todos los pain points',
             ],
             estimatedCost: 'Variable según contenido',
             costService: 'OpenAI API',
           },
-        },
-        {
-          id: 'review_extraction',
-          name: 'Revisar Extracción',
-          description: 'Revisa la tabla raw de problemas extraídos de todas las URLs',
-          type: 'auto_with_review',
-          executor: 'none',
-          dependsOn: ['extract_problems'],
         },
       ],
     },
@@ -254,7 +246,7 @@ export const nicheFinderConfig: PlaybookConfig = {
           type: 'auto_with_review',
           executor: 'llm',
           promptKey: 'step_2_clean_filter',
-          dependsOn: ['review_extraction'],
+          dependsOn: ['extract_problems'],
           executionExplanation: {
             title: 'Limpieza y Filtrado',
             steps: [
