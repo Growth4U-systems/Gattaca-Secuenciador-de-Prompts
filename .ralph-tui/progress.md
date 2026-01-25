@@ -72,3 +72,12 @@ Acceptance Criteria Met:\n- [x] When step starts, create/update `playbook_sessio
 3. Your current progress (45 URLs scraped) will be saved...\")\n\n### Acceptance Criteria Met:\n- ✅ When user clicks \"Back\" on a step with unsaved/in-progress data, show confirmation dialog\n- ✅ Dialog explains what will happen with progress description\n- ✅ Dialog has options: \"Go Back Anyway\", \"Save to Context Lake First\", \"Cancel\"\n- ✅ Browser beforeunload handler warns if session has unsaved changes\n- ✅ \"Save to Context Lake First\" opens save flow then proceeds with navigation\n\n
 
 ---
+## ✓ Iteration 8 - US-008: Create Universal "Save to Context Lake" Button
+*2026-01-25T19:22:52.485Z (244s)*
+
+**Status:** Completed
+
+**Notes:**
+tus:\n- ✅ Add \"Save to Context Lake\" button in footer (visible when step has output)\n- ✅ Button opens dialog (via `onOpenSaveModal` → existing `SaveToContextLakeModal`)\n- ✅ User can edit name, folder, tags before saving (existing modal feature)\n- ✅ Save includes metadata: session_id, step_id, playbook_id, created_at (existing API)\n- ✅ After save, button shows \"Saved ✓\" state with link to view document\n- ✅ Multiple saves from same step create separate documents (API uses `.insert()`)\n\n
+
+---
