@@ -109,3 +109,12 @@ lity"},{"content":"Integrate ArtifactBrowser into PlaybookShell","status":"compl
 {"type":"assistant","message":{"model":"claude-opus-4-5-20251101","id":"msg_01LFE65HJCbCfyFuCt9oEJTJ","type":"message","role":"assistant","content":[{"type":"text","text":"
 
 ---
+## ✓ Iteration 12 - US-012: Implement Historical Data Reuse
+*2026-01-25T19:56:00.906Z (584s)*
+
+**Status:** Completed
+
+**Notes:**
+relevant artifact types per step\n\n### All Acceptance Criteria Met:\n- [x] At relevant steps, show \"Use previous data\" option\n- [x] Opens panel showing compatible artifacts from other sessions\n- [x] Filter by: session name, date range, tags\n- [x] Preview artifact before selecting\n- [x] \"Use This Data\" imports artifact into current session's step\n- [x] Imported data marked with source session reference (traceability)\n- [x] Skip execution for steps where historical data is imported\n\n
+
+---
