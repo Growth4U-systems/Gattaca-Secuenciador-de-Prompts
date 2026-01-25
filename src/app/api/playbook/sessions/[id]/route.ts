@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
 type Params = { params: Promise<{ id: string }> }
 
-// GET: Get session details with steps and jobs
+// GET: Get session details with steps, artifacts, and jobs
 export async function GET(request: NextRequest, { params }: Params) {
+  // Authenticate user
+  const supabase = await createClient()
+  const { data: { session: authSession } } = await supabase.auth.getSession()
+
+  if (!authSession) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -14,15 +23,16 @@ export async function GET(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 })
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabaseAdmin = createServiceClient(supabaseUrl, supabaseServiceKey)
   const { id: sessionId } = await params
 
   try {
-    // Get session
-    const { data: session, error: sessionError } = await supabase
+    // Get session - ensure it belongs to the authenticated user
+    const { data: session, error: sessionError } = await supabaseAdmin
       .from('playbook_sessions')
       .select('*')
       .eq('id', sessionId)
+      .eq('user_id', authSession.user.id)
       .single()
 
     if (sessionError || !session) {
@@ -30,14 +40,21 @@ export async function GET(request: NextRequest, { params }: Params) {
     }
 
     // Get session steps
-    const { data: steps } = await supabase
+    const { data: steps } = await supabaseAdmin
       .from('playbook_session_steps')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('step_order', { ascending: true, nullsFirst: false })
+
+    // Get session artifacts
+    const { data: artifacts } = await supabaseAdmin
+      .from('playbook_session_artifacts')
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
 
     // Get related jobs (for niche_finder)
-    const { data: jobs } = await supabase
+    const { data: jobs } = await supabaseAdmin
       .from('niche_finder_jobs')
       .select('id, status, urls_found, urls_scraped, urls_failed, niches_extracted, created_at, updated_at')
       .eq('session_id', sessionId)
@@ -49,6 +66,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     return NextResponse.json({
       session,
       steps: steps || [],
+      artifacts: artifacts || [],
       jobs: jobs || [],
       timeline,
     })
@@ -63,6 +81,14 @@ export async function GET(request: NextRequest, { params }: Params) {
 
 // PATCH: Update session
 export async function PATCH(request: NextRequest, { params }: Params) {
+  // Authenticate user
+  const supabase = await createClient()
+  const { data: { session: authSession } } = await supabase.auth.getSession()
+
+  if (!authSession) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -70,12 +96,23 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 })
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabaseAdmin = createServiceClient(supabaseUrl, supabaseServiceKey)
   const { id: sessionId } = await params
 
   try {
     const body = await request.json()
-    const allowedFields = ['status', 'current_phase', 'current_step', 'config', 'variables', 'active_job_id', 'completed_at']
+    const allowedFields = [
+      'name',
+      'tags',
+      'status',
+      'current_phase',
+      'current_step',
+      'current_step_id',
+      'config',
+      'variables',
+      'active_job_id',
+      'completed_at',
+    ]
 
     const updateData: Record<string, unknown> = {}
     for (const field of allowedFields) {
@@ -88,14 +125,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
     }
 
-    const { data: session, error } = await supabase
+    // Update session - ensure it belongs to the authenticated user
+    const { data: session, error } = await supabaseAdmin
       .from('playbook_sessions')
       .update(updateData)
       .eq('id', sessionId)
+      .eq('user_id', authSession.user.id)
       .select()
       .single()
 
     if (error) {
+      if (error.code === 'PGRST116') {
+        return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+      }
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 

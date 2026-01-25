@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +46,14 @@ function mapToDbFields(fields: Omit<StepUpdate, 'step_id'>): Record<string, unkn
 
 // GET: List steps for a session
 export async function GET(request: NextRequest, { params }: Params) {
+  // Authenticate user
+  const supabase = await createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -52,15 +61,27 @@ export async function GET(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 })
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabaseAdmin = createServiceClient(supabaseUrl, supabaseServiceKey)
   const { id: sessionId } = await params
 
   try {
-    const { data: steps, error } = await supabase
+    // Verify session belongs to the authenticated user
+    const { data: playbookSession, error: sessionError } = await supabaseAdmin
+      .from('playbook_sessions')
+      .select('id')
+      .eq('id', sessionId)
+      .eq('user_id', session.user.id)
+      .single()
+
+    if (sessionError || !playbookSession) {
+      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+    }
+
+    const { data: steps, error } = await supabaseAdmin
       .from('playbook_session_steps')
       .select('*')
       .eq('session_id', sessionId)
-      .order('created_at', { ascending: true })
+      .order('step_order', { ascending: true, nullsFirst: false })
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
@@ -78,6 +99,14 @@ export async function GET(request: NextRequest, { params }: Params) {
 
 // POST/PUT: Upsert a step (create or update)
 export async function POST(request: NextRequest, { params }: Params) {
+  // Authenticate user
+  const supabase = await createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -85,10 +114,22 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 })
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabaseAdmin = createServiceClient(supabaseUrl, supabaseServiceKey)
   const { id: sessionId } = await params
 
   try {
+    // Verify session belongs to the authenticated user
+    const { data: playbookSession, error: sessionError } = await supabaseAdmin
+      .from('playbook_sessions')
+      .select('id')
+      .eq('id', sessionId)
+      .eq('user_id', session.user.id)
+      .single()
+
+    if (sessionError || !playbookSession) {
+      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+    }
+
     const body: StepUpdate = await request.json()
     const { step_id, ...updateFields } = body
 
@@ -100,7 +141,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     const dbFields = mapToDbFields(updateFields)
 
     // Upsert step
-    const { data: step, error } = await supabase
+    const { data: step, error } = await supabaseAdmin
       .from('playbook_session_steps')
       .upsert(
         {
@@ -120,7 +161,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     // Also update session's current_step if starting a new step
     if (updateFields.status === 'in_progress') {
-      await supabase
+      await supabaseAdmin
         .from('playbook_sessions')
         .update({ current_step: step_id })
         .eq('id', sessionId)

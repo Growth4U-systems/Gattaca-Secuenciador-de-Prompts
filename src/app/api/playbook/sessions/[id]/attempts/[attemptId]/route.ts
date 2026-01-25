@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,14 @@ interface AttemptUpdate {
 
 // GET: Get a specific attempt
 export async function GET(request: NextRequest, { params }: Params) {
+  // Authenticate user
+  const supabase = await createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -21,11 +30,23 @@ export async function GET(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 })
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabaseAdmin = createServiceClient(supabaseUrl, supabaseServiceKey)
   const { id: sessionId, attemptId } = await params
 
   try {
-    const { data: attempt, error } = await supabase
+    // Verify session belongs to the authenticated user
+    const { data: playbookSession, error: sessionError } = await supabaseAdmin
+      .from('playbook_sessions')
+      .select('id')
+      .eq('id', sessionId)
+      .eq('user_id', session.user.id)
+      .single()
+
+    if (sessionError || !playbookSession) {
+      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+    }
+
+    const { data: attempt, error } = await supabaseAdmin
       .from('playbook_step_attempts')
       .select('*')
       .eq('id', attemptId)
@@ -51,6 +72,14 @@ export async function GET(request: NextRequest, { params }: Params) {
 
 // PATCH: Update an attempt
 export async function PATCH(request: NextRequest, { params }: Params) {
+  // Authenticate user
+  const supabase = await createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -58,10 +87,22 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 })
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabaseAdmin = createServiceClient(supabaseUrl, supabaseServiceKey)
   const { id: sessionId, attemptId } = await params
 
   try {
+    // Verify session belongs to the authenticated user
+    const { data: playbookSession, error: sessionError } = await supabaseAdmin
+      .from('playbook_sessions')
+      .select('id')
+      .eq('id', sessionId)
+      .eq('user_id', session.user.id)
+      .single()
+
+    if (sessionError || !playbookSession) {
+      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+    }
+
     const body: AttemptUpdate = await request.json()
     const updateFields: Record<string, unknown> = {}
 
@@ -74,7 +115,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
     }
 
-    const { data: attempt, error } = await supabase
+    const { data: attempt, error } = await supabaseAdmin
       .from('playbook_step_attempts')
       .update(updateFields)
       .eq('id', attemptId)
