@@ -127,3 +127,12 @@ relevant artifact types per step\n\n### All Acceptance Criteria Met:\n- [x] At r
 rvals during execution\n\n### 5. Context Lake Integration\n- Available through `ArtifactBrowser` panel in the PlaybookShell header\n- `UnifiedSearchExtractPanel` has dedicated \"Save to Context Lake\" button for scraped content\n- All step artifacts can be saved to Context Lake\n\n### 6. Historical Data Accessibility\n- Existing `niche_finder_jobs` API routes remain unchanged\n- \"Load Previous Jobs\" feature still works to reuse previous SERP results\n- All historical job data is accessible\n\n
 
 ---
+## ✓ Iteration 14 - US-014: Create Playbook Session API Routes
+*2026-01-25T20:11:11.502Z (406s)*
+
+**Status:** Completed
+
+**Notes:**
+ook/sessions/route.ts` - Updated POST/GET\n- `src/app/api/playbook/sessions/[id]/route.ts` - Updated GET/PATCH  \n- `src/app/api/playbook/sessions/[id]/artifacts/route.ts` - **New** GET\n- `src/app/api/playbook/sessions/[id]/steps/[stepId]/artifacts/route.ts` - **New** POST\n- `src/app/api/playbook/sessions/[id]/steps/route.ts` - Added auth\n- `src/app/api/playbook/sessions/[id]/attempts/route.ts` - Added auth\n- `src/app/api/playbook/sessions/[id]/attempts/[attemptId]/route.ts` - Added auth\n\n
+
+---
