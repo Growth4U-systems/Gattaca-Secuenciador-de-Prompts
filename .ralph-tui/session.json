@@ -3,10 +3,10 @@
   "sessionId": "a2c55120-b0a5-4f35-89fb-2320b271569e",
   "status": "running",
   "startedAt": "2026-01-25T18:38:53.746Z",
-  "updatedAt": "2026-01-25T18:41:58.398Z",
-  "currentIteration": 0,
+  "updatedAt": "2026-01-25T18:47:56.775Z",
+  "currentIteration": 1,
   "maxIterations": 15,
-  "tasksCompleted": 0,
+  "tasksCompleted": 1,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -17,8 +17,8 @@
       {
         "id": "US-001",
         "title": "Create Playbook Session Management Schema",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-002",
@@ -106,9 +106,20 @@
       }
     ]
   },
-  "iterations": [],
+  "iterations": [
+    {
+      "iteration": 1,
+      "status": "completed",
+      "taskId": "US-001",
+      "taskTitle": "Create Playbook Session Management Schema",
+      "taskCompleted": true,
+      "durationMs": 131937,
+      "startedAt": "2026-01-25T18:39:46.458Z",
+      "endedAt": "2026-01-25T18:41:58.395Z"
+    }
+  ],
   "skippedTaskIds": [],
   "cwd": "/Users/martin/Gattaca-Secuenciador-de-Prompts",
   "activeTaskIds": [],
-  "subagentPanelVisible": false
+  "subagentPanelVisible": true
 }
