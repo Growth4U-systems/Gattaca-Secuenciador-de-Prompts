@@ -8,7 +8,6 @@ import {
   CheckCircle,
   Circle,
   Info,
-  X,
 } from 'lucide-react'
 import {
   StepDefinition,
@@ -17,6 +16,11 @@ import {
   StepCompletionCriteria,
 } from './types'
 import SavedIndicator from './SavedIndicator'
+import NavigationWarningDialog, {
+  NavigationWarningAction,
+  NavigationWarningInfo,
+} from './NavigationWarningDialog'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 export interface PlaybookStepContainerProps {
   /** The step definition containing metadata and guidance */
@@ -64,75 +68,22 @@ export interface PlaybookStepContainerProps {
     saveError: string | null
     isDirty?: boolean
   }
+  /**
+   * Description of current progress for the navigation warning dialog
+   * e.g., "45 URLs scraped", "3 keywords configured"
+   */
+  progressDescription?: string
+  /**
+   * Callback to save current output to Context Lake before navigating back
+   * If provided, enables the "Save to Context Lake First" option
+   */
+  onSaveToContextLake?: () => Promise<void>
+  /**
+   * Whether Context Lake save is currently in progress
+   */
+  isSavingToContextLake?: boolean
 }
 
-/**
- * Back navigation warning modal
- */
-function BackWarningModal({
-  isOpen,
-  onClose,
-  onConfirm,
-}: {
-  isOpen: boolean
-  onClose: () => void
-  onConfirm: () => void
-}) {
-  if (!isOpen) return null
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-        >
-          <X size={20} />
-        </button>
-
-        {/* Content */}
-        <div className="flex items-start gap-4">
-          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
-            <AlertTriangle className="w-5 h-5 text-orange-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Go back to previous step?
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              You have entered data in this step. Going back may cause you to lose
-              your current progress. Are you sure you want to continue?
-            </p>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center justify-end gap-3 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 transition-colors"
-          >
-            Go Back Anyway
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 /**
  * User action item in the guidance section
@@ -268,7 +219,11 @@ function evaluateCompletionCriteria(
  * - "What you need to do" guidance section with bullet points
  * - Main content area for step-specific UI
  * - Footer with Back/Next buttons
- * - Back button shows warning if there's unsaved data
+ * - Back button shows navigation warning if there's unsaved data with three options:
+ *   - "Go Back Anyway" - proceed with navigation
+ *   - "Save to Context Lake First" - save output then navigate
+ *   - "Cancel" - stay on current step
+ * - Browser beforeunload warning when session has unsaved changes
  * - Next button disabled until completion criteria met
  */
 export default function PlaybookStepContainer({
@@ -286,8 +241,18 @@ export default function PlaybookStepContainer({
   footerHelperText,
   hasUnsavedData = false,
   saveState,
+  progressDescription,
+  onSaveToContextLake,
+  isSavingToContextLake = false,
 }: PlaybookStepContainerProps) {
-  const [showBackWarning, setShowBackWarning] = useState(false)
+  const [showNavigationWarning, setShowNavigationWarning] = useState(false)
+
+  // Browser beforeunload warning for unsaved changes
+  useUnsavedChangesWarning({
+    hasUnsavedChanges: hasUnsavedData || stepState.status === 'in_progress',
+    message: 'You have unsaved changes. Are you sure you want to leave?',
+    enabled: true,
+  })
 
   // Determine if continue button should be enabled
   const canContinue = evaluateCompletionCriteria(
@@ -296,22 +261,58 @@ export default function PlaybookStepContainer({
     isComplete
   )
 
+  // Build warning info for the dialog
+  const warningInfo: NavigationWarningInfo = {
+    stepName: step.name,
+    stepNumber,
+    progressDescription,
+  }
+
   // Handle back button click
   const handleBackClick = useCallback(() => {
-    if (hasUnsavedData) {
-      setShowBackWarning(true)
+    if (hasUnsavedData || stepState.status === 'in_progress') {
+      setShowNavigationWarning(true)
     } else if (onBack) {
       onBack()
     }
-  }, [hasUnsavedData, onBack])
+  }, [hasUnsavedData, stepState.status, onBack])
 
-  // Handle confirmed back navigation
-  const handleConfirmBack = useCallback(() => {
-    setShowBackWarning(false)
-    if (onBack) {
-      onBack()
+  // Handle navigation warning dialog actions
+  const handleNavigationAction = useCallback(async (action: NavigationWarningAction) => {
+    switch (action) {
+      case 'cancel':
+        setShowNavigationWarning(false)
+        break
+
+      case 'go_back':
+        setShowNavigationWarning(false)
+        if (onBack) {
+          onBack()
+        }
+        break
+
+      case 'save_first':
+        if (onSaveToContextLake) {
+          try {
+            await onSaveToContextLake()
+            setShowNavigationWarning(false)
+            if (onBack) {
+              onBack()
+            }
+          } catch (error) {
+            // Keep dialog open on error - user can retry or choose another option
+            console.error('[PlaybookStepContainer] Save to Context Lake failed:', error)
+          }
+        } else {
+          // If no save handler, just go back
+          setShowNavigationWarning(false)
+          if (onBack) {
+            onBack()
+          }
+        }
+        break
     }
-  }, [onBack])
+  }, [onBack, onSaveToContextLake])
 
   // Determine continue button label
   const buttonLabel = continueLabel || (isLast ? 'Finish' : 'Continue')
@@ -421,11 +422,12 @@ export default function PlaybookStepContainer({
         </div>
       </div>
 
-      {/* Back warning modal */}
-      <BackWarningModal
-        isOpen={showBackWarning}
-        onClose={() => setShowBackWarning(false)}
-        onConfirm={handleConfirmBack}
+      {/* Navigation warning dialog */}
+      <NavigationWarningDialog
+        isOpen={showNavigationWarning}
+        warningInfo={warningInfo}
+        onAction={handleNavigationAction}
+        isSaving={isSavingToContextLake}
       />
     </div>
   )
