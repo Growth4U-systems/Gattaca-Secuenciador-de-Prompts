@@ -97,66 +97,20 @@ export const nicheFinderConfig: PlaybookConfig = {
   phases: [
     // =========================================
     // FASE 1: CONFIGURACIÓN
+    // Panel unificado con palabras clave y fuentes
     // =========================================
     {
       id: 'configuration',
       name: 'Configuración',
-      description: 'Define el producto y contexto de búsqueda',
+      description: 'Define palabras clave y fuentes de búsqueda',
       steps: [
-        // context_type is configured in Campaign Wizard (variables section below)
-        // No need for a separate step - value comes from campaign's custom_variables
         {
-          id: 'life_contexts',
-          name: 'Contextos de Búsqueda',
-          description: 'Palabras clave que describen a tu cliente potencial. Se combinan con las palabras de necesidad para formar queries de búsqueda.',
-          type: 'suggestion',
-          executor: 'none', // No LLM, fixed lists
-          // No dependsOn - context_type comes from campaign config, not a previous step
-          suggestionConfig: {
-            generateFrom: 'fixed',
-            fixedOptionsKey: 'life_contexts', // Will load B2C_CONTEXTS and/or B2B_CONTEXTS based on context_type
-            allowAdd: true,
-            allowEdit: false,
-            minSelections: 1,
-          },
-        },
-        {
-          id: 'need_words',
-          name: 'Palabras de Necesidad',
-          description: 'Palabras que representan las necesidades que tu producto resuelve',
-          type: 'suggestion',
-          executor: 'llm',
-          promptKey: 'suggest_need_words',
-          dependsOn: ['life_contexts'],
-          suggestionConfig: {
-            generateFrom: 'llm',
-            allowAdd: true,
-            allowEdit: true,
-            minSelections: 1,
-          },
-        },
-        {
-          id: 'indicators',
-          name: 'Indicadores de Problema',
-          description: 'Palabras que indican frustración o necesidad de ayuda',
-          type: 'suggestion',
-          executor: 'none',
-          suggestionConfig: {
-            generateFrom: 'api',
-            apiEndpoint: '/api/niche-finder/indicators',
-            allowAdd: true,
-            allowEdit: false,
-            minSelections: 0,
-          },
-        },
-        {
-          id: 'sources',
-          name: 'Fuentes de Datos',
-          description: 'Configura Reddit, foros temáticos y generales',
-          type: 'auto_with_preview',
-          executor: 'llm',
-          promptKey: 'suggest_forums',
-          dependsOn: ['life_contexts', 'need_words'],
+          id: 'keyword_config',
+          name: 'Configurar Búsqueda',
+          description: 'Configura contextos, palabras de necesidad, indicadores y fuentes de datos en un solo lugar.',
+          type: 'unified_keyword_config', // New unified config step
+          executor: 'llm', // For generating suggestions
+          promptKey: 'suggest_need_words', // For generating need words
         },
       ],
     },
@@ -167,65 +121,27 @@ export const nicheFinderConfig: PlaybookConfig = {
     // =========================================
     {
       id: 'search',
-      name: 'Búsqueda',
-      description: 'Busca y recopila contenido relevante',
+      name: 'Búsqueda y Extracción',
+      description: 'Busca conversaciones, descarga contenido y extrae problemas',
       steps: [
         {
-          id: 'search_and_preview',
-          name: 'Buscar URLs',
-          description: 'Ejecuta la búsqueda en Google para encontrar URLs relevantes',
-          type: 'search_with_preview', // Preview queries + execute SERP + show summary
+          id: 'search_scrape_extract',
+          name: 'Buscar y Analizar',
+          description: 'Busca conversaciones, descarga su contenido y extrae problemas automáticamente',
+          type: 'unified_search_extract', // All-in-one: SERP → show URLs → scrape → extract
           executor: 'job',
-          jobType: 'niche_finder_serp',
-          dependsOn: ['sources'],
-        },
-        {
-          id: 'review_and_scrape',
-          name: 'Revisar y Scrapear',
-          description: 'Revisa las URLs por fuente, selecciona cuáles incluir y descarga el contenido',
-          type: 'review_with_action', // Review URLs + select sources + execute scraping
-          executor: 'job',
-          jobType: 'niche_finder_scrape',
-          dependsOn: ['search_and_preview'],
-        },
-        {
-          id: 'scrape_results',
-          name: 'Resultados del Scraping',
-          description: 'Revisa el contenido scrapeado y selecciona qué URLs analizar',
-          type: 'display_scrape_results',
-          executor: 'none',
-          dependsOn: ['review_and_scrape'],
-        },
-      ],
-    },
-
-    // =========================================
-    // FASE 3: EXTRACCIÓN
-    // =========================================
-    {
-      id: 'extraction',
-      name: 'Extracción',
-      description: 'Analiza cada URL y extrae pain points',
-      steps: [
-        {
-          id: 'extract_problems',
-          name: 'Extraer Problemas',
-          description: 'Analiza cada markdown del scraping y extrae pain points. Muestra tabla interactiva al completar.',
-          type: 'auto_with_review', // Changed to show results directly
-          executor: 'job',
-          jobType: 'niche_finder_extract',
-          promptKey: 'step_1_find_problems',
-          dependsOn: ['scrape_results'],
+          jobType: 'niche_finder_unified',
+          dependsOn: ['keyword_config'],
           executionExplanation: {
-            title: 'Extracción de Problemas',
+            title: 'Búsqueda y Extracción Unificada',
             steps: [
-              'Lee el contenido de cada página scrapeada',
-              'Identifica quejas, frustraciones y necesidades',
-              'Extrae problema, contexto y evidencia textual',
-              'Genera tabla interactiva con todos los pain points',
+              'Busca conversaciones relevantes en foros y Reddit',
+              'Descarga el contenido de cada URL encontrada',
+              'Analiza el contenido con IA para extraer problemas',
+              'Genera tabla con todos los pain points identificados',
             ],
-            estimatedCost: 'Variable según contenido',
-            costService: 'OpenAI API',
+            estimatedCost: 'Variable según URLs',
+            costService: 'SERP API + Firecrawl + OpenAI',
           },
         },
       ],
@@ -246,7 +162,7 @@ export const nicheFinderConfig: PlaybookConfig = {
           type: 'auto_with_review',
           executor: 'llm',
           promptKey: 'step_2_clean_filter',
-          dependsOn: ['extract_problems'],
+          dependsOn: ['search_scrape_extract'],
           executionExplanation: {
             title: 'Limpieza y Filtrado',
             steps: [

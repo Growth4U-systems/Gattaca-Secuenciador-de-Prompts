@@ -7,6 +7,7 @@ import {
   Play,
   Loader2,
   Check,
+  CheckCircle,
   AlertCircle,
   Plus,
   RefreshCw,
@@ -14,6 +15,8 @@ import {
   CheckCheck,
   Edit3,
   Square,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { WorkAreaProps, StepDefinition, StepState } from './types'
@@ -25,17 +28,180 @@ import { SerpResultsPanel } from './SerpResultsPanel'
 import { SearchWithPreviewPanel } from './SearchWithPreviewPanel'
 import { ReviewAndScrapePanel } from './ReviewAndScrapePanel'
 import { ScrapeResultsPanel } from './ScrapeResultsPanel'
+import { UnifiedSearchExtractPanel } from './UnifiedSearchExtractPanel'
+import KeywordConfigPanel from './KeywordConfigPanel'
 import ApiKeySetupModal from '../settings/ApiKeySetupModal'
 import CSVTableViewer from '../documents/CSVTableViewer'
+import { StepInspectionPanel, StepInfo } from './StepInspectionPanel'
 
-// Helper to detect if a string is CSV content
+// Helper to detect if a string is CSV content (comma or semicolon separated)
 function isCSVContent(content: string | null | undefined): boolean {
   if (!content || typeof content !== 'string') return false
   const lines = content.trim().split('\n')
   if (lines.length < 1) return false
-  // Check if first line looks like CSV headers (has commas)
+  // Check if first line looks like CSV headers (has commas or semicolons)
   const firstLine = lines[0]
-  return firstLine.includes(',') && !firstLine.startsWith('{') && !firstLine.startsWith('[')
+  const hasDelimiter = firstLine.includes(',') || firstLine.includes(';')
+  // NOT a Markdown table (those start with |)
+  const isMarkdownTable = firstLine.trim().startsWith('|')
+  return hasDelimiter && !firstLine.startsWith('{') && !firstLine.startsWith('[') && !isMarkdownTable
+}
+
+// Helper to detect if content is a Markdown table
+function isMarkdownTable(content: string | null | undefined): boolean {
+  if (!content || typeof content !== 'string') return false
+  const lines = content.trim().split('\n')
+  if (lines.length < 2) return false
+  // Markdown tables have | characters and a separator line with dashes
+  const firstLine = lines[0].trim()
+  const secondLine = lines[1]?.trim() || ''
+  return firstLine.startsWith('|') && secondLine.includes('|') && secondLine.includes('-')
+}
+
+// Helper to count rows in a Markdown table
+function countMarkdownTableRows(content: string): number {
+  const lines = content.trim().split('\n').filter(l => l.trim().startsWith('|'))
+  // Subtract 2 for header and separator
+  return Math.max(0, lines.length - 2)
+}
+
+// Sources display component for the "Fuentes de Datos" step
+interface SourcesData {
+  reddit?: {
+    enabled: boolean
+    subreddits?: string[]
+  }
+  thematic_forums?: {
+    enabled: boolean
+    forums?: string[]
+  }
+  general_forums?: {
+    enabled: boolean
+    forums?: string[]
+  }
+}
+
+function SourcesDisplay({ data }: { data: SourcesData }) {
+  const parseData = (raw: unknown): SourcesData => {
+    if (typeof raw === 'string') {
+      try {
+        // Remove markdown code block if present
+        const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+        return JSON.parse(cleaned)
+      } catch {
+        return {}
+      }
+    }
+    return (raw as SourcesData) || {}
+  }
+
+  const sources = parseData(data)
+
+  return (
+    <div className="space-y-4">
+      {/* Reddit */}
+      {sources.reddit?.enabled && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xl">🔶</span>
+            <h4 className="font-medium text-orange-800">Reddit</h4>
+            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+              {sources.reddit.subreddits?.length || 0} subreddits
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {sources.reddit.subreddits?.map((sub, i) => (
+              <span
+                key={i}
+                className="px-3 py-1 bg-white border border-orange-200 rounded-full text-sm text-orange-700"
+              >
+                r/{sub}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Thematic Forums */}
+      {sources.thematic_forums?.enabled && sources.thematic_forums.forums && sources.thematic_forums.forums.length > 0 && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xl">💬</span>
+            <h4 className="font-medium text-purple-800">Foros Temáticos</h4>
+            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+              {sources.thematic_forums.forums.length} foros
+            </span>
+          </div>
+          <div className="space-y-2">
+            {sources.thematic_forums.forums.map((forum, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 px-3 py-2 bg-white border border-purple-200 rounded-lg text-sm"
+              >
+                <span className="text-purple-400">🔗</span>
+                <a
+                  href={forum}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-purple-700 hover:text-purple-900 hover:underline truncate"
+                >
+                  {forum.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* General Forums */}
+      {sources.general_forums?.enabled && sources.general_forums.forums && sources.general_forums.forums.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xl">🌐</span>
+            <h4 className="font-medium text-blue-800">Foros Generales</h4>
+            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+              {sources.general_forums.forums.length} foros
+            </span>
+          </div>
+          <div className="space-y-2">
+            {sources.general_forums.forums.map((forum, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm"
+              >
+                <span className="text-blue-400">🔗</span>
+                <a
+                  href={forum}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-700 hover:text-blue-900 hover:underline truncate"
+                >
+                  {forum.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Summary */}
+      <div className="text-sm text-gray-500 pt-2 border-t border-gray-200">
+        Total: {' '}
+        {(sources.reddit?.subreddits?.length || 0) +
+         (sources.thematic_forums?.forums?.length || 0) +
+         (sources.general_forums?.forums?.length || 0)} fuentes configuradas
+      </div>
+    </div>
+  )
+}
+
+// Helper to check if output looks like sources config
+function isSourcesOutput(output: unknown): boolean {
+  if (!output) return false
+  const str = typeof output === 'string' ? output : ''
+  // Check for JSON with reddit/forums keys
+  return str.includes('"reddit"') || str.includes('"thematic_forums"') ||
+         (typeof output === 'object' && ('reddit' in (output as Record<string, unknown>) || 'thematic_forums' in (output as Record<string, unknown>)))
 }
 
 // Sub-components for different step types
@@ -609,35 +775,78 @@ function AutoWithReviewStep({
       </div>
 
       {showOutput && (
-        <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 overflow-hidden" style={{ maxHeight: '500px' }}>
-          {/* Empty or null state */}
-          {(!outputToDisplay || outputToDisplay === 'null' || (typeof outputToDisplay === 'string' && outputToDisplay.trim() === '')) ? (
-            <div className="text-center py-8 text-gray-500">
-              <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-              <p>No hay datos para mostrar.</p>
-              <p className="text-sm mt-1">Ejecuta el paso anterior para generar resultados.</p>
+        <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden" style={{ maxHeight: '500px' }}>
+          {/* Metadata header with timestamp and row count */}
+          {outputToDisplay && typeof outputToDisplay === 'string' && isMarkdownTable(outputToDisplay) && (
+            <div className="px-4 py-2 bg-gray-100 border-b border-gray-200 flex items-center justify-between text-xs text-gray-500">
+              <span>
+                {countMarkdownTableRows(outputToDisplay)} filas en la tabla
+              </span>
+              {stepState.completedAt && (
+                <span>
+                  Generado: {new Date(stepState.completedAt).toLocaleString('es-ES', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </span>
+              )}
             </div>
-          ) : isEditing ? (
-            <textarea
-              value={editedOutput || ''}
-              onChange={(e) => setEditedOutput(e.target.value)}
-              className="w-full h-64 font-mono text-sm bg-white border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
-          ) : typeof outputToDisplay === 'string' && isCSVContent(outputToDisplay) ? (
-            /* Render CSV as interactive table */
-            <div className="h-[450px]">
-              <CSVTableViewer
-                content={outputToDisplay}
-                filename={`${step.name || 'output'}.csv`}
-              />
-            </div>
-          ) : (
-            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono overflow-auto max-h-[400px]">
-              {typeof outputToDisplay === 'string'
-                ? outputToDisplay
-                : JSON.stringify(outputToDisplay, null, 2)}
-            </pre>
           )}
+          <div className="p-4 overflow-auto" style={{ maxHeight: '450px' }}>
+            {/* Empty or null state */}
+            {(!outputToDisplay || outputToDisplay === 'null' || (typeof outputToDisplay === 'string' && outputToDisplay.trim() === '')) ? (
+              <div className="text-center py-8 text-gray-500">
+                <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                <p>No hay datos para mostrar.</p>
+                <p className="text-sm mt-1">Ejecuta el paso anterior para generar resultados.</p>
+              </div>
+            ) : isEditing ? (
+              <textarea
+                value={editedOutput || ''}
+                onChange={(e) => setEditedOutput(e.target.value)}
+                className="w-full h-64 font-mono text-sm bg-white border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              />
+            ) : typeof outputToDisplay === 'string' && isMarkdownTable(outputToDisplay) ? (
+              /* Render Markdown table */
+              <div className="prose prose-sm max-w-none overflow-x-auto">
+                <ReactMarkdown
+                  components={{
+                    table: ({ children }) => (
+                      <table className="min-w-full border-collapse text-sm">{children}</table>
+                    ),
+                    th: ({ children }) => (
+                      <th className="border border-gray-300 bg-gray-100 px-3 py-2 text-left font-medium text-gray-700">{children}</th>
+                    ),
+                    td: ({ children }) => (
+                      <td className="border border-gray-300 px-3 py-2 text-gray-600">{children}</td>
+                    ),
+                  }}
+                >
+                  {outputToDisplay}
+                </ReactMarkdown>
+              </div>
+            ) : typeof outputToDisplay === 'string' && isCSVContent(outputToDisplay) ? (
+              /* Render CSV as interactive table */
+              <div className="h-[400px]">
+                <CSVTableViewer
+                  content={outputToDisplay}
+                  filename={`${step.name || 'output'}.csv`}
+                />
+              </div>
+            ) : isSourcesOutput(outputToDisplay) ? (
+              /* Render sources config as visual cards */
+              <SourcesDisplay data={outputToDisplay as SourcesData} />
+            ) : (
+              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono overflow-auto max-h-[400px]">
+                {typeof outputToDisplay === 'string'
+                  ? outputToDisplay
+                  : JSON.stringify(outputToDisplay, null, 2)}
+              </pre>
+            )}
+          </div>
         </div>
       )}
 
@@ -916,9 +1125,9 @@ function SerpResultsSummary({ jobId, onContinue, onBack }: SerpResultsSummaryPro
             <Check className="w-5 h-5 text-green-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-green-800">Búsqueda completada</h3>
+            <h3 className="font-semibold text-green-800">Conversaciones encontradas</h3>
             <p className="text-sm text-green-600">
-              Las URLs están listas para revisar y scrapear
+              Listas para descargar contenido
             </p>
           </div>
         </div>
@@ -930,13 +1139,13 @@ function SerpResultsSummary({ jobId, onContinue, onBack }: SerpResultsSummaryPro
               <p className="text-3xl font-bold text-green-700">
                 {summary.totalUrls.toLocaleString()}
               </p>
-              <p className="text-sm text-green-600">URLs encontradas</p>
+              <p className="text-sm text-green-600">Conversaciones</p>
             </div>
             <div className="text-center">
               <p className="text-3xl font-bold text-green-700">
                 {summary.sourceCount}
               </p>
-              <p className="text-sm text-green-600">Fuentes diferentes</p>
+              <p className="text-sm text-green-600">Fuentes</p>
             </div>
           </div>
         )}
@@ -945,8 +1154,7 @@ function SerpResultsSummary({ jobId, onContinue, onBack }: SerpResultsSummaryPro
       {/* Info about next step */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <p className="text-sm text-blue-800">
-          <strong>Siguiente paso:</strong> Podrás revisar las URLs por fuente, seleccionar cuáles
-          incluir, y ejecutar el scraping para descargar el contenido.
+          <strong>Siguiente:</strong> Descargar el contenido de las conversaciones para analizar problemas reales.
         </p>
       </div>
 
@@ -962,7 +1170,7 @@ function SerpResultsSummary({ jobId, onContinue, onBack }: SerpResultsSummaryPro
           onClick={onContinue}
           className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
         >
-          Continuar a Revisar URLs
+          Descargar Contenido
           <ChevronRight size={18} />
         </button>
       </div>
@@ -997,11 +1205,21 @@ function SearchWithPreviewStep({
   isExecuting: externalIsExecuting,
 }: SearchWithPreviewStepProps) {
   const isExecuting = externalIsExecuting || stepState.status === 'in_progress'
+  const hasAutoExecuted = useRef(false)
 
   // Build config from playbook context
   const config = useMemo(() => {
+    // Debug: Log what we're receiving from playbookContext
+    console.log('[SearchWithPreviewStep] Building config from playbookContext:', {
+      life_contexts: playbookContext?.life_contexts,
+      need_words: playbookContext?.need_words,
+      indicators: playbookContext?.indicators,
+      sources: playbookContext?.sources,
+      all_keys: playbookContext ? Object.keys(playbookContext) : [],
+    })
+
     // Ensure arrays and default sources structure
-    return {
+    const result = {
       life_contexts: (playbookContext?.life_contexts as string[]) || [],
       product_words: (playbookContext?.need_words as string[]) || [],
       indicators: (playbookContext?.indicators as string[]) || [],
@@ -1012,15 +1230,18 @@ function SearchWithPreviewStep({
       },
       serp_pages: (playbookContext?.serp_pages as number) || 5,
     }
+
+    console.log('[SearchWithPreviewStep] Built config:', result)
+    return result
   }, [playbookContext])
 
-  const handleExecute = async () => {
+  const handleExecute = useCallback(async () => {
     onUpdateState({
       status: 'in_progress',
       startedAt: new Date(),
     })
     await onExecute(config)
-  }
+  }, [config, onExecute, onUpdateState])
 
   const handleCancel = () => {
     if (onCancel) {
@@ -1028,59 +1249,206 @@ function SearchWithPreviewStep({
     }
   }
 
+  // Auto-execute when step is pending and we have valid config
+  const hasValidConfig = config.life_contexts.length > 0 && config.product_words.length > 0
+  useEffect(() => {
+    if (stepState.status === 'pending' && hasValidConfig && !hasAutoExecuted.current) {
+      hasAutoExecuted.current = true
+      console.log('[SearchWithPreviewStep] Auto-executing with config:', config)
+      handleExecute()
+    }
+  }, [stepState.status, hasValidConfig, handleExecute, config])
+
   // Get serpJobId from step output or context for results display
   const serpJobId = (stepState.output as { jobId?: string })?.jobId ||
     (playbookContext?.serpJobId as string)
 
-  // Show completed state with results
-  if (stepState.status === 'completed') {
+  // Handle retry - reset step and re-execute (must be defined before any early returns)
+  const handleRetry = useCallback(() => {
+    console.log('[SearchWithPreviewStep] Retry requested, resetting step and re-executing...')
+    // Reset the autoExecuted flag so useEffect can trigger again
+    hasAutoExecuted.current = false
+    // Reset step state to pending (this clears the old jobId)
+    onUpdateState({
+      status: 'pending',
+      output: undefined,
+      error: undefined,
+      progress: undefined,
+    })
+    // The useEffect will pick this up and auto-execute with the new config
+  }, [onUpdateState])
+
+  // Show progress during execution with real-time URL count
+  if (isExecuting) {
+    const progress = stepState.progress
+    const urlsFound = progress?.current || 0
+    const totalSearches = progress?.total || 0
+    const percentComplete = totalSearches > 0 ? Math.round((urlsFound / totalSearches) * 100) : 0
+
     return (
-      <div className="space-y-4">
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-green-800">
-            <Check size={20} />
-            <span className="font-medium">Búsqueda completada</span>
+      <div className="space-y-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+            <div>
+              <h3 className="font-semibold text-blue-800">Buscando conversaciones...</h3>
+              <p className="text-sm text-blue-600">{progress?.label || 'Ejecutando búsquedas en SERP'}</p>
+            </div>
           </div>
-          {stepState.output && (
-            <p className="text-sm text-green-600 mt-2">
-              Se encontraron URLs para analizar
-            </p>
-          )}
+
+          {/* Progress bar */}
+          <div className="mb-4">
+            <div className="flex justify-between text-sm text-blue-700 mb-1">
+              <span>{urlsFound} URLs encontradas</span>
+              <span>{percentComplete}%</span>
+            </div>
+            <div className="w-full bg-blue-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${percentComplete}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-blue-200">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-blue-700">{urlsFound}</p>
+              <p className="text-xs text-blue-600">URLs encontradas</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-blue-700">{totalSearches}</p>
+              <p className="text-xs text-blue-600">Búsquedas totales</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-blue-700">{config.life_contexts.length}</p>
+              <p className="text-xs text-blue-600">Contextos</p>
+            </div>
+          </div>
         </div>
-        {onBack && (
+
+        {/* Cancel button */}
+        <div className="flex justify-center">
           <button
-            onClick={onBack}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            onClick={handleCancel}
+            className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            ← Ver resultados
+            Cancelar búsqueda
           </button>
-        )}
+        </div>
       </div>
     )
   }
 
-  // If we have a serpJobId and the step is not error, show simple summary
-  // The detailed URL selection happens in the next step (review_and_scrape)
-  if (serpJobId && stepState.status !== 'error') {
+  // If we have a serpJobId and step is completed, show completion summary
+  // Don't show ReviewAndScrapePanel here - that's for the next step (review_and_scrape)
+  if (serpJobId && stepState.status === 'completed') {
+    const output = stepState.output as { jobId?: string; urlsFound?: number; costs?: { serp?: number } }
+    const urlsFound = output?.urlsFound || 0
+    const serpCost = output?.costs?.serp || 0
+
     return (
-      <SerpResultsSummary
-        jobId={serpJobId}
-        onContinue={() => {
-          // IMPORTANT: Save jobId in output so next step (review_and_scrape) can access it
-          onUpdateState({
-            status: 'completed',
-            completedAt: new Date(),
-            output: { jobId: serpJobId },
-          })
-          // Call the parent's onContinue to advance to next step
-          onContinue()
-        }}
-        onBack={onBack || (() => {})}
-      />
+      <div className="space-y-6">
+        {/* Success header */}
+        <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+              <CheckCircle className="w-6 h-6 text-green-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-green-800">Búsqueda Completada</h3>
+              <p className="text-sm text-green-600">Se encontraron {urlsFound} URLs para analizar</p>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-green-200">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-700">{urlsFound}</p>
+              <p className="text-xs text-green-600">URLs encontradas</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-700">${serpCost.toFixed(2)}</p>
+              <p className="text-xs text-green-600">Costo SERP</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-700">{config.life_contexts.length}</p>
+              <p className="text-xs text-green-600">Contextos</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3">
+          <button
+            onClick={onBack || (() => {})}
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+          >
+            ← Volver
+          </button>
+          <button
+            onClick={handleRetry}
+            className="px-4 py-2 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors"
+          >
+            Re-buscar
+          </button>
+          <button
+            onClick={onContinue}
+            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+          >
+            Continuar a Descargar Contenido →
+          </button>
+        </div>
+      </div>
     )
   }
 
-  // Show preview panel
+  // If we have a serpJobId but step is not completed (in progress or pending), show polling state
+  // This happens when returning to the step while job is running
+  if (serpJobId && stepState.status !== 'error' && stepState.status !== 'completed') {
+    return (
+      <div className="space-y-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+            <div>
+              <h3 className="font-semibold text-blue-800">Búsqueda en progreso...</h3>
+              <p className="text-sm text-blue-600">{stepState.progress?.label || 'Ejecutando búsquedas SERP'}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // If config is empty (missing from previous step), show error message instead of empty form
+  if (!hasValidConfig) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-amber-800 mb-2">
+            <AlertCircle size={20} />
+            <span className="font-medium">Configuración no encontrada</span>
+          </div>
+          <p className="text-sm text-amber-700 mb-3">
+            No se encontraron los contextos y palabras de necesidad del paso anterior.
+            Por favor vuelve al paso de configuración para definirlos.
+          </p>
+          <div className="text-xs text-amber-600 bg-amber-100 rounded p-2 font-mono">
+            Debug: life_contexts={config.life_contexts.length}, product_words={config.product_words.length}
+          </div>
+        </div>
+        <button
+          onClick={onBack || (() => {})}
+          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2"
+        >
+          ← Volver a Configuración
+        </button>
+      </div>
+    )
+  }
+
+  // Show preview panel only if we don't have valid config to auto-execute
   return (
     <SearchWithPreviewPanel
       config={config}
@@ -1279,19 +1647,27 @@ export function WorkArea({
   onBack,
   onCancel,
   onRerunPrevious,
+  onRetry,
   isFirst,
   isLast,
   previousStepOutput,
   playbookContext,
   projectId,
+  allSteps,
 }: WorkAreaProps) {
   const [isExpanded, setIsExpanded] = useState(true)
+  const [showInspection, setShowInspection] = useState(false)
   const prevStepIdRef = useRef<string | null>(null)
 
   // API key verification state
   const [showApiKeyModal, setShowApiKeyModal] = useState(false)
   const [missingApiKeys, setMissingApiKeys] = useState<string[]>([])
   const [apiKeysChecked, setApiKeysChecked] = useState(false)
+
+  // Generation loading states
+  const [isGeneratingNeedWords, setIsGeneratingNeedWords] = useState(false)
+  const [isGeneratingSubreddits, setIsGeneratingSubreddits] = useState(false)
+  const [isGeneratingForums, setIsGeneratingForums] = useState(false)
 
   // Check required API keys when step changes
   useEffect(() => {
@@ -1336,6 +1712,13 @@ export function WorkArea({
       prevStepIdRef.current = step.id
     }
   }, [step.id])
+
+  // Auto-show inspection panel when there's an error
+  useEffect(() => {
+    if (stepState.status === 'error') {
+      setShowInspection(true)
+    }
+  }, [stepState.status])
 
   // Render different content based on step type and status
   const renderStepContent = () => {
@@ -1548,6 +1931,22 @@ export function WorkArea({
         )
       }
 
+      // Check if step is marked as in_progress but job is not actually extracting
+      // This can happen if the extraction failed or was interrupted
+      const isExtracting = stepState.status === 'in_progress'
+
+      // If step says in_progress but there's no progress data, it's likely stale
+      const isStaleProgress = isExtracting && !stepState.progress
+
+      // Convert stepState.progress to extraction progress format
+      const extractionProgress = stepState.progress ? {
+        current: stepState.progress.current || 0,
+        total: stepState.progress.total || 0,
+        extracted: (stepState.partialResults as { extracted?: number })?.extracted || 0,
+        filtered: (stepState.partialResults as { filtered?: number })?.filtered || 0,
+        label: stepState.progress.label,
+      } : undefined
+
       return (
         <ScrapeResultsPanel
           jobId={jobId}
@@ -1560,6 +1959,111 @@ export function WorkArea({
             onContinue()
           }}
           onBack={onBack || (() => {})}
+          onExecuteExtraction={async () => {
+            // Start extraction
+            onUpdateState({
+              status: 'in_progress',
+              startedAt: new Date(),
+              input: { jobId },
+            })
+            // Call the parent's execute handler with jobId
+            await onExecute({ jobId, action: 'extract' })
+          }}
+          isExtracting={isExtracting && !isStaleProgress}
+          extractionProgress={extractionProgress}
+          onResetExtractionState={isStaleProgress ? () => {
+            // Reset the stale in_progress state back to pending
+            console.log('[WorkArea] Resetting stale extraction state to pending')
+            onUpdateState({
+              status: 'pending',
+              progress: undefined,
+              partialResults: undefined,
+            })
+          } : undefined}
+        />
+      )
+    }
+
+    // extract_with_preview: Shows scraped URLs + extraction button + results table
+    // This combines the old display_scrape_results functionality in a clearer way
+    if (step.type === 'extract_with_preview') {
+      console.log('[EXTRACT_WITH_PREVIEW] playbookContext:', {
+        serpJobId: playbookContext?.serpJobId,
+        review_and_scrape_output: playbookContext?.review_and_scrape_output,
+        scrape_results_output: playbookContext?.scrape_results_output, // Old saved states
+        search_and_preview_output: playbookContext?.search_and_preview_output,
+        allKeys: playbookContext ? Object.keys(playbookContext) : [],
+      })
+
+      // Get jobId from context - check multiple sources for backwards compatibility
+      const jobId = playbookContext?.serpJobId as string ||
+                    (playbookContext?.review_and_scrape_output as { jobId?: string })?.jobId ||
+                    (playbookContext?.scrape_results_output as { jobId?: string })?.jobId || // Old saved states
+                    (playbookContext?.search_and_preview_output as { jobId?: string })?.jobId
+
+      if (!jobId) {
+        console.error('[EXTRACT_WITH_PREVIEW] No jobId found')
+        return (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p className="text-amber-800 font-medium">
+              No se encontró el ID del job de scraping.
+            </p>
+            <p className="text-amber-700 text-sm mt-2">
+              Verifica que el paso &quot;Revisar y Scrapear&quot; se completó correctamente.
+            </p>
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="mt-3 px-4 py-2 bg-amber-100 text-amber-800 rounded hover:bg-amber-200"
+              >
+                Volver al paso anterior
+              </button>
+            )}
+          </div>
+        )
+      }
+
+      const isExtracting = stepState.status === 'in_progress'
+      const isStaleProgress = isExtracting && !stepState.progress
+
+      const extractionProgress = stepState.progress ? {
+        current: stepState.progress.current || 0,
+        total: stepState.progress.total || 0,
+        extracted: (stepState.partialResults as { extracted?: number })?.extracted || 0,
+        filtered: (stepState.partialResults as { filtered?: number })?.filtered || 0,
+        label: stepState.progress.label,
+      } : undefined
+
+      return (
+        <ScrapeResultsPanel
+          jobId={jobId}
+          onContinue={() => {
+            onUpdateState({
+              status: 'completed',
+              completedAt: new Date(),
+              output: { jobId, extracted: true },
+            })
+            onContinue()
+          }}
+          onBack={onBack || (() => {})}
+          onExecuteExtraction={async () => {
+            onUpdateState({
+              status: 'in_progress',
+              startedAt: new Date(),
+              input: { jobId },
+            })
+            await onExecute({ jobId, action: 'extract' })
+          }}
+          isExtracting={isExtracting && !isStaleProgress}
+          extractionProgress={extractionProgress}
+          onResetExtractionState={isStaleProgress ? () => {
+            console.log('[WorkArea] Resetting stale extraction state')
+            onUpdateState({
+              status: 'pending',
+              progress: undefined,
+              partialResults: undefined,
+            })
+          } : undefined}
         />
       )
     }
@@ -1687,6 +2191,416 @@ export function WorkArea({
 
     // Render based on step type
     switch (step.type) {
+      case 'unified_keyword_config':
+        // Unified keyword configuration panel for Niche Finder
+        const keywordOutput = (stepState.output || {}) as {
+          lifeContexts?: Array<{ id: string; label: string; selected: boolean; category?: string }>
+          needWords?: Array<{ id: string; label: string; selected: boolean }>
+          indicators?: Array<{ id: string; label: string; selected: boolean }>
+          sources?: {
+            reddit_general: { enabled: boolean }
+            reddit: { enabled: boolean; subreddits: string[] }
+            thematic_forums: { enabled: boolean; forums: string[] }
+            general_forums: { enabled: boolean; forums: string[] }
+          }
+        }
+
+        const defaultSources = {
+          reddit_general: { enabled: false },
+          reddit: { enabled: true, subreddits: [] as string[] },
+          thematic_forums: { enabled: true, forums: [] as string[] },
+          general_forums: { enabled: false, forums: [] as string[] },
+        }
+
+        return (
+          <KeywordConfigPanel
+            contextType={(playbookContext?.context_type as 'personal' | 'business' | 'both') || 'both'}
+            product={playbookContext?.product as string | undefined}
+            target={playbookContext?.target as string | undefined}
+            lifeContexts={keywordOutput.lifeContexts || []}
+            needWords={keywordOutput.needWords || []}
+            indicators={keywordOutput.indicators || []}
+            sources={keywordOutput.sources || defaultSources}
+            onLifeContextsChange={(items) => {
+              onUpdateState({
+                output: { ...keywordOutput, lifeContexts: items },
+              })
+            }}
+            onNeedWordsChange={(items) => {
+              onUpdateState({
+                output: { ...keywordOutput, needWords: items },
+              })
+            }}
+            onIndicatorsChange={(items) => {
+              onUpdateState({
+                output: { ...keywordOutput, indicators: items },
+              })
+            }}
+            onSourcesChange={(sources) => {
+              onUpdateState({
+                output: { ...keywordOutput, sources },
+              })
+            }}
+            onGenerateNeedWords={async () => {
+              // Generate need words using LLM
+              setIsGeneratingNeedWords(true)
+              try {
+                const response = await fetch('/api/playbook/generate-suggestions', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    promptKey: 'suggest_need_words',
+                    context: playbookContext,
+                  }),
+                })
+                const data = await response.json()
+                if (data.suggestions) {
+                  // Preserve selected items, only replace unselected ones
+                  const selectedItems = (keywordOutput.needWords || []).filter(w => w.selected)
+                  const newSuggestions = data.suggestions.map((s: string, i: number) => ({
+                    id: `gen_${Date.now()}_${i}`,
+                    label: s,
+                    selected: false,
+                  }))
+                  onUpdateState({
+                    output: {
+                      ...keywordOutput,
+                      needWords: [...selectedItems, ...newSuggestions],
+                    },
+                  })
+                }
+              } catch (error) {
+                console.error('Error generating need words:', error)
+              } finally {
+                setIsGeneratingNeedWords(false)
+              }
+            }}
+            onGenerateSubreddits={async () => {
+              // Generate subreddit suggestions using LLM
+              setIsGeneratingSubreddits(true)
+              try {
+                const response = await fetch('/api/playbook/generate-suggestions', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    promptKey: 'suggest_subreddits',
+                    context: {
+                      ...playbookContext,
+                      life_contexts: keywordOutput.lifeContexts?.filter(c => c.selected).map(c => c.label) || [],
+                      need_words: keywordOutput.needWords?.filter(w => w.selected).map(w => w.label) || [],
+                    },
+                  }),
+                })
+                const data = await response.json()
+                if (data.subreddits) {
+                  onUpdateState({
+                    output: {
+                      ...keywordOutput,
+                      sources: {
+                        ...(keywordOutput.sources || defaultSources),
+                        reddit: {
+                          enabled: true,
+                          subreddits: data.subreddits,
+                        },
+                      },
+                    },
+                  })
+                }
+              } catch (error) {
+                console.error('Error generating subreddits:', error)
+              } finally {
+                setIsGeneratingSubreddits(false)
+              }
+            }}
+            onGenerateForums={async () => {
+              // Generate forum suggestions using LLM
+              setIsGeneratingForums(true)
+              try {
+                const response = await fetch('/api/playbook/generate-suggestions', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    promptKey: 'suggest_forums',
+                    context: {
+                      ...playbookContext,
+                      life_contexts: keywordOutput.lifeContexts?.filter(c => c.selected).map(c => c.label) || [],
+                      need_words: keywordOutput.needWords?.filter(w => w.selected).map(w => w.label) || [],
+                    },
+                  }),
+                })
+                const data = await response.json()
+                if (data.forums) {
+                  onUpdateState({
+                    output: {
+                      ...keywordOutput,
+                      sources: {
+                        ...(keywordOutput.sources || defaultSources),
+                        thematic_forums: {
+                          enabled: true,
+                          forums: data.forums,
+                        },
+                      },
+                    },
+                  })
+                }
+              } catch (error) {
+                console.error('Error generating forums:', error)
+              } finally {
+                setIsGeneratingForums(false)
+              }
+            }}
+            isGeneratingNeedWords={isGeneratingNeedWords}
+            isGeneratingSubreddits={isGeneratingSubreddits}
+            isGeneratingForums={isGeneratingForums}
+            onContinue={async () => {
+              // Save selected items to context and continue
+              const selectedContexts = keywordOutput.lifeContexts?.filter(c => c.selected).map(c => c.label) || []
+              const selectedNeeds = keywordOutput.needWords?.filter(w => w.selected).map(w => w.label) || []
+              const selectedIndicators = keywordOutput.indicators?.filter(i => i.selected).map(i => i.label) || []
+
+              // Get subreddits and forums from sources
+              const subreddits = keywordOutput.sources?.reddit?.subreddits || []
+              const forums = keywordOutput.sources?.thematic_forums?.forums || []
+
+              // Validate required selections
+              if (selectedContexts.length === 0) {
+                alert('Por favor selecciona al menos un contexto de vida antes de continuar.')
+                return
+              }
+              if (selectedNeeds.length === 0) {
+                alert('Por favor selecciona o añade al menos una palabra de necesidad antes de continuar.')
+                return
+              }
+
+              // Log what we're saving for debugging
+              console.log('[KeywordConfig] Saving config:', {
+                selectedContexts,
+                selectedNeeds,
+                selectedIndicators,
+                subreddits,
+                forums,
+              })
+
+              onUpdateState({
+                status: 'completed',
+                completedAt: new Date(),
+                output: {
+                  ...keywordOutput,
+                  // Also save as arrays for easy access
+                  life_contexts: selectedContexts,
+                  product_words: selectedNeeds,
+                  indicators: selectedIndicators,
+                  sources: keywordOutput.sources,
+                },
+              })
+
+              // Save keywords config to Context Lake asynchronously
+              try {
+                const projectResponse = await fetch(`/api/projects/${projectId}`)
+                const projectData = await projectResponse.json()
+
+                if (projectData.client_id) {
+                  const dateStr = new Date().toISOString().split('T')[0]
+                  const campaignName = (playbookContext?.campaign_name as string) || 'Sin nombre'
+                  const campaignSlug = campaignName.toLowerCase().replace(/\s+/g, '-')
+                  const campaignId = (playbookContext?.campaign_id as string) || ''
+
+                  // Build markdown content for keywords
+                  const lines: string[] = [
+                    '# Configuracion de Busqueda - Niche Finder',
+                    '',
+                    `**Campana:** ${campaignName}`,
+                    `**Fecha:** ${dateStr}`,
+                    '',
+                  ]
+
+                  if (selectedContexts.length > 0) {
+                    lines.push('## Contextos de Vida')
+                    selectedContexts.forEach(c => lines.push(`- ${c}`))
+                    lines.push('')
+                  }
+
+                  if (selectedNeeds.length > 0) {
+                    lines.push('## Palabras de Necesidad')
+                    selectedNeeds.forEach(w => lines.push(`- ${w}`))
+                    lines.push('')
+                  }
+
+                  if (selectedIndicators.length > 0) {
+                    lines.push('## Indicadores de Urgencia')
+                    selectedIndicators.forEach(i => lines.push(`- ${i}`))
+                    lines.push('')
+                  }
+
+                  if (subreddits.length > 0) {
+                    lines.push('## Subreddits')
+                    subreddits.forEach(s => lines.push(`- r/${s}`))
+                    lines.push('')
+                  }
+
+                  if (forums.length > 0) {
+                    lines.push('## Foros')
+                    forums.forEach(f => lines.push(`- ${f}`))
+                    lines.push('')
+                  }
+
+                  const content = lines.join('\n')
+
+                  await fetch('/api/documents/from-step-output', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      projectId,
+                      clientId: projectData.client_id,
+                      filename: `Niche Finder - Keywords - ${dateStr}`,
+                      category: 'research',
+                      content,
+                      description: `Configuracion: ${selectedContexts.length} contextos, ${selectedNeeds.length} palabras de necesidad, ${subreddits.length} subreddits`,
+                      tags: [`fecha:${dateStr}`, `campaign:${campaignId}`, 'niche-finder', 'keywords', 'configuracion'],
+                      folder: `niche-finder/${campaignSlug}`,
+                      userId: 'system',
+                      sourceMetadata: {
+                        origin_type: 'flow_step_output',
+                        playbook_id: 'niche-finder',
+                        playbook_name: 'Niche Finder',
+                        campaign_id: campaignId,
+                        campaign_name: campaignName,
+                        campaign_variables: {},
+                        step_id: 'keyword_config',
+                        step_name: 'Configuracion de Keywords',
+                        step_order: 1,
+                        executed_at: new Date().toISOString(),
+                        model_used: 'system',
+                        model_provider: 'system',
+                        input_tokens: 0,
+                        output_tokens: 0,
+                        input_document_ids: [],
+                        input_previous_step_ids: [],
+                        converted_at: new Date().toISOString(),
+                        converted_by: 'system',
+                        was_edited_before_conversion: false,
+                      },
+                      sourceCampaignId: campaignId,
+                      sourceStepId: 'keyword_config',
+                      sourceStepName: 'Configuracion de Keywords',
+                      sourcePlaybookId: 'niche-finder',
+                    }),
+                  })
+                  console.log('[KEYWORDS] Config saved to Context Lake')
+                }
+              } catch (err) {
+                console.error('[KEYWORDS] Error saving to Context Lake:', err)
+                // Don't fail the step if Context Lake save fails
+              }
+
+              onContinue()
+            }}
+          />
+        )
+
+      case 'unified_search_extract':
+        // Unified panel for SERP → URLs → Scrape → Extract
+        // Get config from playbookContext which has ALREADY extracted labels as strings
+        // (buildPlaybookContext extracts from keyword_config output)
+
+        // Get sources config - handle both old format and new format
+        const sourcesFromContext = playbookContext?.sources as {
+          reddit?: { enabled?: boolean; subreddits?: string[] }
+          thematic_forums?: { enabled?: boolean; forums?: string[] }
+          general_forums?: { enabled?: boolean; forums?: string[] }
+        } | undefined
+
+        const searchConfig = {
+          life_contexts: (playbookContext?.life_contexts as string[]) || [],
+          product_words: (playbookContext?.need_words as string[]) || [],
+          indicators: (playbookContext?.indicators as string[]) || [],
+          sources: {
+            reddit: sourcesFromContext?.reddit?.enabled ?? true,
+            thematic_forums: sourcesFromContext?.thematic_forums?.enabled ?? false,
+            general_forums: sourcesFromContext?.general_forums?.forums || [],
+          },
+          serp_pages: 5,
+        }
+
+        // Determine phase from step state
+        // Note: 'error' status is handled by early return at top of renderStepContent
+        let currentPhase: 'preview' | 'serp_executing' | 'serp_complete' | 'scraping' | 'scrape_done' | 'extracting' | 'completed' | 'error' = 'preview'
+        if (stepState.status === 'completed') {
+          currentPhase = 'completed'
+        } else if (stepState.status === 'in_progress') {
+          // Check what phase we're in based on output
+          const output = stepState.output as { phase?: string } | undefined
+          if (output?.phase === 'extracting') {
+            currentPhase = 'extracting'
+          } else if (output?.phase === 'scrape_done') {
+            currentPhase = 'scrape_done'
+          } else if (output?.phase === 'scraping') {
+            currentPhase = 'scraping'
+          } else if (output?.phase === 'serp_complete') {
+            currentPhase = 'serp_complete'
+          } else {
+            currentPhase = 'serp_executing'
+          }
+        }
+
+        return (
+          <UnifiedSearchExtractPanel
+            config={searchConfig}
+            projectId={projectId}
+            jobId={(stepState.output as { jobId?: string })?.jobId}
+            currentPhase={currentPhase}
+            serpProgress={currentPhase === 'serp_executing' ? stepState.progress : undefined}
+            analysisProgress={currentPhase === 'extracting' ? {
+              current: stepState.progress?.current || 0,
+              total: stepState.progress?.total || 0,
+              label: stepState.progress?.label,
+              scrapedCount: stepState.partialResults?.successCount,
+              extractedCount: stepState.partialResults?.extracted,
+              filteredCount: stepState.partialResults?.filtered,
+            } : undefined}
+            onExecuteSerp={async (finalConfig) => {
+              // Update state to show we're executing SERP
+              onUpdateState({
+                status: 'in_progress',
+                startedAt: new Date(),
+                output: { phase: 'serp_executing' },
+              })
+              // Call parent execute handler
+              await onExecute({ action: 'serp', config: finalConfig })
+            }}
+            onExecuteAnalysis={async (jobId, selectedSources, extractionPrompt) => {
+              // Update state to show we're scraping (then extracting)
+              onUpdateState({
+                status: 'in_progress',
+                output: { phase: 'scraping', jobId },
+              })
+              // Call parent execute handler with extraction prompt if provided
+              await onExecute({ action: 'analyze', jobId, selectedSources, extractionPrompt })
+            }}
+            onComplete={(output) => {
+              onUpdateState({
+                status: 'completed',
+                completedAt: new Date(),
+                output,
+              })
+              onContinue()
+            }}
+            onBack={onBack}
+            onCancel={onCancel}
+            onResetPhase={() => {
+              // Reset step state to allow restarting the search
+              onUpdateState({
+                status: 'pending',
+                output: undefined,
+                startedAt: undefined,
+                completedAt: undefined,
+                progress: undefined,
+                partialResults: undefined,
+              })
+            }}
+          />
+        )
+
       case 'suggestion':
         return (
           <SuggestionStep
@@ -1800,7 +2714,7 @@ export function WorkArea({
             </div>
           </div>
 
-          {/* Status indicator */}
+          {/* Status indicator and inspection toggle */}
           <div className="flex items-center gap-2">
             {stepState.status === 'completed' && (
               <span className="flex items-center gap-1 text-sm text-green-600 bg-green-50 px-2 py-1 rounded-full">
@@ -1820,6 +2734,21 @@ export function WorkArea({
                 Error
               </span>
             )}
+            {/* Inspection toggle button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowInspection(!showInspection)
+              }}
+              className={`p-1.5 rounded transition-colors ${
+                showInspection
+                  ? 'bg-blue-100 text-blue-600'
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+              }`}
+              title={showInspection ? 'Ocultar inspector' : 'Mostrar inspector'}
+            >
+              {showInspection ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
           </div>
         </div>
       </div>
@@ -1831,8 +2760,21 @@ export function WorkArea({
         </div>
       )}
 
-      {/* Navigation footer for completed steps */}
-      {isExpanded && stepState.status === 'completed' && (
+      {/* Step Inspection Panel */}
+      {showInspection && (
+        <StepInspectionPanel
+          step={step}
+          stepState={stepState}
+          playbookContext={playbookContext || {}}
+          allSteps={allSteps || []}
+          onClose={() => setShowInspection(false)}
+          onRetry={onRetry || (() => onUpdateState({ status: 'pending', error: undefined }))}
+        />
+      )}
+
+      {/* Navigation footer for completed steps - hide for steps with their own navigation */}
+      {isExpanded && stepState.status === 'completed' &&
+       !['unified_keyword_config', 'search_with_preview', 'review_with_action', 'unified_search_extract'].includes(step.type) && (
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
           <div className="flex gap-2">
             {!isFirst && onBack && (

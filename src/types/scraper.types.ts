@@ -537,6 +537,15 @@ export interface ScraperStepConfig {
   // Configuración opcional de filtro pre-scraping
   filter_by_domain?: boolean;   // Filtrar dominios no deseados
   excluded_domains?: string[];  // Dominios a excluir
+
+  // Campaign metadata (passed from PlaybookShell for traceability)
+  campaign_id?: string;         // ID of the selected campaign
+  ecp_name?: string;           // Company name
+  ecp_product?: string;        // Product description
+  ecp_target?: string;         // Target audience
+  ecp_industry?: string;       // Industry
+  ecp_category?: string;       // Category
+  ecp_country?: string;        // Country
 }
 
 // ============================================

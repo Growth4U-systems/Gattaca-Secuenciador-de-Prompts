@@ -14,7 +14,13 @@ export async function GET(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 })
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  // Create Supabase client with caching disabled to avoid stale data
+  const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { persistSession: false },
+    global: {
+      fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }),
+    },
+  })
   const { id: jobId } = await params
 
   try {
@@ -45,6 +51,56 @@ export async function GET(request: NextRequest, { params }: Params) {
 
     for (const url of urlCounts || []) {
       counts[url.status as keyof typeof counts]++
+    }
+
+    // AUTO-FIX: Detectar y corregir jobs stuck
+    // Si el job está en "scraping" pero no hay URLs pending, actualizar a scrape_done
+    if (job.status === 'scraping' && counts.pending === 0) {
+      console.log(`[STATUS] Auto-fixing stuck job ${jobId}: scraping -> scrape_done (${counts.scraped} scraped, ${counts.failed} failed)`)
+      await supabase
+        .from('niche_finder_jobs')
+        .update({ status: 'scrape_done' })
+        .eq('id', jobId)
+      job.status = 'scrape_done'
+    }
+
+    // AUTO-FIX: Si el job está en "scraping" con muy pocas URLs pending y muchas procesadas,
+    // marcar las pending como failed y avanzar (evita stuck por 1-2 URLs problemáticas)
+    const totalProcessed = counts.scraped + counts.failed
+    if (job.status === 'scraping' && counts.pending > 0 && counts.pending <= 5 && totalProcessed > 50) {
+      console.log(`[STATUS] Auto-fixing stuck job ${jobId}: marking ${counts.pending} stuck pending URLs as failed`)
+
+      // Mark remaining pending URLs as failed
+      await supabase
+        .from('niche_finder_urls')
+        .update({
+          status: 'failed',
+          error_message: 'Auto-marked as failed (stuck in pending state)',
+        })
+        .eq('job_id', jobId)
+        .eq('status', 'pending')
+
+      // Update job status to scrape_done
+      await supabase
+        .from('niche_finder_jobs')
+        .update({ status: 'scrape_done' })
+        .eq('id', jobId)
+
+      counts.failed += counts.pending
+      counts.pending = 0
+      job.status = 'scrape_done'
+      console.log(`[STATUS] Job ${jobId} advanced to scrape_done after auto-fix`)
+    }
+
+    // AUTO-FIX: Si el job está en "extracting" pero todas las URLs scraped ya fueron procesadas
+    const allExtracted = counts.scraped === 0 && (counts.extracted + counts.filtered) > 0
+    if (job.status === 'extracting' && allExtracted) {
+      console.log(`[STATUS] Auto-fixing stuck job ${jobId}: extracting -> completed (${counts.extracted} extracted, ${counts.filtered} filtered)`)
+      await supabase
+        .from('niche_finder_jobs')
+        .update({ status: 'completed' })
+        .eq('id', jobId)
+      job.status = 'completed'
     }
 
     // Determine current phase

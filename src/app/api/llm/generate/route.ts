@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase-server'
 import { getUserApiKey } from '@/lib/getUserApiKey'
 import { decryptToken } from '@/lib/encryption'
+import { trackLLMUsage } from '@/lib/polar-usage'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -17,11 +18,13 @@ interface GenerateRequest {
 export async function POST(request: NextRequest) {
   // Get user session to look up their API key
   let openrouterApiKey: string | null = null
+  let userId: string | null = null
   try {
     const supabase = await createServerClient()
     const { data: { session } } = await supabase.auth.getSession()
 
     if (session?.user?.id) {
+      userId = session.user.id
       // 1. Try user_api_keys table first
       openrouterApiKey = await getUserApiKey({
         userId: session.user.id,
@@ -117,6 +120,13 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json()
     const content = data.choices?.[0]?.message?.content || ''
+
+    // Track usage in Polar (async, don't block response)
+    if (userId && data.usage?.total_tokens) {
+      trackLLMUsage(userId, data.usage.total_tokens, data.model).catch((err) => {
+        console.warn('[llm/generate] Failed to track usage:', err)
+      })
+    }
 
     return NextResponse.json({
       success: true,

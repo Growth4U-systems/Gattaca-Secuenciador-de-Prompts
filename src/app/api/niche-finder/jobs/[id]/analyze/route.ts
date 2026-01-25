@@ -5,6 +5,7 @@ import {
   STEP_3_SCORING_PROMPT,
   STEP_4_CONSOLIDATE_PROMPT,
 } from '@/lib/templates/niche-finder-playbook'
+import { trackLLMUsage } from '@/lib/polar-usage'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes for LLM analysis
@@ -157,7 +158,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     // Get job with project info
     const { data: job, error: jobError } = await supabase
       .from('niche_finder_jobs')
-      .select('*, projects(name, description, settings)')
+      .select('*, user_id, projects(name, description, settings)')
       .eq('id', jobId)
       .single()
 
@@ -320,6 +321,13 @@ export async function POST(request: NextRequest, { params }: Params) {
           tokens: result.tokens_input + result.tokens_output,
           cost,
         })
+
+        // Track LLM usage in Polar (async, don't block response)
+        if (job.user_id && (result.tokens_input + result.tokens_output) > 0) {
+          trackLLMUsage(job.user_id, result.tokens_input + result.tokens_output, stepModel).catch((err) => {
+            console.warn(`[analyze] Failed to track LLM usage for step ${step.number} in Polar:`, err)
+          })
+        }
 
         // Use output as input for next step
         currentInput = result.output

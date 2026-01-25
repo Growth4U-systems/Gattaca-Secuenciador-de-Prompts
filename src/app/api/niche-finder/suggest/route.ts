@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase-server'
 import { getUserApiKey } from '@/lib/getUserApiKey'
 import { decryptToken } from '@/lib/encryption'
+import { trackLLMUsage } from '@/lib/polar-usage'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -277,6 +278,20 @@ Responde SOLO con el JSON, sin texto adicional.`
 
     const data = await response.json()
     const content = data.choices?.[0]?.message?.content || '{}'
+
+    // Track LLM usage in Polar (async, don't block response)
+    // Note: We need the user ID from session - let's get it from supabase
+    try {
+      const supabaseForTracking = await createServerClient()
+      const { data: { session: sessionForTracking } } = await supabaseForTracking.auth.getSession()
+      if (sessionForTracking?.user?.id && data.usage?.total_tokens) {
+        trackLLMUsage(sessionForTracking.user.id, data.usage.total_tokens, 'openai/gpt-4o-mini').catch((err) => {
+          console.warn('[suggest] Failed to track LLM usage in Polar:', err)
+        })
+      }
+    } catch (trackErr) {
+      console.warn('[suggest] Failed to get session for tracking:', trackErr)
+    }
 
     // Parse JSON from response
     interface ParsedSuggestions {

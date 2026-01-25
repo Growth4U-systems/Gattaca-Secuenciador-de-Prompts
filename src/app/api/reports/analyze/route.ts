@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import OpenAI from 'openai'
+import { trackLLMUsage } from '@/lib/polar-usage'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -135,6 +136,14 @@ Si no hay inconsistencias, responde: {"inconsistencies": []}`
     })
 
     const responseText = completion.choices[0]?.message?.content || '{}'
+
+    // Track LLM usage in Polar (async, don't block response)
+    if (completion.usage?.total_tokens) {
+      trackLLMUsage(session.user.id, completion.usage.total_tokens, 'gpt-4o-mini').catch((err) => {
+        console.warn('[reports/analyze] Failed to track LLM usage in Polar:', err)
+      })
+    }
+
     let parsed: { inconsistencies: any[] }
 
     try {

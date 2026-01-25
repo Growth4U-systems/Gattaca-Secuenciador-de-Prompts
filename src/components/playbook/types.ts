@@ -27,11 +27,14 @@ export type StepType =
   | 'decision'
   | 'display'
   | 'display_scrape_results'
+  | 'extract_with_preview' // Shows scraped URLs + extraction button + results table
   | 'action'
   | 'manual_research'
   | 'manual_review'
   | 'search_with_preview'
   | 'review_with_action'
+  | 'unified_keyword_config' // Unified panel for keywords, indicators, and sources
+  | 'unified_search_extract' // All-in-one: SERP → show URLs → scrape → extract
 
 /**
  * Executor type determines how the step is executed:
@@ -171,6 +174,8 @@ export interface StepState {
     failedCount?: number
     lastSnippet?: string // Last content snippet (for scraping)
     lastUrl?: string // Last URL processed
+    extracted?: number // Count of successfully extracted items (for extraction step)
+    filtered?: number // Count of filtered/ignored items (for extraction step)
   }
 }
 
@@ -244,9 +249,11 @@ export interface WorkAreaProps {
   onEdit?: () => void           // Volver a editar un paso completado
   onCancel?: () => void         // Cancelar ejecución en curso
   onRerunPrevious?: () => void  // Re-ejecutar el paso anterior (para decisiones de regenerar)
+  onRetry?: () => void          // Retry the current step after an error
   isFirst: boolean
   isLast: boolean
   previousStepOutput?: unknown  // Output from the previous step
   projectId?: string            // Project ID for API calls
   playbookContext?: Record<string, unknown>  // Context with all previous step outputs
+  allSteps?: Array<{ definition: StepDefinition; state: StepState }>  // All steps info for inspection panel
 }

@@ -1,8 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { ChevronDown, ChevronRight, Check, Circle, Loader2, AlertCircle } from 'lucide-react'
-import { NavigationPanelProps, PhaseDefinition, StepDefinition, PhaseState, StepState, StepStatus, PhaseStatus } from './types'
+import { ChevronRight, Check, Circle, Loader2, AlertCircle } from 'lucide-react'
+import { NavigationPanelProps, PhaseDefinition, StepDefinition, PhaseState, StepState } from './types'
 
 interface PhaseItemProps {
   phase: PhaseDefinition
@@ -21,64 +20,23 @@ function PhaseItem({
   currentStepIndex,
   onStepClick,
 }: PhaseItemProps) {
-  const [isExpanded, setIsExpanded] = useState(true)
-
-  const completedSteps = phaseState.steps.filter(s => s.status === 'completed').length
-  const totalSteps = phase.steps.length
-  const isCurrentPhase = phaseIndex === currentPhaseIndex
-
-  const getPhaseIcon = () => {
-    switch (phaseState.status) {
-      case 'completed':
-        return <Check className="w-4 h-4 text-green-600" />
-      case 'in_progress':
-        return <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
-      case 'error':
-        return <AlertCircle className="w-4 h-4 text-red-500" />
-      default:
-        return <Circle className="w-3 h-3 text-gray-300" />
-    }
-  }
-
   return (
-    <div className="border-b border-gray-200">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-          isCurrentPhase ? 'bg-blue-50 hover:bg-blue-100/70' : 'bg-gray-50 hover:bg-gray-100'
-        }`}
-      >
-        <span className="text-gray-400">
-          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-        </span>
-        <span className="flex-shrink-0">{getPhaseIcon()}</span>
-        <span className={`flex-1 text-xs font-semibold uppercase tracking-wide ${
-          phaseState.status === 'completed' ? 'text-green-700' :
-          isCurrentPhase ? 'text-blue-700' :
-          'text-gray-600'
-        }`}>
-          {phase.name}
-        </span>
-        <span className="text-xs text-gray-400">
-          {completedSteps}/{totalSteps}
-        </span>
-      </button>
-
-      {isExpanded && (
-        <div className="bg-white py-1">
-          {phase.steps.map((step, stepIndex) => (
-            <StepItem
-              key={step.id}
-              step={step}
-              stepState={phaseState.steps[stepIndex]}
-              phaseIndex={phaseIndex}
-              stepIndex={stepIndex}
-              isCurrentStep={phaseIndex === currentPhaseIndex && stepIndex === currentStepIndex}
-              onClick={() => onStepClick(phaseIndex, stepIndex)}
-            />
-          ))}
-        </div>
-      )}
+    <div className="py-1">
+      {phase.steps.map((step, stepIndex) => {
+        const stepState = phaseState.steps[stepIndex]
+        if (!stepState) return null
+        return (
+          <StepItem
+            key={step.id}
+            step={step}
+            stepState={stepState}
+            phaseIndex={phaseIndex}
+            stepIndex={stepIndex}
+            isCurrentStep={phaseIndex === currentPhaseIndex && stepIndex === currentStepIndex}
+            onClick={() => onStepClick(phaseIndex, stepIndex)}
+          />
+        )
+      })}
     </div>
   )
 }
@@ -126,22 +84,24 @@ function StepItem({ step, stepState, isCurrentStep, onClick }: StepItemProps) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2 pl-10 pr-4 py-1.5 text-left hover:bg-blue-50/50 transition-colors ${
-        isCurrentStep ? 'bg-blue-50 border-l-2 border-blue-500' : 'border-l-2 border-transparent'
+      className={`w-full flex items-center gap-2 pl-6 pr-4 py-2 text-left transition-colors ${
+        isCurrentStep
+          ? 'bg-blue-600 border-l-2 border-blue-700'
+          : 'border-l-2 border-transparent hover:bg-gray-100'
       }`}
     >
-      <span className="flex-shrink-0">{getStepIcon()}</span>
+      <span className={`flex-shrink-0 ${isCurrentStep ? '[&>svg]:text-white' : ''}`}>{getStepIcon()}</span>
       <span className={`flex-1 text-sm ${
+        isCurrentStep ? 'text-white font-medium' :
         stepState.status === 'completed' ? 'text-green-600' :
-        isCurrentStep ? 'text-blue-700 font-medium' :
         stepState.status === 'error' ? 'text-red-600' :
-        'text-gray-500'
+        'text-gray-600'
       }`}>
         {step.name}
       </span>
-      {getStepTypeIndicator()}
+      {!isCurrentStep && getStepTypeIndicator()}
       {isCurrentStep && (
-        <span className="text-blue-600">
+        <span className="text-white">
           <ChevronRight size={14} />
         </span>
       )}
@@ -185,17 +145,21 @@ export default function NavigationPanel({
       {/* Phases list */}
       <div className="flex-1 overflow-y-auto">
         <div className="py-2">
-          {phases.map((phase, phaseIndex) => (
-            <PhaseItem
-              key={phase.id}
-              phase={phase}
-              phaseState={phaseStates[phaseIndex]}
-              phaseIndex={phaseIndex}
-              currentPhaseIndex={currentPhaseIndex}
-              currentStepIndex={currentStepIndex}
-              onStepClick={onStepClick}
-            />
-          ))}
+          {phases.map((phase, phaseIndex) => {
+            const phaseState = phaseStates[phaseIndex]
+            if (!phaseState) return null
+            return (
+              <PhaseItem
+                key={phase.id}
+                phase={phase}
+                phaseState={phaseState}
+                phaseIndex={phaseIndex}
+                currentPhaseIndex={currentPhaseIndex}
+                currentStepIndex={currentStepIndex}
+                onStepClick={onStepClick}
+              />
+            )
+          })}
         </div>
       </div>
     </div>

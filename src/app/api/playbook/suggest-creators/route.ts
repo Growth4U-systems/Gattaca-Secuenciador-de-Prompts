@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase-server'
 import { getUserApiKey } from '@/lib/getUserApiKey'
 import { decryptToken } from '@/lib/encryption'
+import { trackLLMUsage } from '@/lib/polar-usage'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -176,6 +177,13 @@ Important:
 
     const responseData = await openrouterResponse.json()
     const content = responseData.choices?.[0]?.message?.content || ''
+
+    // Track LLM usage in Polar (async, don't block response)
+    if (responseData.usage?.total_tokens) {
+      trackLLMUsage(session.user.id, responseData.usage.total_tokens, 'perplexity/sonar').catch((err) => {
+        console.warn('[suggest-creators] Failed to track LLM usage in Polar:', err)
+      })
+    }
 
     // Parse creators from response
     const creators = parseCreatorsFromResponse(content)

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
+import { trackLLMUsage } from '@/lib/polar-usage'
 
 export const runtime = 'nodejs'
 export const maxDuration = 800 // ~13 minutes (Vercel Pro limit for Deep Research)
@@ -166,6 +167,24 @@ export async function POST(request: NextRequest) {
 
     const result = await response.json()
     const duration = Date.now() - startTime
+
+    // Track LLM usage in Polar (async, don't block response)
+    console.log(`[campaign/run-step] Result from edge function:`, JSON.stringify({
+      success: result.success,
+      model_used: result.model_used,
+      tokens: result.tokens,
+      async_polling_required: result.async_polling_required
+    }))
+
+    const tokensUsed = result.tokens?.total || 0
+    if (tokensUsed > 0 && result.model_used) {
+      console.log(`[campaign/run-step] Tracking LLM usage: ${tokensUsed} tokens, model: ${result.model_used}`)
+      trackLLMUsage(session.user.id, tokensUsed, result.model_used).catch((err) => {
+        console.warn('[campaign/run-step] Failed to track LLM usage in Polar:', err)
+      })
+    } else {
+      console.log(`[campaign/run-step] NOT tracking - tokensUsed: ${tokensUsed}, model_used: ${result.model_used}`)
+    }
 
     // Check if Deep Research returned async polling required
     if (result.async_polling_required) {

@@ -30,7 +30,13 @@ export async function GET(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 })
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  // Create Supabase client with caching disabled
+  const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { persistSession: false },
+    global: {
+      fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }),
+    },
+  })
   const { id: jobId } = await params
 
   // Parse query params
@@ -40,72 +46,83 @@ export async function GET(request: NextRequest, { params }: Params) {
   const statusFilter = searchParams.get('status') || 'all'
 
   try {
-    // First, get summary statistics
-    const { data: allUrls, error: countError } = await supabase
+    // Get status counts for summary (lightweight query)
+    const { data: statusOnly } = await supabase
       .from('niche_finder_urls')
-      .select('id, status, content_markdown, selected')
+      .select('status')
       .eq('job_id', jobId)
-      .in('status', ['scraped', 'failed'])
 
-    if (countError) {
-      return NextResponse.json({ error: countError.message }, { status: 500 })
-    }
+    const allUrls = statusOnly || []
 
-    // Calculate summary
-    const scrapedUrls = allUrls?.filter(u => u.status === 'scraped') || []
-    const failedUrls = allUrls?.filter(u => u.status === 'failed') || []
-    const selectedUrls = scrapedUrls.filter(u => u.selected === true)
+    // Count by status
+    const scrapedCount = allUrls.filter(u => u.status === 'scraped').length
+    const failedCount = allUrls.filter(u => u.status === 'failed').length
 
-    let totalWords = 0
-    for (const url of scrapedUrls) {
-      if (url.content_markdown) {
-        totalWords += url.content_markdown.split(/\s+/).length
-      }
-    }
+    // Count selected URLs (for cost estimation)
+    const { count: selectedCount } = await supabase
+      .from('niche_finder_urls')
+      .select('*', { count: 'exact', head: true })
+      .eq('job_id', jobId)
+      .eq('status', 'scraped')
+      .eq('selected', true)
 
-    // Calculate selected words for cost estimation
-    let selectedWords = 0
-    for (const url of selectedUrls) {
-      if (url.content_markdown) {
-        selectedWords += url.content_markdown.split(/\s+/).length
-      }
-    }
+    console.log(`[SCRAPED] Job ${jobId}: scraped=${scrapedCount}, failed=${failedCount}, selected=${selectedCount || 0}`)
+
+    // Get word count from job record (approximate) to avoid loading all content
+    const { data: job } = await supabase
+      .from('niche_finder_jobs')
+      .select('urls_scraped')
+      .eq('id', jobId)
+      .single()
+
+    // Estimate words based on average (500 words per URL is typical)
+    const avgWordsPerUrl = 500
+    const totalWords = scrapedCount * avgWordsPerUrl
+    const selectedWords = (selectedCount || 0) * avgWordsPerUrl
 
     // Estimate cost based on selected URLs
-    const estimatedInputTokens = (selectedWords * AVG_CHARS_PER_TOKEN) / AVG_CHARS_PER_TOKEN
-    const estimatedOutputTokens = selectedUrls.length * ESTIMATED_OUTPUT_TOKENS_PER_URL
+    const estimatedInputTokens = selectedWords
+    const estimatedOutputTokens = (selectedCount || 0) * ESTIMATED_OUTPUT_TOKENS_PER_URL
     const estimatedCost = (estimatedInputTokens / 1000 * COST_PER_1K_INPUT_TOKENS) +
                           (estimatedOutputTokens / 1000 * COST_PER_1K_OUTPUT_TOKENS)
 
-    // Build query for paginated URLs
-    let query = supabase
+    // Get paginated URLs with full data
+    const { data: directUrls, error: directError } = await supabase
       .from('niche_finder_urls')
-      .select('id, url, title, source_type, status, content_markdown, error_message, selected, life_context, product_word')
+      .select('*')
       .eq('job_id', jobId)
+
+    if (directError) {
+      console.error('[SCRAPED] Query error:', directError)
+      return NextResponse.json({ error: directError.message }, { status: 500 })
+    }
+
+    // Filter and sort in JS
+    let jsFiltered = (directUrls || []).filter(u =>
+      u.status === 'scraped' || u.status === 'failed'
+    )
 
     // Apply status filter
     if (statusFilter === 'scraped') {
-      query = query.eq('status', 'scraped')
+      jsFiltered = jsFiltered.filter(u => u.status === 'scraped')
     } else if (statusFilter === 'failed') {
-      query = query.eq('status', 'failed')
-    } else {
-      query = query.in('status', ['scraped', 'failed'])
+      jsFiltered = jsFiltered.filter(u => u.status === 'failed')
     }
 
-    // Order by status (scraped first) then by id
-    query = query.order('status', { ascending: true }).order('id')
+    // Sort: scraped first, then by id
+    jsFiltered.sort((a, b) => {
+      if (a.status !== b.status) {
+        return a.status === 'scraped' ? -1 : 1
+      }
+      return a.id.localeCompare(b.id)
+    })
 
     // Apply pagination
-    query = query.range(offset, offset + limit - 1)
-
-    const { data: urls, error: urlsError } = await query
-
-    if (urlsError) {
-      return NextResponse.json({ error: urlsError.message }, { status: 500 })
-    }
+    const filteredUrls = jsFiltered.slice(offset, offset + limit)
+    const totalFiltered = jsFiltered.length
 
     // Process URLs to add word_count and truncate content for preview
-    const processedUrls = (urls || []).map(url => {
+    const processedUrls = filteredUrls.map(url => {
       const wordCount = url.content_markdown
         ? url.content_markdown.split(/\s+/).length
         : 0
@@ -131,10 +148,10 @@ export async function GET(request: NextRequest, { params }: Params) {
 
     return NextResponse.json({
       summary: {
-        total: allUrls?.length || 0,
-        scraped: scrapedUrls.length,
-        failed: failedUrls.length,
-        selected: selectedUrls.length,
+        total: scrapedCount + failedCount,
+        scraped: scrapedCount,
+        failed: failedCount,
+        selected: selectedCount || 0,
         totalWords,
         selectedWords,
         estimatedCost: Math.round(estimatedCost * 100) / 100,
@@ -144,7 +161,8 @@ export async function GET(request: NextRequest, { params }: Params) {
       pagination: {
         limit,
         offset,
-        hasMore: (urls?.length || 0) === limit,
+        hasMore: offset + limit < totalFiltered,
+        totalFiltered,
       }
     })
   } catch (error) {

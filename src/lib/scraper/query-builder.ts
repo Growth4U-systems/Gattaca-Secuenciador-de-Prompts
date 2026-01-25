@@ -255,13 +255,13 @@ function createQuery(
   // Site filter
   parts.push(`site:${sourceDomain}`)
 
-  // Main search terms
-  parts.push(`"${lifeContext}"`)
-  parts.push(`"${productWord}"`)
+  // Main search terms (without quotes for broader matching)
+  parts.push(lifeContext)
+  parts.push(productWord)
 
-  // Indicator if present
+  // Indicator if present (without quotes)
   if (indicator) {
-    parts.push(`"${indicator}"`)
+    parts.push(indicator)
   }
 
   return {
@@ -291,13 +291,13 @@ function createThematicQuery(
   parts.push(`site:${forum.domain}`)
 
   // For thematic forums, use the life context and product word
-  // but the query is more targeted to the forum's topic
-  parts.push(`"${lifeContext}"`)
-  parts.push(`"${productWord}"`)
+  // but the query is more targeted to the forum's topic (without quotes for broader matching)
+  parts.push(lifeContext)
+  parts.push(productWord)
 
-  // Indicator if present
+  // Indicator if present (without quotes)
   if (indicator) {
-    parts.push(`"${indicator}"`)
+    parts.push(indicator)
   }
 
   return {

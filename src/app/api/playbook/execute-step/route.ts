@@ -8,6 +8,7 @@ import { NICHE_FINDER_FLOW_STEPS } from '@/lib/templates/niche-finder-playbook'
 import { VIDEO_VIRAL_IA_FLOW_STEPS } from '@/lib/templates/video-viral-ia-playbook'
 import { getDefaultPromptForStep } from '@/components/playbook/utils/getDefaultPrompts'
 import { APIFY_ACTORS } from '@/lib/scraperTemplates'
+import { trackLLMUsage } from '@/lib/polar-usage'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -544,6 +545,13 @@ export async function POST(request: NextRequest) {
 
     const llmData = await llmResponse.json()
     const output = llmData.choices?.[0]?.message?.content || ''
+
+    // Track LLM usage in Polar (async, don't block response)
+    if (llmData.usage?.total_tokens) {
+      trackLLMUsage(session.user.id, llmData.usage.total_tokens, model).catch((err) => {
+        console.warn('[playbook/execute-step] Failed to track LLM usage in Polar:', err)
+      })
+    }
 
     if (!output) {
       throw new Error('LLM returned empty response')

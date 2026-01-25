@@ -43,13 +43,7 @@ const SERVICE_INFO: Record<string, ServiceInfo> = {
     docsUrl: 'https://serper.dev/api-key',
     placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
   },
-  openrouter: {
-    name: 'openrouter',
-    label: 'OpenRouter',
-    description: 'IA para sugerencias y Deep Search (usa Perplexity Sonar internamente)',
-    docsUrl: 'https://openrouter.ai/keys',
-    placeholder: 'sk-or-v1-xxxxxxxxxxxx',
-  },
+  // OpenRouter se configura desde el Header (icono de rayo) para ver créditos/consumo
   wavespeed: {
     name: 'wavespeed',
     label: 'Wavespeed AI',

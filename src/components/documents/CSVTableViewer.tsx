@@ -9,10 +9,35 @@ interface CSVTableViewerProps {
 }
 
 /**
+ * Detect the delimiter used in CSV content (comma or semicolon)
+ * by counting occurrences in the first line outside of quotes
+ */
+function detectDelimiter(content: string): ',' | ';' {
+  const firstLine = content.split('\n')[0] || ''
+  let commaCount = 0
+  let semicolonCount = 0
+  let inQuotes = false
+
+  for (const char of firstLine) {
+    if (char === '"') {
+      inQuotes = !inQuotes
+    } else if (!inQuotes) {
+      if (char === ',') commaCount++
+      if (char === ';') semicolonCount++
+    }
+  }
+
+  // Use semicolon if it appears more frequently, otherwise comma
+  return semicolonCount > commaCount ? ';' : ','
+}
+
+/**
  * Parse CSV content into a 2D array
- * Handles quoted fields with commas and newlines
+ * Handles quoted fields with commas/semicolons and newlines
+ * Auto-detects delimiter (comma or semicolon)
  */
 function parseCSV(content: string): string[][] {
+  const delimiter = detectDelimiter(content)
   const rows: string[][] = []
   let currentRow: string[] = []
   let currentField = ''
@@ -37,8 +62,8 @@ function parseCSV(content: string): string[][] {
       if (char === '"') {
         // Start of quoted field
         inQuotes = true
-      } else if (char === ',') {
-        // End of field
+      } else if (char === delimiter) {
+        // End of field (using detected delimiter)
         currentRow.push(currentField.trim())
         currentField = ''
       } else if (char === '\n' || (char === '\r' && nextChar === '\n')) {

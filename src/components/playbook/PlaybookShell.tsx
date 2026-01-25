@@ -43,20 +43,24 @@ function initializeState(
     })),
   }))
 
-  // Apply initial state if provided
+  // Apply initial state if provided - match by ID for robustness when config changes
   if (initialState?.phases) {
-    initialState.phases.forEach((phaseState, phaseIndex) => {
-      if (phases[phaseIndex]) {
-        phases[phaseIndex].status = phaseState.status
-        phaseState.steps.forEach((stepState, stepIndex) => {
-          if (phases[phaseIndex].steps[stepIndex]) {
-            phases[phaseIndex].steps[stepIndex] = {
-              ...phases[phaseIndex].steps[stepIndex],
-              ...stepState,
-            }
-          }
-        })
-      }
+    initialState.phases.forEach((savedPhaseState) => {
+      // Find phase by ID instead of index
+      const phaseIndex = phases.findIndex(p => p.id === savedPhaseState.id)
+      if (phaseIndex === -1) return
+
+      phases[phaseIndex].status = savedPhaseState.status
+      savedPhaseState.steps.forEach((savedStepState) => {
+        // Find step by ID instead of index
+        const stepIndex = phases[phaseIndex].steps.findIndex(s => s.id === savedStepState.id)
+        if (stepIndex === -1) return
+
+        phases[phaseIndex].steps[stepIndex] = {
+          ...phases[phaseIndex].steps[stepIndex],
+          ...savedStepState,
+        }
+      })
     })
   }
 
@@ -66,12 +70,56 @@ function initializeState(
     0
   )
 
+  // Validate currentPhaseIndex and currentStepIndex are within bounds
+  let currentPhaseIndex = initialState?.currentPhaseIndex ?? 0
+  let currentStepIndex = initialState?.currentStepIndex ?? 0
+
+  // Ensure phase index is valid
+  if (currentPhaseIndex >= playbookConfig.phases.length) {
+    currentPhaseIndex = Math.max(0, playbookConfig.phases.length - 1)
+  }
+
+  // Ensure step index is valid for the current phase
+  const currentPhaseSteps = playbookConfig.phases[currentPhaseIndex]?.steps.length ?? 0
+  if (currentStepIndex >= currentPhaseSteps) {
+    currentStepIndex = Math.max(0, currentPhaseSteps - 1)
+  }
+
+  // If the current step doesn't exist, find the first non-completed step
+  if (currentPhaseSteps === 0 || currentStepIndex < 0) {
+    // Find first pending step
+    for (let pi = 0; pi < phases.length; pi++) {
+      for (let si = 0; si < phases[pi].steps.length; si++) {
+        if (phases[pi].steps[si].status !== 'completed') {
+          currentPhaseIndex = pi
+          currentStepIndex = si
+          break
+        }
+      }
+      if (currentStepIndex >= 0) break
+    }
+    // Default to first step if all completed
+    if (currentStepIndex < 0) {
+      currentPhaseIndex = 0
+      currentStepIndex = 0
+    }
+  }
+
+  console.log('[initializeState] Validated indices:', {
+    originalPhase: initialState?.currentPhaseIndex,
+    originalStep: initialState?.currentStepIndex,
+    validatedPhase: currentPhaseIndex,
+    validatedStep: currentStepIndex,
+    maxPhases: playbookConfig.phases.length,
+    maxSteps: currentPhaseSteps,
+  })
+
   return {
     projectId,
     playbookType: playbookConfig.type,
     phases,
-    currentPhaseIndex: initialState?.currentPhaseIndex ?? 0,
-    currentStepIndex: initialState?.currentStepIndex ?? 0,
+    currentPhaseIndex,
+    currentStepIndex,
     config: initialState?.config ?? {},
     completedSteps,
     totalSteps,
@@ -265,9 +313,24 @@ export default function PlaybookShell({
       context_type: campaignVars.context_type || 'both', // Explicitly include context_type
     }
 
+    // DEBUG: Log all steps to see their state
+    console.log('[buildPlaybookContext] All steps:', state.phases.flatMap(p =>
+      p.steps.map(s => ({ id: s.id, status: s.status, hasOutput: !!s.output }))
+    ))
+
     // Collect values from completed steps
     for (const phase of state.phases) {
       for (const stepState of phase.steps) {
+        // DEBUG: Log keyword_config step specifically
+        if (stepState.id === 'keyword_config') {
+          console.log('[buildPlaybookContext] keyword_config step:', {
+            status: stepState.status,
+            hasOutput: !!stepState.output,
+            outputKeys: stepState.output ? Object.keys(stepState.output as object) : [],
+            output: stepState.output,
+          })
+        }
+
         if (stepState.status === 'completed' || stepState.decision || stepState.suggestions) {
           // Get decision value
           if (stepState.decision) {
@@ -330,6 +393,86 @@ export default function PlaybookShell({
               // Don't set context.sources - let it use default values
             }
           }
+
+          // Special case: Extract keyword_config unified output for SearchWithPreviewStep
+          // The unified panel saves data in two formats:
+          // 1. lifeContexts, needWords, indicators as arrays of objects (for UI)
+          // 2. life_contexts, product_words, indicators as arrays of strings (for SERP job)
+          if (stepState.id === 'keyword_config' && stepState.output) {
+            const output = stepState.output as {
+              // Object arrays (for UI state)
+              lifeContexts?: Array<{ id: string; label: string; selected: boolean }>
+              needWords?: Array<{ id: string; label: string; selected: boolean }>
+              indicators?: Array<{ id: string; label: string; selected: boolean }>
+              // String arrays (pre-extracted for SERP job)
+              life_contexts?: string[]
+              product_words?: string[]
+              sources?: {
+                reddit_general?: { enabled: boolean }
+                reddit?: { enabled: boolean; subreddits?: string[] }
+                thematic_forums?: { enabled: boolean; forums?: string[] }
+                general_forums?: { enabled: boolean; forums?: string[] }
+              }
+            }
+
+            // First try to use pre-extracted string arrays (set on completion)
+            if (output.life_contexts && Array.isArray(output.life_contexts)) {
+              context.life_contexts = output.life_contexts
+            } else if (output.lifeContexts) {
+              // Fall back to extracting from object array
+              context.life_contexts = output.lifeContexts
+                .filter(item => item.selected)
+                .map(item => item.label)
+            }
+
+            // Check multiple possible keys for need words
+            if (output.product_words && Array.isArray(output.product_words) && output.product_words.length > 0) {
+              context.need_words = output.product_words
+              console.log('[buildPlaybookContext] Got need_words from product_words:', output.product_words)
+            } else if ((output as any).need_words && Array.isArray((output as any).need_words) && (output as any).need_words.length > 0) {
+              // Also check for 'need_words' key (alternative naming)
+              context.need_words = (output as any).need_words
+              console.log('[buildPlaybookContext] Got need_words from need_words key:', (output as any).need_words)
+            } else if (output.needWords && Array.isArray(output.needWords)) {
+              const extracted = output.needWords
+                .filter(item => item.selected)
+                .map(item => item.label)
+              if (extracted.length > 0) {
+                context.need_words = extracted
+                console.log('[buildPlaybookContext] Got need_words from needWords (selected):', extracted)
+              } else {
+                console.warn('[buildPlaybookContext] needWords array exists but no items selected:', output.needWords)
+              }
+            } else {
+              console.warn('[buildPlaybookContext] Could not find need_words in output:', {
+                hasProductWords: !!output.product_words,
+                productWordsLength: output.product_words?.length,
+                hasNeedWords: !!(output as any).need_words,
+                hasNeedWordsArray: !!output.needWords,
+                outputKeys: Object.keys(output),
+              })
+            }
+
+            if (output.indicators && Array.isArray(output.indicators) && typeof output.indicators[0] === 'string') {
+              context.indicators = output.indicators
+            } else if (output.indicators && Array.isArray(output.indicators)) {
+              context.indicators = (output.indicators as Array<{ id: string; label: string; selected: boolean }>)
+                .filter(item => item.selected)
+                .map(item => item.label)
+            }
+
+            if (output.sources) {
+              context.sources = output.sources
+            }
+
+            // DEBUG: Log what we extracted from keyword_config
+            console.log('[buildPlaybookContext] Extracted from keyword_config:', {
+              life_contexts: context.life_contexts,
+              need_words: context.need_words,
+              indicators: context.indicators,
+              sources: context.sources,
+            })
+          }
         }
 
         // IMPORTANT: Extract serpJobId even from non-completed steps (e.g., after cancel)
@@ -356,8 +499,70 @@ export default function PlaybookShell({
             context.serpJobId = output.jobId
           }
         }
+
+        // IMPORTANT: Also extract keyword_config data even if step is not 'completed'
+        // This ensures retry/navigation doesn't lose the config
+        if (stepState.id === 'keyword_config' && stepState.output && !context.life_contexts) {
+          console.log('[buildPlaybookContext] Extracting keyword_config from non-completed step')
+          const output = stepState.output as {
+            lifeContexts?: Array<{ id: string; label: string; selected: boolean }>
+            needWords?: Array<{ id: string; label: string; selected: boolean }>
+            indicators?: Array<{ id: string; label: string; selected: boolean }>
+            life_contexts?: string[]
+            product_words?: string[]
+            sources?: Record<string, unknown>
+          }
+
+          if (output.life_contexts && Array.isArray(output.life_contexts) && output.life_contexts.length > 0) {
+            context.life_contexts = output.life_contexts
+          } else if (output.lifeContexts) {
+            const extracted = output.lifeContexts.filter(item => item.selected).map(item => item.label)
+            if (extracted.length > 0) {
+              context.life_contexts = extracted
+            }
+          }
+
+          if (output.product_words && Array.isArray(output.product_words) && output.product_words.length > 0) {
+            context.need_words = output.product_words
+          } else if (output.needWords) {
+            const extracted = output.needWords.filter(item => item.selected).map(item => item.label)
+            if (extracted.length > 0) {
+              context.need_words = extracted
+            }
+          }
+
+          if (output.indicators && Array.isArray(output.indicators) && output.indicators.length > 0) {
+            if (typeof output.indicators[0] === 'string') {
+              context.indicators = output.indicators
+            } else {
+              const extracted = (output.indicators as Array<{ id: string; label: string; selected: boolean }>)
+                .filter(item => item.selected).map(item => item.label)
+              if (extracted.length > 0) {
+                context.indicators = extracted
+              }
+            }
+          }
+
+          if (output.sources && !context.sources) {
+            context.sources = output.sources
+          }
+
+          console.log('[buildPlaybookContext] Extracted from non-completed keyword_config:', {
+            life_contexts: context.life_contexts,
+            need_words: context.need_words,
+          })
+        }
       }
     }
+
+    // DEBUG: Log final context
+    console.log('[buildPlaybookContext] Final context:', {
+      life_contexts: context.life_contexts,
+      need_words: context.need_words,
+      indicators: context.indicators,
+      sources: context.sources,
+      serpJobId: context.serpJobId,
+    })
 
     return context
   }
@@ -375,12 +580,23 @@ export default function PlaybookShell({
 
   // Navigate to a specific step
   const goToStep = useCallback((phaseIndex: number, stepIndex: number) => {
+    // Save current state immediately before navigating (don't wait for debounce)
+    if (shouldSaveRef.current && selectedCampaignId) {
+      // Clear pending debounced save
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
+      // Save current state synchronously
+      savePlaybookState(state)
+    }
+
     setState(prev => ({
       ...prev,
       currentPhaseIndex: phaseIndex,
       currentStepIndex: stepIndex,
     }))
-  }, [])
+  }, [selectedCampaignId, state, savePlaybookState])
 
   // Go to next step
   const goToNextStep = useCallback(() => {
@@ -486,13 +702,37 @@ export default function PlaybookShell({
   // Update step state
   const updateStepState = useCallback(
     (stepId: string, update: Partial<StepState>) => {
+      console.log('[updateStepState] Updating step:', stepId, 'with:', {
+        ...update,
+        output: update.output ? `[output with keys: ${Object.keys(update.output as object).join(', ')}]` : undefined,
+      })
       setState(prev => {
+        // Find the current step to log what we're merging
+        const currentStep = prev.phases.flatMap(p => p.steps).find(s => s.id === stepId)
+        if (stepId === 'keyword_config') {
+          console.log('[updateStepState] keyword_config before merge:', {
+            status: currentStep?.status,
+            hasOutput: !!currentStep?.output,
+            outputKeys: currentStep?.output ? Object.keys(currentStep.output as object) : [],
+          })
+        }
+
         const newPhases = prev.phases.map(phase => ({
           ...phase,
           steps: phase.steps.map(step =>
             step.id === stepId ? { ...step, ...update } : step
           ),
         }))
+
+        // Log the merged result for keyword_config
+        if (stepId === 'keyword_config') {
+          const mergedStep = newPhases.flatMap(p => p.steps).find(s => s.id === stepId)
+          console.log('[updateStepState] keyword_config after merge:', {
+            status: mergedStep?.status,
+            hasOutput: !!mergedStep?.output,
+            outputKeys: mergedStep?.output ? Object.keys(mergedStep.output as object) : [],
+          })
+        }
 
         // Recalculate phase status
         newPhases.forEach(phase => {
@@ -552,6 +792,304 @@ export default function PlaybookShell({
 
       try {
         let result: any
+
+        // Special case: Execute extraction from scrape_results step
+        if (step.id === 'scrape_results' && input?.action === 'extract' && input?.jobId) {
+          console.log('[EXTRACT from scrape_results] Starting extraction for job:', input.jobId)
+          const jobId = input.jobId
+
+          updateStepState(stepId, {
+            output: { jobId },
+            progress: { current: 0, total: 0, label: 'Iniciando extracción de problemas...' },
+            partialResults: { extracted: 0, filtered: 0 },
+          })
+
+          // Get total URLs to extract from job status
+          const statusResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+          const statusData = await statusResponse.json()
+          const scrapedUrlCount = statusData.url_counts?.scraped || 0
+          const totalUrls = scrapedUrlCount || statusData.job?.urls_scraped || 0
+          const existingExtractedCount = statusData.job?.niches_extracted || 0
+          const existingFilteredCount = statusData.url_counts?.filtered || 0
+
+          console.log('[EXTRACT] Status check:', {
+            scrapedUrlCount,
+            totalUrls,
+            existingExtractedCount,
+            existingFilteredCount,
+            jobStatus: statusData.job?.status,
+            urlsFailed: statusData.url_counts?.failed || 0,
+          })
+
+          // Check if there's nothing to extract (all URLs failed or filtered)
+          if (scrapedUrlCount === 0 && existingExtractedCount === 0) {
+            const failedCount = statusData.url_counts?.failed || 0
+            console.log('[EXTRACT] No URLs to extract and no existing results. Failed:', failedCount, 'Filtered:', existingFilteredCount)
+
+            // Show error state - nothing to extract
+            updateStepState(stepId, {
+              status: 'error',
+              completedAt: new Date(),
+              output: {
+                jobId,
+                extractedCount: 0,
+                filteredCount: existingFilteredCount,
+                error: failedCount > 0
+                  ? `El scraping falló para ${failedCount} URLs (posible bloqueo de Reddit API). No hay contenido disponible para extraer.`
+                  : 'No hay URLs disponibles para extraer. Verifica que el scraping se completó correctamente.',
+              },
+              progress: undefined,
+            })
+
+            return // Stop - nothing to do
+          }
+
+          // Check if extraction was already done (no URLs to process but results exist)
+          if (scrapedUrlCount === 0 && existingExtractedCount > 0) {
+            console.log('[EXTRACT] Extraction already completed, using existing results')
+            updateStepState(stepId, {
+              progress: { current: 100, total: 100, label: `Usando resultados existentes: ${existingExtractedCount} problemas encontrados` },
+            })
+
+            // Skip extraction loop and jump to results fetching
+            // Get extracted niches for CSV content
+            const resultsResponse = await fetch(`/api/niche-finder/results/${jobId}`)
+            const resultsData = await resultsResponse.json()
+            const niches = resultsData.niches || []
+
+            // Build CSV content
+            let csvContent = 'problema,persona,causa_funcional,carga_emocional,evidencia,alternativas,url_fuente\n'
+            for (const niche of niches) {
+              const problem = (niche.problem || '').replace(/"/g, '""')
+              const persona = (niche.persona || '').replace(/"/g, '""')
+              const functionalCause = (niche.functional_cause || '').replace(/"/g, '""')
+              const emotionalLoad = (niche.emotional_load || '').replace(/"/g, '""')
+              const evidence = (niche.evidence || '').replace(/"/g, '""')
+              const alternatives = (niche.alternatives || '').replace(/"/g, '""')
+              const url = niche.source_url || ''
+              csvContent += `"${problem}","${persona}","${functionalCause}","${emotionalLoad}","${evidence}","${alternatives}","${url}"\n`
+            }
+
+            // Mark scrape_results as completed
+            updateStepState(stepId, {
+              status: 'completed',
+              completedAt: new Date(),
+              output: {
+                jobId,
+                extractedCount: existingExtractedCount,
+                filteredCount: existingFilteredCount,
+              },
+              progress: undefined,
+            })
+
+            // Also update extract_problems step for clean_filter to use
+            console.log('[EXTRACT] Updating extract_problems step with existing CSV results')
+            updateStepState('extract_problems', {
+              status: 'completed',
+              completedAt: new Date(),
+              output: csvContent,
+              partialResults: {
+                extracted: existingExtractedCount,
+                filtered: existingFilteredCount,
+                successCount: niches.length,
+              }
+            })
+
+            console.log('[EXTRACT] Using existing results:', niches.length, 'problems')
+            return // Don't proceed with new extraction
+          }
+
+          updateStepState(stepId, {
+            progress: { current: 0, total: totalUrls, label: `Extrayendo problemas de 0/${totalUrls} URLs...` },
+          })
+
+          // Call extract endpoint in batches until has_more=false
+          let hasMore = true
+          let extractedTotal = 0
+          let filteredTotal = 0
+          let processedTotal = 0
+
+          while (hasMore) {
+            try {
+              const extractResponse = await fetch(`/api/niche-finder/jobs/${jobId}/extract`, {
+                method: 'POST',
+              })
+
+              // Handle non-JSON responses (e.g., Vercel timeout)
+              const contentType = extractResponse.headers.get('content-type')
+              if (!contentType || !contentType.includes('application/json')) {
+                console.error('[EXTRACT] Non-JSON response, polling status...')
+                await new Promise(resolve => setTimeout(resolve, 2000))
+
+                // Check current status
+                const checkResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+                const checkData = await checkResponse.json()
+
+                if (checkData.status === 'completed') {
+                  hasMore = false
+                  extractedTotal = checkData.job?.niches_extracted || 0
+                }
+                continue
+              }
+
+              const extractData = await extractResponse.json()
+              console.log('[EXTRACT] Batch response:', extractData)
+
+              if (extractData.error) {
+                throw new Error(extractData.error)
+              }
+
+              extractedTotal += extractData.extracted || 0
+              filteredTotal += extractData.filtered || 0
+              processedTotal = extractedTotal + filteredTotal
+              hasMore = extractData.has_more || false
+
+              updateStepState(stepId, {
+                progress: {
+                  current: processedTotal,
+                  total: totalUrls,
+                  label: `Extrayendo problemas... ${extractedTotal} encontrados de ${processedTotal}/${totalUrls} URLs`,
+                },
+                partialResults: {
+                  extracted: extractedTotal,
+                  filtered: filteredTotal,
+                },
+              })
+            } catch (extractError) {
+              console.error('[EXTRACT] Batch error:', extractError)
+              await new Promise(resolve => setTimeout(resolve, 2000))
+
+              // Check if we should stop
+              const checkResponse = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+              const checkData = await checkResponse.json()
+              if (checkData.status === 'completed' || checkData.status === 'failed') {
+                hasMore = false
+                if (checkData.status === 'failed') {
+                  throw new Error(checkData.job?.error_message || 'Extraction failed')
+                }
+              }
+            }
+          }
+
+          // Mark as completed
+          updateStepState(stepId, {
+            status: 'completed',
+            completedAt: new Date(),
+            output: {
+              jobId,
+              extractedCount: extractedTotal,
+              filteredCount: filteredTotal,
+            },
+            progress: undefined, // Clear progress
+          })
+
+          console.log('[EXTRACT] Completed! Extracted:', extractedTotal, 'Filtered:', filteredTotal)
+
+          // Save results to Context Lake automatically
+          try {
+            // Get project data (includes client_id)
+            const projectResponse = await fetch(`/api/projects/${projectId}`)
+            const projectData = await projectResponse.json()
+
+            // Get extracted niches for CSV content
+            const resultsResponse = await fetch(`/api/niche-finder/results/${jobId}`)
+            const resultsData = await resultsResponse.json()
+            const niches = resultsData.niches || []
+
+            // Build CSV content
+            let csvContent = 'problema,persona,causa_funcional,carga_emocional,evidencia,alternativas,url_fuente\n'
+            for (const niche of niches) {
+              const problem = (niche.problem || '').replace(/"/g, '""')
+              const persona = (niche.persona || '').replace(/"/g, '""')
+              const functionalCause = (niche.functional_cause || '').replace(/"/g, '""')
+              const emotionalLoad = (niche.emotional_load || '').replace(/"/g, '""')
+              const evidence = (niche.evidence || '').replace(/"/g, '""')
+              const alternatives = (niche.alternatives || '').replace(/"/g, '""')
+              const url = niche.source_url || ''
+              csvContent += `"${problem}","${persona}","${functionalCause}","${emotionalLoad}","${evidence}","${alternatives}","${url}"\n`
+            }
+
+            // IMPORTANT: Also update extract_problems step so clean_filter can use the results
+            // clean_filter depends on extract_problems, not scrape_results
+            console.log('[EXTRACT] Updating extract_problems step with CSV results for clean_filter')
+            updateStepState('extract_problems', {
+              status: 'completed',
+              completedAt: new Date(),
+              output: csvContent,  // CSV string that clean_filter will use
+              partialResults: {
+                extracted: extractedTotal,
+                filtered: filteredTotal,
+                successCount: niches.length,
+              }
+            })
+
+            const dateStr = new Date().toISOString().split('T')[0]
+            const campaignSlug = selectedCampaign?.name?.toLowerCase().replace(/\s+/g, '-') || 'sin-nombre'
+            const projectSlug = projectData.name?.toLowerCase().replace(/\s+/g, '-') || 'proyecto'
+
+            const documentData = {
+              projectId: projectId,
+              clientId: projectData.client_id,
+              filename: `Niche Finder - ${selectedCampaign?.name || 'Sin nombre'} - ${dateStr}`,
+              category: 'research',
+              content: csvContent,
+              description: `${extractedTotal} problemas extraídos del Niche Finder. ${filteredTotal} URLs filtradas de ${totalUrls} procesadas.`,
+              tags: [
+                `fecha:${dateStr}`,
+                `proyecto:${projectSlug}`,
+                `campaña:${campaignSlug}`,
+                `job:${jobId}`,
+                'niche-finder',
+                'problemas-extraidos'
+              ],
+              folder: `niche-finder/${campaignSlug}`,
+              userId: 'system', // TODO: Get actual user ID from session
+              sourceMetadata: {
+                origin_type: 'flow_step_output',
+                playbook_id: playbookConfig.type || 'niche-finder',
+                playbook_name: playbookConfig.name,
+                campaign_id: selectedCampaignId || '',
+                campaign_name: selectedCampaign?.name || '',
+                campaign_variables: selectedCampaign?.customVariables || {},
+                step_id: 'scrape_results',
+                step_name: 'Extracción de Problemas',
+                step_order: 3,
+                executed_at: new Date().toISOString(),
+                model_used: 'openai/gpt-4o-mini',
+                model_provider: 'openrouter',
+                input_tokens: 0,
+                output_tokens: 0,
+                input_document_ids: [],
+                input_previous_step_ids: ['search_and_preview', 'review_and_scrape'],
+                converted_at: new Date().toISOString(),
+                converted_by: 'system',
+                was_edited_before_conversion: false
+              },
+              sourceCampaignId: selectedCampaignId || '',
+              sourceStepId: 'scrape_results',
+              sourceStepName: 'Extracción de Problemas',
+              sourcePlaybookId: playbookConfig.type
+            }
+
+            const saveResponse = await fetch('/api/documents/from-step-output', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(documentData)
+            })
+
+            if (saveResponse.ok) {
+              const savedDoc = await saveResponse.json()
+              console.log('[EXTRACT] Results saved to Context Lake:', savedDoc.document?.id)
+            } else {
+              console.error('[EXTRACT] Failed to save to Context Lake:', await saveResponse.text())
+            }
+          } catch (saveError) {
+            console.error('[EXTRACT] Error saving to Context Lake:', saveError)
+            // Don't fail the extraction if saving to Context Lake fails
+          }
+
+          return // Don't fall through to the switch
+        }
 
         switch (step.executor) {
           case 'llm':
@@ -671,10 +1209,28 @@ export default function PlaybookShell({
                   indicators: string[]
                   sources: { reddit: boolean | { enabled?: boolean; subreddits?: string[] }; thematic_forums: boolean | { enabled?: boolean; forums?: string[] }; general_forums: string[] | { enabled?: boolean; forums?: string[] } }
                   serp_pages: number
+                  // Campaign metadata for extraction to use correct variables
+                  campaign_id?: string | null
+                  ecp_name?: string
+                  ecp_product?: string
+                  ecp_target?: string
+                  ecp_industry?: string
+                  ecp_category?: string
+                  ecp_country?: string
                 }
 
                 // If input is provided (from SearchWithPreviewPanel), use it directly
+                console.log('[SERP] Input received:', JSON.stringify(input, null, 2))
+
                 if (input && input.life_contexts && input.product_words) {
+                  // Warn if arrays are empty
+                  if (input.life_contexts.length === 0 || input.product_words.length === 0) {
+                    console.warn('[SERP] WARNING: life_contexts or product_words is empty!', {
+                      life_contexts: input.life_contexts,
+                      product_words: input.product_words
+                    })
+                  }
+
                   jobConfig = {
                     life_contexts: input.life_contexts,
                     product_words: input.product_words,
@@ -683,6 +1239,7 @@ export default function PlaybookShell({
                     serp_pages: input.serp_pages || 5,
                   }
                 } else {
+                  console.log('[SERP] No valid input, falling back to completed steps...')
                   // Fall back to building from completed steps (legacy flow)
                   const lifeContextsStep = state.phases
                     .flatMap(p => p.steps)
@@ -720,12 +1277,23 @@ export default function PlaybookShell({
                     console.error('Error parsing sources config:', e)
                   }
 
+                  // Get campaign variables with proper typing
+                  const campaignVars = selectedCampaign?.customVariables as Record<string, string | number | undefined> | undefined
+
                   jobConfig = {
+                    campaign_id: selectedCampaignId, // CRITICAL: Pass campaign_id so extract uses correct variables
                     life_contexts: selectedContexts,
                     product_words: selectedNeedWords,
                     indicators: selectedIndicators,
                     sources: sourcesConfig,
-                    serp_pages: (selectedCampaign?.customVariables?.serp_pages as number) || 5,
+                    serp_pages: (campaignVars?.serp_pages as number) || 5,
+                    // Also pass campaign variables directly in config for reliability
+                    ecp_name: (campaignVars?.company_name as string) || selectedCampaign?.name,
+                    ecp_product: campaignVars?.product as string | undefined,
+                    ecp_target: campaignVars?.target as string | undefined,
+                    ecp_industry: campaignVars?.industry as string | undefined,
+                    ecp_category: campaignVars?.category as string | undefined,
+                    ecp_country: campaignVars?.country as string | undefined,
                   }
                 }
 
@@ -846,7 +1414,9 @@ export default function PlaybookShell({
                   // Update last completed for next poll comparison
                   lastCompletedCount = completed
 
-                  if (statusData.status === 'serp_done' || statusData.status === 'serp_completed') {
+                  // Check if SERP phase is done (includes later states that imply SERP finished)
+                  const serpDone = ['serp_done', 'serp_completed', 'scrape_done', 'extracting', 'completed'].includes(statusData.status)
+                  if (serpDone) {
                     if (pollIntervalRef.current) {
                       clearInterval(pollIntervalRef.current)
                       pollIntervalRef.current = null
@@ -859,6 +1429,7 @@ export default function PlaybookShell({
                         urlsFound: statusData.job?.urls_found || 0,
                         costs: statusData.costs,
                       },
+                      progress: undefined, // Clear progress to stop spinner
                     })
                     setTimeout(goToNextStep, 500)
                   } else if (statusData.status === 'failed' || statusData.status === 'error') {
@@ -1167,6 +1738,405 @@ export default function PlaybookShell({
               return
             }
 
+            // UNIFIED SEARCH + EXTRACT: Handles both SERP and analysis in one step
+            if (step.jobType === 'niche_finder_unified') {
+              const action = (input as { action?: string })?.action
+
+              // ============ ACTION: SERP ============
+              if (action === 'serp') {
+                const config = (input as { config?: { life_contexts: string[]; product_words: string[]; indicators: string[]; sources: { reddit: boolean; thematic_forums: boolean; general_forums: string[] }; serp_pages: number } }).config
+                if (!config) {
+                  throw new Error('No se recibió configuración para la búsqueda')
+                }
+
+                console.log('[UNIFIED] Starting SERP with config:', config)
+
+                // Get campaign variables
+                const campaignVars = selectedCampaign?.customVariables as Record<string, string | number | undefined> | undefined
+
+                // Create the SERP job
+                const jobResponse = await fetch('/api/niche-finder/jobs/start', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    project_id: projectId,
+                    config: {
+                      ...config,
+                      campaign_id: selectedCampaignId,
+                      ecp_name: campaignVars?.['ECP Name'] || campaignVars?.ecp_name,
+                      ecp_product: campaignVars?.['ECP Product'] || campaignVars?.ecp_product,
+                      ecp_target: campaignVars?.['ECP Target'] || campaignVars?.ecp_target,
+                      ecp_industry: campaignVars?.['ECP Industry'] || campaignVars?.ecp_industry,
+                      ecp_category: campaignVars?.['ECP Category'] || campaignVars?.ecp_category,
+                      ecp_country: campaignVars?.['ECP Country'] || campaignVars?.ecp_country,
+                    }
+                  }),
+                })
+
+                if (!jobResponse.ok) {
+                  const errorText = await jobResponse.text()
+                  throw new Error(`Error al crear job: ${jobResponse.status} - ${errorText || 'Sin respuesta'}`)
+                }
+
+                const jobText = await jobResponse.text()
+                if (!jobText || jobText.trim() === '') {
+                  throw new Error('El servidor devolvió una respuesta vacía al crear el job')
+                }
+
+                const jobData = JSON.parse(jobText)
+                const jobId = jobData.job_id
+
+                if (!jobId) {
+                  throw new Error('No se pudo crear el job de búsqueda')
+                }
+
+                console.log('[UNIFIED] SERP Job created:', jobId)
+                updateStepState(stepId, {
+                  output: { jobId, phase: 'serp_executing' },
+                  progress: { current: 0, total: 0, label: 'Iniciando búsqueda SERP...' },
+                })
+
+                // Start SERP execution
+                const serpResponse = await fetch(`/api/niche-finder/jobs/${jobId}/serp`, { method: 'POST' })
+
+                if (!serpResponse.ok) {
+                  const serpErrorText = await serpResponse.text()
+                  let errorMessage = `Error al iniciar búsqueda SERP: ${serpResponse.status}`
+                  try {
+                    const serpError = JSON.parse(serpErrorText)
+                    if (serpError.code === 'MISSING_API_KEY') {
+                      errorMessage = `${serpError.error}`
+                    } else if (serpError.error) {
+                      errorMessage = serpError.error
+                    }
+                  } catch {
+                    if (serpErrorText) errorMessage += ` - ${serpErrorText}`
+                  }
+                  throw new Error(errorMessage)
+                }
+
+                console.log('[UNIFIED] SERP execution started successfully')
+
+                // Poll for SERP completion
+                let serpComplete = false
+                let pollRetries = 0
+                const MAX_POLL_RETRIES = 3
+                while (!serpComplete) {
+                  await new Promise(resolve => setTimeout(resolve, 2000))
+                  try {
+                    const statusRes = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+
+                    if (!statusRes.ok) {
+                      console.warn(`[UNIFIED] Status poll failed with ${statusRes.status}`)
+                      pollRetries++
+                      if (pollRetries >= MAX_POLL_RETRIES) {
+                        throw new Error(`Error al consultar estado del job: ${statusRes.status}`)
+                      }
+                      continue
+                    }
+
+                    const text = await statusRes.text()
+                    if (!text || text.trim() === '') {
+                      console.warn('[UNIFIED] Empty response from status endpoint, retrying...')
+                      pollRetries++
+                      if (pollRetries >= MAX_POLL_RETRIES) {
+                        throw new Error('El servidor no está respondiendo correctamente')
+                      }
+                      continue
+                    }
+
+                    const statusData = JSON.parse(text)
+                    pollRetries = 0 // Reset retries on success
+
+                    const urlsFound = statusData.job?.urls_found || 0
+                    // Status API returns serp_total and serp_completed (not total_queries/completed_queries)
+                    const totalSearches = statusData.job?.serp_total || statusData.progress?.serp?.total || 0
+                    const completedSearches = statusData.job?.serp_completed || statusData.progress?.serp?.completed || 0
+
+                    updateStepState(stepId, {
+                      progress: {
+                        current: completedSearches,
+                        total: totalSearches,
+                        label: `Buscando... ${urlsFound} URLs encontradas`,
+                      },
+                    })
+
+                    if (['serp_done', 'serp_completed', 'scrape_done', 'completed'].includes(statusData.status)) {
+                      serpComplete = true
+                      console.log('[UNIFIED] SERP completed. URLs found:', urlsFound)
+                      updateStepState(stepId, {
+                        output: { jobId, phase: 'serp_complete', urlsFound },
+                        progress: undefined,
+                      })
+                    } else if (statusData.status === 'failed') {
+                      throw new Error(statusData.job?.error_message || 'SERP falló')
+                    }
+                  } catch (pollError) {
+                    if (pollError instanceof SyntaxError) {
+                      console.warn('[UNIFIED] JSON parse error in poll, retrying...', pollError)
+                      pollRetries++
+                      if (pollRetries >= MAX_POLL_RETRIES) {
+                        throw new Error('Error al procesar respuesta del servidor')
+                      }
+                    } else {
+                      throw pollError
+                    }
+                  }
+                }
+                return // Don't mark as completed - wait for analyze action
+              }
+
+              // ============ ACTION: ANALYZE (Scrape + Extract) ============
+              if (action === 'analyze') {
+                const jobId = (input as { jobId?: string }).jobId
+                const selectedSources = (input as { selectedSources?: string[] }).selectedSources || []
+                const extractionPrompt = (input as { extractionPrompt?: string }).extractionPrompt
+
+                if (!jobId) {
+                  throw new Error('No se encontró el Job ID')
+                }
+
+                console.log('[UNIFIED] Starting analysis for job:', jobId, 'sources:', selectedSources, 'custom prompt:', !!extractionPrompt)
+                updateStepState(stepId, {
+                  output: { jobId, phase: 'analyzing' },
+                  progress: { current: 0, total: 0, label: 'Iniciando análisis...' },
+                })
+
+                // If a custom extraction prompt was provided, update the job config
+                if (extractionPrompt) {
+                  console.log('[UNIFIED] Updating job with custom extraction prompt')
+                  const updateRes = await fetch(`/api/niche-finder/jobs/${jobId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ extraction_prompt: extractionPrompt }),
+                  })
+                  if (!updateRes.ok) {
+                    console.warn('[UNIFIED] Failed to update job with custom prompt:', updateRes.status)
+                  }
+                }
+
+                // Get total URLs to process
+                const statusRes = await fetch(`/api/niche-finder/jobs/${jobId}/status`)
+                if (!statusRes.ok) {
+                  throw new Error(`Error al obtener estado del job: ${statusRes.status}`)
+                }
+                const statusText = await statusRes.text()
+                if (!statusText || statusText.trim() === '') {
+                  throw new Error('El servidor devolvió una respuesta vacía al consultar estado')
+                }
+                const statusData = JSON.parse(statusText)
+                const totalUrls = statusData.job?.urls_found || 0
+
+                // Start scraping - call API repeatedly until all URLs are processed
+                console.log('[UNIFIED] Starting scrape for', totalUrls, 'URLs')
+                updateStepState(stepId, {
+                  progress: { current: 0, total: totalUrls, label: 'Descargando contenido...' },
+                })
+
+                let scrapeComplete = false
+                let scrapeRetries = 0
+                let totalScraped = 0
+                let totalFailed = 0
+                const MAX_SCRAPE_RETRIES = 5 // More retries for transient failures
+
+                while (!scrapeComplete) {
+                  try {
+                    console.log(`[UNIFIED] Scrape batch starting, totalScraped=${totalScraped}, retries=${scrapeRetries}`)
+
+                    // Call scrape API with timeout (120s to allow for slow scrapes)
+                    const controller = new AbortController()
+                    const timeout = setTimeout(() => controller.abort(), 120000)
+
+                    const scrapeRes = await fetch(`/api/niche-finder/jobs/${jobId}/scrape`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ sources: selectedSources }),
+                      signal: controller.signal,
+                    })
+                    clearTimeout(timeout)
+
+                    if (!scrapeRes.ok) {
+                      const errorText = await scrapeRes.text().catch(() => '')
+                      console.error(`[UNIFIED] Scrape response not ok: ${scrapeRes.status}`, errorText)
+                      scrapeRetries++
+                      if (scrapeRetries >= MAX_SCRAPE_RETRIES) throw new Error(`Error en scraping: ${scrapeRes.status} - ${errorText || 'Unknown error'}`)
+                      await new Promise(r => setTimeout(r, 3000))
+                      continue
+                    }
+
+                    const scrapeText = await scrapeRes.text()
+                    if (!scrapeText) {
+                      console.warn('[UNIFIED] Empty scrape response, retrying...')
+                      scrapeRetries++
+                      if (scrapeRetries >= MAX_SCRAPE_RETRIES) throw new Error('Respuesta vacía del servidor después de múltiples reintentos')
+                      await new Promise(r => setTimeout(r, 3000))
+                      continue
+                    }
+
+                    const scrapeData = JSON.parse(scrapeText)
+                    scrapeRetries = 0 // Reset on successful response
+
+                    if (scrapeData.error) {
+                      // Check if it's a retryable error
+                      if (scrapeData.error.includes('Rate limit') || scrapeData.error.includes('timeout')) {
+                        console.warn(`[UNIFIED] Retryable scrape error: ${scrapeData.error}`)
+                        scrapeRetries++
+                        if (scrapeRetries >= MAX_SCRAPE_RETRIES) throw new Error(scrapeData.error)
+                        await new Promise(r => setTimeout(r, 5000))
+                        continue
+                      }
+                      throw new Error(scrapeData.error)
+                    }
+
+                    // Update progress with scraped count from this batch
+                    totalScraped += scrapeData.scraped || 0
+                    totalFailed += scrapeData.failed || 0
+                    const remaining = scrapeData.remaining || 0
+
+                    updateStepState(stepId, {
+                      progress: {
+                        current: totalScraped,
+                        total: totalUrls,
+                        label: `Descargando... ${totalScraped}/${totalUrls} URLs${totalFailed > 0 ? ` (${totalFailed} fallidas)` : ''}`,
+                      },
+                      partialResults: {
+                        successCount: totalScraped,
+                        failedCount: totalFailed,
+                      },
+                    })
+
+                    console.log(`[UNIFIED] Scrape batch complete: +${scrapeData.scraped} scraped, ${remaining} remaining, has_more: ${scrapeData.has_more}`)
+
+                    // Check if scraping is complete
+                    if (!scrapeData.has_more || remaining === 0) {
+                      scrapeComplete = true
+                    }
+                  } catch (e) {
+                    console.error('[UNIFIED] Scrape error:', e)
+                    if (e instanceof SyntaxError) {
+                      scrapeRetries++
+                      if (scrapeRetries >= MAX_SCRAPE_RETRIES) throw new Error('Error al procesar respuesta del servidor')
+                      await new Promise(r => setTimeout(r, 3000))
+                    } else if (e instanceof Error && e.name === 'AbortError') {
+                      // Timeout - retry with longer wait
+                      console.warn('[UNIFIED] Scrape request timed out, retrying...')
+                      scrapeRetries++
+                      if (scrapeRetries >= MAX_SCRAPE_RETRIES) throw new Error('Timeout en scraping después de múltiples reintentos')
+                      await new Promise(r => setTimeout(r, 5000))
+                    } else {
+                      throw e
+                    }
+                  }
+                }
+
+                console.log('[UNIFIED] Scraping complete, total scraped:', totalScraped)
+
+                // Start extraction - use totalScraped as the base since only scraped URLs can be extracted
+                const extractionTotal = totalScraped || totalUrls // Fallback to totalUrls if scraping tracked differently
+                console.log('[UNIFIED] Starting extraction for', extractionTotal, 'scraped URLs')
+                updateStepState(stepId, {
+                  progress: { current: 0, total: extractionTotal, label: 'Extrayendo problemas...' },
+                })
+
+                let extractComplete = false
+                let extractedTotal = 0
+                let filteredTotal = 0
+                let extractRetries = 0
+
+                while (!extractComplete) {
+                  try {
+                    const extractRes = await fetch(`/api/niche-finder/jobs/${jobId}/extract`, { method: 'POST' })
+                    if (!extractRes.ok) {
+                      extractRetries++
+                      if (extractRetries >= 3) throw new Error(`Error en extracción: ${extractRes.status}`)
+                      await new Promise(r => setTimeout(r, 2000))
+                      continue
+                    }
+                    const text = await extractRes.text()
+                    if (!text) {
+                      extractRetries++
+                      if (extractRetries >= 3) throw new Error('Respuesta vacía del servidor')
+                      await new Promise(r => setTimeout(r, 2000))
+                      continue
+                    }
+                    const extractData = JSON.parse(text)
+                    extractRetries = 0
+
+                    if (extractData.error) {
+                      throw new Error(extractData.error)
+                    }
+
+                    extractedTotal += extractData.extracted || 0
+                    filteredTotal += extractData.filtered || 0
+                    const processed = extractedTotal + filteredTotal
+                    const remaining = extractData.remaining || 0
+
+                    updateStepState(stepId, {
+                      progress: {
+                        current: processed,
+                        total: extractionTotal,
+                        label: `Extrayendo... ${extractedTotal} problemas de ${processed}/${extractionTotal} URLs${filteredTotal > 0 ? ` (${filteredTotal} filtradas)` : ''}`,
+                      },
+                      partialResults: {
+                        extracted: extractedTotal,
+                        filtered: filteredTotal,
+                      },
+                    })
+
+                    console.log(`[UNIFIED] Extract batch: ${extractData.extracted} extracted, ${extractData.filtered} filtered, ${remaining} remaining, has_more: ${extractData.has_more}`)
+
+                    if (!extractData.has_more || remaining === 0) {
+                      extractComplete = true
+                    }
+                  } catch (e) {
+                    if (e instanceof SyntaxError) {
+                      extractRetries++
+                      if (extractRetries >= 3) throw new Error('Error al procesar respuesta del servidor')
+                      await new Promise(r => setTimeout(r, 2000))
+                    } else {
+                      throw e
+                    }
+                  }
+                }
+
+                console.log('[UNIFIED] Extraction complete. Problems:', extractedTotal, 'Filtered:', filteredTotal)
+
+                // Get results and format as CSV
+                console.log('[UNIFIED] Getting results')
+                const resultsRes = await fetch(`/api/niche-finder/results/${jobId}`)
+                if (!resultsRes.ok) {
+                  throw new Error(`Error al obtener resultados: ${resultsRes.status}`)
+                }
+                const resultsText = await resultsRes.text()
+                const resultsData = resultsText ? JSON.parse(resultsText) : { niches: [] }
+                const niches = resultsData.niches || []
+
+                let csvOutput = 'problema,persona,causa_funcional,carga_emocional,evidencia,alternativas,url_fuente\n'
+                for (const niche of niches) {
+                  const problem = (niche.problem || '').replace(/"/g, '""')
+                  const persona = (niche.persona || '').replace(/"/g, '""')
+                  const functionalCause = (niche.functional_cause || '').replace(/"/g, '""')
+                  const emotionalLoad = (niche.emotional_load || '').replace(/"/g, '""')
+                  const evidence = (niche.evidence || '').replace(/"/g, '""')
+                  const alternatives = (niche.alternatives || '').replace(/"/g, '""')
+                  const url = niche.source_url || ''
+                  csvOutput += `"${problem}","${persona}","${functionalCause}","${emotionalLoad}","${evidence}","${alternatives}","${url}"\n`
+                }
+
+                console.log('[UNIFIED] Complete. Problems:', niches.length)
+                updateStepState(stepId, {
+                  status: 'completed',
+                  completedAt: new Date(),
+                  output: { jobId, extractedCount: niches.length, csv: csvOutput },
+                })
+                setTimeout(goToNextStep, 500)
+                return
+              }
+
+              // Unknown action
+              console.warn('[UNIFIED] Unknown action:', action)
+            }
+
             // For other job types, just mark as pending
             result = input
             break
@@ -1201,9 +2171,21 @@ export default function PlaybookShell({
 
   // Handle continue from current step
   const handleContinue = useCallback(() => {
+    console.log('[handleContinue] Called for step:', currentStep?.id, 'current status:', currentStepState?.status)
+    // Note: Don't update step state here if the caller (WorkArea) already updated it.
+    // The caller is responsible for setting status and output correctly before calling onContinue.
+    // We only set completedAt if not already completed, and we do it in a way that preserves output.
     if (currentStepState?.status !== 'completed') {
-      // Mark as completed if not already
-      updateStepState(currentStep.id, { status: 'completed', completedAt: new Date() })
+      console.log('[handleContinue] Status is not completed, updating step state (without output)')
+      // Mark as completed, but preserve any existing output that might have been set
+      // by the caller in the same tick (before React re-renders)
+      updateStepState(currentStep.id, {
+        status: 'completed',
+        completedAt: new Date(),
+        // Don't set output - it should already be set by the caller
+      })
+    } else {
+      console.log('[handleContinue] Status is already completed, not updating')
     }
     // Enable auto-execution for the next step (if it's an auto step)
     setShouldAutoExecute(true)
@@ -1287,7 +2269,9 @@ export default function PlaybookShell({
         fetch(`/api/niche-finder/jobs/${jobId}/status`)
           .then(res => res.json())
           .then(statusData => {
-            if (statusData.status === 'serp_done' || statusData.status === 'serp_completed') {
+            // Check if SERP phase is done (includes later states that imply SERP finished)
+            const serpDone = ['serp_done', 'serp_completed', 'scrape_done', 'extracting', 'completed'].includes(statusData.status)
+            if (serpDone) {
               console.log('[Resume] Job already completed, marking step as done')
               updateStepState(currentStep.id, {
                 status: 'completed',
@@ -1297,6 +2281,7 @@ export default function PlaybookShell({
                   urlsFound: statusData.job?.urls_found || 0,
                   costs: statusData.costs,
                 },
+                progress: undefined, // Clear progress to stop spinner
               })
               setTimeout(goToNextStep, 500)
               return // Don't start polling
@@ -1370,7 +2355,9 @@ export default function PlaybookShell({
             }
             lastCompletedCount = completed
 
-            if (statusData.status === 'serp_done' || statusData.status === 'serp_completed') {
+            // Check if SERP phase is done (includes later states that imply SERP finished)
+            const serpDoneInPoll = ['serp_done', 'serp_completed', 'scrape_done', 'extracting', 'completed'].includes(statusData.status)
+            if (serpDoneInPoll) {
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current)
                 pollIntervalRef.current = null
@@ -1383,6 +2370,7 @@ export default function PlaybookShell({
                   urlsFound: statusData.job?.urls_found || 0,
                   costs: statusData.costs,
                 },
+                progress: undefined, // Clear progress to stop spinner
               })
               setTimeout(goToNextStep, 500)
             } else if (statusData.status === 'failed' || statusData.status === 'error') {
@@ -1586,11 +2574,20 @@ export default function PlaybookShell({
                 onEdit={handleEdit}
                 onCancel={handleCancel}
                 onRerunPrevious={rerunPreviousStep}
+                onRetry={() => {
+                  updateStepState(currentStep.id, { status: 'pending', error: undefined })
+                }}
                 isFirst={isFirstStep}
                 isLast={isLastStep}
                 previousStepOutput={getPreviousStepOutput()}
                 projectId={projectId}
                 playbookContext={buildPlaybookContext()}
+                allSteps={playbookConfig.phases.flatMap((phase, phaseIdx) =>
+                  phase.steps.map((stepDef, stepIdx) => ({
+                    definition: stepDef,
+                    state: state.phases[phaseIdx]?.steps[stepIdx] || { id: stepDef.id, status: 'pending' },
+                  }))
+                )}
               />
             )}
           </div>

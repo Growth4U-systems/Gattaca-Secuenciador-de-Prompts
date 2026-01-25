@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase-server'
 import { getUserApiKey } from '@/lib/getUserApiKey'
+import { trackScrapeUsage } from '@/lib/polar-usage'
 
 export const dynamic = 'force-dynamic'
 
@@ -344,6 +345,14 @@ export async function POST(request: NextRequest, { params }: Params) {
         service: 'firecrawl',
         units: successCount,
         cost_usd: totalCost,
+      })
+    }
+
+    // Track usage in Polar (async, don't block response)
+    // Note: Only Firecrawl scrapes are tracked - Reddit uses free public API
+    if (successCount > 0 && session.user.id) {
+      trackScrapeUsage(session.user.id, successCount, 'firecrawl').catch((err) => {
+        console.warn('[SCRAPE] Failed to track usage in Polar:', err)
       })
     }
 

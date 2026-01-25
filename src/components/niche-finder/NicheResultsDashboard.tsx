@@ -22,6 +22,38 @@ import {
 import type { NicheFinderResults, ExtractedNiche, AnalysisStepOutput } from '@/types/scraper.types'
 import NicheTable from './NicheTable'
 import NicheDetail from './NicheDetail'
+import CSVTableViewer from '../documents/CSVTableViewer'
+import MarkdownRenderer from '../common/MarkdownRenderer'
+
+// Helper to detect if content is CSV (comma or semicolon separated)
+function isCSVContent(content: string | null | undefined): boolean {
+  if (!content || typeof content !== 'string') return false
+  const lines = content.trim().split('\n')
+  if (lines.length < 1) return false
+  const firstLine = lines[0]
+  // CSV typically has delimiters and quoted fields
+  const hasDelimiter = firstLine.includes(',') || firstLine.includes(';')
+  const looksLikeCSV = hasDelimiter && !firstLine.startsWith('{') && !firstLine.startsWith('[')
+  // Check for markdown table pattern (starts with |)
+  const isMarkdownTable = firstLine.startsWith('|')
+  return looksLikeCSV && !isMarkdownTable
+}
+
+// Helper to detect if content is markdown (has markdown syntax)
+function isMarkdownContent(content: string | null | undefined): boolean {
+  if (!content || typeof content !== 'string') return false
+  // Check for common markdown patterns
+  const markdownPatterns = [
+    /^#+ /m,           // Headers
+    /^\|.+\|$/m,       // Tables
+    /^\* /m,           // Unordered lists
+    /^\d+\. /m,        // Ordered lists
+    /\*\*[^*]+\*\*/,   // Bold
+    /\*[^*]+\*/,       // Italic
+    /```/,             // Code blocks
+  ]
+  return markdownPatterns.some(pattern => pattern.test(content))
+}
 
 interface NicheResultsDashboardProps {
   jobId: string
@@ -420,10 +452,24 @@ export default function NicheResultsDashboard({
 
                 {expandedStep === step.step_number && step.output_content && (
                   <div className="p-4 border-t border-gray-200 bg-white">
-                    <div className="max-h-96 overflow-y-auto">
-                      <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded-lg">
-                        {step.output_content}
-                      </pre>
+                    <div className="max-h-[500px] overflow-y-auto">
+                      {isCSVContent(step.output_content) ? (
+                        <div className="h-[450px]">
+                          <CSVTableViewer
+                            content={step.output_content}
+                            filename={`step-${step.step_number}-${step.step_name}.csv`}
+                          />
+                        </div>
+                      ) : isMarkdownContent(step.output_content) ? (
+                        <MarkdownRenderer
+                          content={step.output_content}
+                          className="prose prose-sm max-w-none"
+                        />
+                      ) : (
+                        <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded-lg">
+                          {step.output_content}
+                        </pre>
+                      )}
                     </div>
                   </div>
                 )}

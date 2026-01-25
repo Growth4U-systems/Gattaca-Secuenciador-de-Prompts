@@ -4,6 +4,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
+import { scrypt } from 'https://esm.sh/scrypt-js@3.0.1'
 
 // ============================================================================
 // ENCRYPTION UTILITIES (for decrypting user's OpenRouter API key)
@@ -37,34 +38,166 @@ async function getEncryptionKey(): Promise<CryptoKey> {
   )
 }
 
+/**
+ * Decrypt OAuth token from user_openrouter_tokens table
+ * Format: iv:tag:ciphertext (colon-separated base64 strings)
+ * Uses scrypt key derivation with salt 'gattaca-api-keys' (matches Node.js encrypt())
+ */
 async function decryptToken(encryptedData: string): Promise<string> {
-  const key = await getEncryptionKey()
-
-  // Decode base64
-  const combined = Uint8Array.from(atob(encryptedData), c => c.charCodeAt(0))
-
-  if (combined.length < IV_LENGTH + AUTH_TAG_LENGTH) {
-    throw new Error('Invalid encrypted data: too short')
+  const encryptionKey = Deno.env.get('ENCRYPTION_KEY')
+  if (!encryptionKey) {
+    throw new Error('ENCRYPTION_KEY environment variable is not set')
   }
 
-  // Format from Node.js: iv (16) + authTag (16) + ciphertext
-  // Web Crypto API expects: iv + ciphertext + authTag (authTag at the end)
-  const iv = combined.slice(0, IV_LENGTH)
-  const authTag = combined.slice(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH)
-  const ciphertext = combined.slice(IV_LENGTH + AUTH_TAG_LENGTH)
+  // Format: iv:tag:ciphertext (base64 separated by colons)
+  const parts = encryptedData.split(':')
+  if (parts.length !== 3) {
+    throw new Error(`Invalid OAuth token format: expected 3 parts, got ${parts.length}`)
+  }
 
-  // Reorder for Web Crypto: ciphertext + authTag
+  const [ivB64, tagB64, ciphertextB64] = parts
+
+  // Decode base64 parts
+  const iv = Uint8Array.from(atob(ivB64), c => c.charCodeAt(0))
+  const authTag = Uint8Array.from(atob(tagB64), c => c.charCodeAt(0))
+  const ciphertext = Uint8Array.from(atob(ciphertextB64), c => c.charCodeAt(0))
+
+  console.log('[decryptToken] Parts decoded:', {
+    iv_length: iv.length,
+    authTag_length: authTag.length,
+    ciphertext_length: ciphertext.length
+  })
+
+  // Derive key using scrypt with salt 'gattaca-api-keys' (matches Node.js crypto.scryptSync)
+  const derivedKey = await scrypt(
+    new TextEncoder().encode(encryptionKey),
+    new TextEncoder().encode('gattaca-api-keys'),
+    16384, // N (CPU/memory cost)
+    8,     // r (block size)
+    1,     // p (parallelization)
+    32     // dkLen (derived key length)
+  )
+
+  // Import the derived key for AES-GCM
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    derivedKey,
+    { name: ALGORITHM },
+    false,
+    ['decrypt']
+  )
+
+  // Web Crypto expects ciphertext + authTag concatenated
   const ciphertextWithTag = new Uint8Array(ciphertext.length + authTag.length)
   ciphertextWithTag.set(ciphertext, 0)
   ciphertextWithTag.set(authTag, ciphertext.length)
 
   const decrypted = await crypto.subtle.decrypt(
     { name: ALGORITHM, iv, tagLength: AUTH_TAG_LENGTH * 8 },
-    key,
+    cryptoKey,
     ciphertextWithTag
   )
 
-  return new TextDecoder().decode(decrypted)
+  const result = new TextDecoder().decode(decrypted)
+  console.log('[decryptToken] Successfully decrypted, starts with:', result.substring(0, 10))
+  return result
+}
+
+/**
+ * Decrypt API key from user_api_keys table
+ * Format: ivHex:authTagHex:encryptedHex (colon-separated hex strings)
+ * Uses scrypt key derivation with salt 'salt'
+ */
+async function decryptUserApiKey(encryptedData: string): Promise<string> {
+  const encryptionKey = Deno.env.get('ENCRYPTION_KEY')
+  if (!encryptionKey) {
+    throw new Error('ENCRYPTION_KEY environment variable is not set')
+  }
+  console.log('[decryptUserApiKey] ENCRYPTION_KEY length:', encryptionKey.length)
+
+  const parts = encryptedData.split(':')
+  if (parts.length !== 3) {
+    throw new Error(`Invalid user_api_keys encrypted data format: expected 3 parts, got ${parts.length}`)
+  }
+
+  const [ivHex, authTagHex, encryptedHex] = parts
+  console.log('[decryptUserApiKey] Parts:', {
+    ivHex_length: ivHex.length,
+    authTagHex_length: authTagHex.length,
+    encryptedHex_length: encryptedHex.length
+  })
+
+  // Convert hex to Uint8Array
+  const iv = new Uint8Array(ivHex.length / 2)
+  for (let i = 0; i < iv.length; i++) {
+    iv[i] = parseInt(ivHex.substr(i * 2, 2), 16)
+  }
+
+  const authTag = new Uint8Array(authTagHex.length / 2)
+  for (let i = 0; i < authTag.length; i++) {
+    authTag[i] = parseInt(authTagHex.substr(i * 2, 2), 16)
+  }
+
+  const ciphertext = new Uint8Array(encryptedHex.length / 2)
+  for (let i = 0; i < ciphertext.length; i++) {
+    ciphertext[i] = parseInt(encryptedHex.substr(i * 2, 2), 16)
+  }
+
+  console.log('[decryptUserApiKey] Converted:', {
+    iv_length: iv.length,
+    authTag_length: authTag.length,
+    ciphertext_length: ciphertext.length
+  })
+
+  // Derive key using scrypt with salt 'salt' (matches Node.js crypto.scryptSync)
+  // scrypt-js API: scrypt(password, salt, N, r, p, dkLen, progressCallback?)
+  console.log('[decryptUserApiKey] Starting scrypt key derivation...')
+  const derivedKey = await scrypt(
+    new TextEncoder().encode(encryptionKey),
+    new TextEncoder().encode('salt'),
+    16384, // N (CPU/memory cost)
+    8,     // r (block size)
+    1,     // p (parallelization)
+    32     // dkLen (derived key length)
+  )
+  console.log('[decryptUserApiKey] Scrypt completed, derived key length:', derivedKey.length)
+
+  // Log first 4 bytes of derived key for debugging (safe to log, not the actual key)
+  const keyPreview = Array.from(derivedKey.slice(0, 4)).map(b => b.toString(16).padStart(2, '0')).join('')
+  console.log('[decryptUserApiKey] Derived key first 4 bytes (hex):', keyPreview)
+
+  // Import the derived key for AES-GCM
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    derivedKey,
+    { name: ALGORITHM },
+    false,
+    ['decrypt']
+  )
+  console.log('[decryptUserApiKey] CryptoKey imported successfully')
+
+  // Web Crypto expects ciphertext + authTag concatenated
+  const ciphertextWithTag = new Uint8Array(ciphertext.length + authTag.length)
+  ciphertextWithTag.set(ciphertext, 0)
+  ciphertextWithTag.set(authTag, ciphertext.length)
+
+  console.log('[decryptUserApiKey] Attempting decryption with ciphertextWithTag length:', ciphertextWithTag.length)
+  try {
+    const decrypted = await crypto.subtle.decrypt(
+      { name: ALGORITHM, iv, tagLength: AUTH_TAG_LENGTH * 8 },
+      cryptoKey,
+      ciphertextWithTag
+    )
+    console.log('[decryptUserApiKey] Decryption successful, output length:', decrypted.byteLength)
+
+    const result = new TextDecoder().decode(decrypted)
+    console.log('[decryptUserApiKey] Decoded result starts with:', result.substring(0, 15))
+    return result
+  } catch (decryptError) {
+    console.error('[decryptUserApiKey] DECRYPTION FAILED:', decryptError)
+    console.error('[decryptUserApiKey] IV length:', iv.length, 'AuthTag length:', authTag.length, 'Ciphertext length:', ciphertext.length)
+    throw new Error(`Decryption failed: ${decryptError instanceof Error ? decryptError.message : 'unknown error'}`)
+  }
 }
 
 const SYSTEM_INSTRUCTION = `You are a strict strategic analyst.
@@ -406,6 +539,18 @@ async function callOpenRouter(
   temperature: number,
   maxTokens: number
 ): Promise<LLMResponse> {
+  // Validate API key format
+  console.log(`[OpenRouter] API key validation:`, {
+    length: userApiKey?.length || 0,
+    startsWithSkOr: userApiKey?.startsWith('sk-or-') || false,
+    first15chars: userApiKey?.substring(0, 15) || 'null',
+    hasNonPrintable: userApiKey ? /[^\x20-\x7E]/.test(userApiKey) : 'null'
+  })
+
+  if (!userApiKey || !userApiKey.startsWith('sk-or-')) {
+    throw new Error(`Invalid OpenRouter API key format. Key should start with "sk-or-". Got: "${userApiKey?.substring(0, 20)}..."`)
+  }
+
   const openRouterModel = mapToOpenRouterModel(model)
   const appUrl = Deno.env.get('NEXT_PUBLIC_APP_URL') || 'https://gatacca.app'
 
@@ -1080,23 +1225,25 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // =========================================================================
-    // FETCH AND DECRYPT OPENROUTER API KEY (User -> Agency -> Error)
+    // FETCH AND DECRYPT OPENROUTER API KEY
+    // Priority: 1) user_openrouter_tokens (OAuth modal), 2) agency
     // Skip for Deep Research models (they use Google API directly)
+    // NOTE: OpenRouter keys are ONLY managed via OAuth modal (not Settings > API Keys)
     // =========================================================================
     let userOpenRouterKey: string | null = null
-    let keySource: 'user' | 'agency' = 'user'
+    let keySource: 'user_oauth' | 'agency' | 'none' = 'none'
 
     if (!isDeepResearchModel) {
-      console.log(`[OpenRouter] Looking for token for user_id: ${user_id}`)
+      console.log(`[OpenRouter] Looking for API key for user_id: ${user_id}`)
 
-      // 1. Try user's personal token first
+      // 1. Try user_openrouter_tokens (OAuth flow) - PRIMARY SOURCE
       const { data: tokenRecord, error: tokenError } = await supabase
         .from('user_openrouter_tokens')
         .select('encrypted_api_key')
         .eq('user_id', user_id)
         .single()
 
-      console.log(`[OpenRouter] Token query:`, {
+      console.log(`[OpenRouter] user_openrouter_tokens query:`, {
         found: !!tokenRecord?.encrypted_api_key,
         keyLength: tokenRecord?.encrypted_api_key?.length || 0,
         isPending: tokenRecord?.encrypted_api_key === 'PENDING',
@@ -1107,8 +1254,8 @@ serve(async (req) => {
       if (tokenRecord?.encrypted_api_key && tokenRecord.encrypted_api_key !== 'PENDING') {
         try {
           userOpenRouterKey = await decryptToken(tokenRecord.encrypted_api_key)
-          keySource = 'user'
-          console.log('[OpenRouter] Successfully decrypted user key')
+          keySource = 'user_oauth'
+          console.log('[OpenRouter] Successfully decrypted OAuth token')
 
           // Update last_used_at for user token
           await supabase
@@ -1116,7 +1263,7 @@ serve(async (req) => {
             .update({ last_used_at: new Date().toISOString() })
             .eq('user_id', user_id)
         } catch (decryptError) {
-          console.warn('Failed to decrypt user OpenRouter key:', decryptError)
+          console.warn('[OpenRouter] Failed to decrypt OAuth key:', decryptError)
         }
       }
 
@@ -1144,7 +1291,7 @@ serve(async (req) => {
               .update({ openrouter_key_last_used_at: new Date().toISOString() })
               .eq('id', agencyData.id)
           } catch (decryptError) {
-            console.warn('Failed to decrypt agency OpenRouter key:', decryptError)
+            console.warn('[OpenRouter] Failed to decrypt agency OpenRouter key:', decryptError)
           }
         }
       }
@@ -1153,7 +1300,7 @@ serve(async (req) => {
       if (!userOpenRouterKey) {
         return new Response(
           JSON.stringify({
-            error: 'OpenRouter not connected. Please connect your OpenRouter account or ask your agency admin to configure an API key.',
+            error: 'OpenRouter no conectado. Haz clic en el icono de rayo (⚡) en el header para conectar tu cuenta de OpenRouter.',
             requires_openrouter: true
           }),
           { status: 401, headers: { 'Content-Type': 'application/json' } }

@@ -16,7 +16,7 @@ export async function GET() {
     const userId = session.user.id
     console.log('[OpenRouter Status] Checking status for user:', userId)
 
-    // 1. Check user's personal token first
+    // 1. Check user's personal token first (OAuth)
     const { data: tokenRecord } = await supabase
       .from('user_openrouter_tokens')
       .select('encrypted_api_key, key_prefix, last_used_at, created_at, expires_at, credit_limit, limit_remaining, usage')

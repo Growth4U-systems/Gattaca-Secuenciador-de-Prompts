@@ -8,6 +8,7 @@ import Link from 'next/link'
 import NotificationBell from '@/components/notifications/NotificationBell'
 import { OpenRouterStatusBadge, OpenRouterAuthModal } from '@/components/openrouter'
 import { useOpenRouter } from '@/lib/openrouter-context'
+import CreditsBalance from '@/components/credits/CreditsBalance'
 import { useToast } from '@/components/ui/Toast/ToastContext'
 
 export default function Header() {
@@ -217,6 +218,9 @@ export default function Header() {
                 >
                   <HelpCircle className="w-5 h-5" />
                 </Link>
+
+                {/* Credits Balance */}
+                <CreditsBalance />
 
                 {/* OpenRouter Status */}
                 <OpenRouterStatusBadge onClick={handleOpenRouterBadgeClick} />

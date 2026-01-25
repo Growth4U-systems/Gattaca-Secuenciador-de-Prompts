@@ -42,10 +42,22 @@ interface Summary {
   estimatedCost: number
 }
 
+interface ExtractionProgress {
+  current: number
+  total: number
+  extracted: number
+  filtered: number
+  label?: string
+}
+
 interface ScrapeResultsPanelProps {
   jobId: string
   onContinue: () => void
   onBack: () => void
+  onExecuteExtraction?: () => Promise<void>
+  isExtracting?: boolean
+  extractionProgress?: ExtractionProgress
+  onResetExtractionState?: () => void
 }
 
 // Source type display names and colors
@@ -60,6 +72,10 @@ export function ScrapeResultsPanel({
   jobId,
   onContinue,
   onBack,
+  onExecuteExtraction,
+  isExtracting = false,
+  extractionProgress,
+  onResetExtractionState,
 }: ScrapeResultsPanelProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -125,6 +141,14 @@ export function ScrapeResultsPanel({
   useEffect(() => {
     fetchUrls(0, false)
   }, [fetchUrls])
+
+  // Reset stale extraction state if detected
+  useEffect(() => {
+    if (onResetExtractionState) {
+      console.log('[ScrapeResultsPanel] Resetting stale extraction state')
+      onResetExtractionState()
+    }
+  }, [onResetExtractionState])
 
   // Scroll infinite loading
   const handleScroll = useCallback(() => {
@@ -515,20 +539,58 @@ export function ScrapeResultsPanel({
         </div>
       </div>
 
+      {/* Extraction progress */}
+      {isExtracting && extractionProgress && (
+        <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="flex items-center gap-3 mb-3">
+            <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+            <span className="font-medium text-blue-800">Extrayendo problemas...</span>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm text-blue-700">
+              <span>{extractionProgress.label || 'Procesando URLs...'}</span>
+              <span>{extractionProgress.current}/{extractionProgress.total}</span>
+            </div>
+            <div className="w-full bg-blue-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{
+                  width: extractionProgress.total > 0
+                    ? `${(extractionProgress.current / extractionProgress.total) * 100}%`
+                    : '0%'
+                }}
+              />
+            </div>
+            <div className="flex gap-4 text-xs text-blue-600 mt-2">
+              <span>✓ {extractionProgress.extracted} problemas encontrados</span>
+              <span>⊘ {extractionProgress.filtered} URLs filtradas</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="flex justify-between mt-6 pt-4 border-t">
         <button
           onClick={onBack}
-          className="px-4 py-2 text-gray-600 hover:text-gray-900"
+          disabled={isExtracting}
+          className="px-4 py-2 text-gray-600 hover:text-gray-900 disabled:opacity-50"
         >
           ← Atrás
         </button>
         <button
           onClick={() => setShowConfirmModal(true)}
-          disabled={selectedCount === 0}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={selectedCount === 0 || isExtracting}
+          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
-          Extraer de {selectedCount} URLs (~${summary?.estimatedCost?.toFixed(2) || '0.00'}) →
+          {isExtracting ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Extrayendo...
+            </>
+          ) : (
+            <>Extraer de {selectedCount} URLs (~${summary?.estimatedCost?.toFixed(2) || '0.00'}) →</>
+          )}
         </button>
       </div>
 
@@ -561,7 +623,12 @@ export function ScrapeResultsPanel({
               <button
                 onClick={() => {
                   setShowConfirmModal(false)
-                  onContinue()
+                  if (onExecuteExtraction) {
+                    onExecuteExtraction()
+                  } else {
+                    // Fallback to old behavior if no extraction handler
+                    onContinue()
+                  }
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >

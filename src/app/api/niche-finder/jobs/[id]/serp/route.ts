@@ -5,6 +5,7 @@ import { serperSearch, SERPER_COST_PER_SEARCH } from '@/lib/serper'
 import { generateSearchQueries } from '@/lib/scraper/query-builder'
 import { isLikelyBlog, scoreUrlQuality } from '@/lib/scraper/url-filter'
 import { getUserApiKey } from '@/lib/getUserApiKey'
+import { trackSerpUsage } from '@/lib/polar-usage'
 import type { ScraperStepConfig } from '@/types/scraper.types'
 
 export const dynamic = 'force-dynamic'
@@ -242,6 +243,13 @@ export async function POST(request: NextRequest, { params }: Params) {
           completed_to: totalSearches,
         },
       })
+
+      // Track usage in Polar (async, don't block response)
+      if (session.user.id) {
+        trackSerpUsage(session.user.id, searchesThisRun, 'serper').catch((err) => {
+          console.warn('[SERP] Failed to track usage in Polar:', err)
+        })
+      }
     }
 
     // Update job with final status

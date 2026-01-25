@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     const projectId = searchParams.get('project_id')
     const status = searchParams.get('status')
     const limit = parseInt(searchParams.get('limit') || '10')
+    const withUrls = searchParams.get('with_urls') === 'true' // Filter to jobs with URLs found
 
     if (!projectId) {
       return NextResponse.json({ error: 'project_id is required' }, { status: 400 })
@@ -21,13 +22,18 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from('niche_finder_jobs')
-      .select('id, status, serp_completed, serp_total, urls_found, created_at')
+      .select('id, status, serp_completed, serp_total, urls_found, urls_scraped, niches_extracted, config, created_at')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false })
       .limit(limit)
 
     if (status) {
       query = query.eq('status', status)
+    }
+
+    // Filter to jobs that have URLs found (useful for showing reusable jobs)
+    if (withUrls) {
+      query = query.gt('urls_found', 0)
     }
 
     const { data: jobs, error } = await query

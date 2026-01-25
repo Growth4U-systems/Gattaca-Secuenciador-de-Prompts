@@ -25,6 +25,7 @@ interface ReviewAndScrapePanelProps {
   projectId?: string // Project ID to fetch latest job from if jobId not provided
   onExecute: (selectedUrls: string[]) => void
   onBack: () => void
+  onRetry?: () => void // Optional: re-run the search with new config
   isExecuting?: boolean
   progress?: {
     current: number
@@ -44,6 +45,7 @@ export function ReviewAndScrapePanel({
   projectId,
   onExecute,
   onBack,
+  onRetry,
   isExecuting: externalIsExecuting = false,
   progress,
 }: ReviewAndScrapePanelProps) {
@@ -353,19 +355,30 @@ export function ReviewAndScrapePanel({
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex gap-3">
           <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium text-yellow-800">No se encontraron URLs</p>
+            <p className="font-medium text-yellow-800">No se encontraron conversaciones</p>
             <p className="text-sm text-yellow-700 mt-1">
               La búsqueda no encontró resultados. Intenta ajustar los contextos o
-              palabras de búsqueda.
+              palabras de búsqueda, o re-intentar la búsqueda.
             </p>
           </div>
         </div>
-        <button
-          onClick={onBack}
-          className="px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-        >
-          ← Volver a configurar búsqueda
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={onBack}
+            className="px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            ← Volver a configurar búsqueda
+          </button>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              <Play className="w-4 h-4" />
+              Re-intentar búsqueda
+            </button>
+          )}
+        </div>
       </div>
     )
   }
@@ -378,9 +391,9 @@ export function ReviewAndScrapePanel({
           <Globe className="w-5 h-5 text-green-600" />
         </div>
         <div>
-          <h3 className="font-semibold text-gray-900">Revisar URLs Encontradas</h3>
+          <h3 className="font-semibold text-gray-900">Conversaciones Encontradas</h3>
           <p className="text-sm text-gray-500">
-            Selecciona las fuentes a scrapear
+            Selecciona las fuentes a analizar
           </p>
         </div>
       </div>
@@ -390,7 +403,7 @@ export function ReviewAndScrapePanel({
         <div className="bg-gray-50 rounded-lg p-4">
           <div className="flex items-center gap-2 text-gray-600 mb-1">
             <Globe className="w-4 h-4" />
-            <span className="text-sm">URLs</span>
+            <span className="text-sm">Conversaciones</span>
           </div>
           <p className="text-2xl font-bold text-gray-900">
             {stats.selectedUrls.toLocaleString()}
@@ -475,7 +488,7 @@ export function ReviewAndScrapePanel({
                   {formatSourceName(source.source)}
                 </span>
                 <span className="text-sm text-gray-600">
-                  {source.count} URLs
+                  {source.count} conversaciones
                 </span>
               </div>
 
@@ -509,7 +522,7 @@ export function ReviewAndScrapePanel({
                   ))}
                   {source.urls.length > 20 && (
                     <p className="text-xs text-gray-500 pt-1">
-                      ...y {source.urls.length - 20} URLs más
+                      ...y {source.urls.length - 20} conversaciones más
                     </p>
                   )}
                 </div>
@@ -524,9 +537,9 @@ export function ReviewAndScrapePanel({
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex gap-3">
           <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium text-yellow-800">Ninguna URL seleccionada</p>
+            <p className="font-medium text-yellow-800">Ninguna fuente seleccionada</p>
             <p className="text-sm text-yellow-700 mt-1">
-              Selecciona al menos una fuente para continuar.
+              Selecciona al menos una fuente para analizar conversaciones.
             </p>
           </div>
         </div>
@@ -567,7 +580,7 @@ export function ReviewAndScrapePanel({
           }`}
         >
           <Play className="w-4 h-4" />
-          Scrapear {stats.selectedUrls.toLocaleString()} URLs
+          Analizar {stats.selectedUrls.toLocaleString()} conversaciones
         </button>
       </div>
     </div>

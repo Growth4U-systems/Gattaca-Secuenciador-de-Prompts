@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createClient as createServerClient } from '@/lib/supabase-server'
+import { getUserApiKey } from '@/lib/getUserApiKey'
+import { decryptToken } from '@/lib/encryption'
 import { parseNicheExtractionOutput, prepareExtractionPrompt } from '@/lib/scraper/extractor'
 import { EXTRACTION_PROMPT } from '@/lib/templates/niche-finder-playbook'
+import { trackLLMUsage } from '@/lib/polar-usage'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,28 +14,132 @@ type Params = { params: Promise<{ id: string }> }
 export async function POST(request: NextRequest, { params }: Params) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const openrouterApiKey = process.env.OPENROUTER_API_KEY
 
   if (!supabaseUrl || !supabaseServiceKey) {
     return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 })
   }
 
-  if (!openrouterApiKey) {
-    return NextResponse.json({ error: 'OpenRouter API key not configured' }, { status: 500 })
+  // Get authenticated user
+  const serverClient = await createServerClient()
+  const { data: { session } } = await serverClient.auth.getSession()
+
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  // Helper to validate OpenRouter key format
+  const isValidOpenRouterKey = (key: string | null): boolean => {
+    return !!key && key.startsWith('sk-or-') && key.length > 20
+  }
+
+  // Get OpenRouter API key with hierarchy:
+  // 1. User personal key (user_api_keys)
+  // 2. User OAuth token (user_openrouter_tokens)
+  // 3. Agency key (agencies table)
+  // 4. Environment variable
+  let openrouterApiKey: string | null = null
+  let keySource = 'none'
+
+  // 1. Try user_api_keys table
+  const userKey = await getUserApiKey({
+    userId: session.user.id,
+    serviceName: 'openrouter',
+    supabase: serverClient,
+  })
+  if (isValidOpenRouterKey(userKey)) {
+    openrouterApiKey = userKey
+    keySource = 'user_api_keys'
+  }
+
+  // 2. Try user_openrouter_tokens (OAuth)
+  if (!openrouterApiKey) {
+    const { data: tokenRecord } = await serverClient
+      .from('user_openrouter_tokens')
+      .select('encrypted_api_key')
+      .eq('user_id', session.user.id)
+      .single()
+
+    if (tokenRecord?.encrypted_api_key && tokenRecord.encrypted_api_key !== 'PENDING') {
+      try {
+        const oauthKey = decryptToken(tokenRecord.encrypted_api_key)
+        if (isValidOpenRouterKey(oauthKey)) {
+          openrouterApiKey = oauthKey
+          keySource = 'user_openrouter_tokens'
+        }
+      } catch {
+        // Ignore decryption errors
+      }
+    }
+  }
+
+  // 3. Try agency key (from agencies table via agency_members)
+  if (!openrouterApiKey) {
+    const { data: membership } = await serverClient
+      .from('agency_members')
+      .select('agency_id, agencies(id, openrouter_api_key)')
+      .eq('user_id', session.user.id)
+      .single()
+
+    const agencyData = membership?.agencies as unknown as {
+      id: string
+      openrouter_api_key: string | null
+    } | null
+
+    if (agencyData?.openrouter_api_key) {
+      try {
+        const agencyKey = decryptToken(agencyData.openrouter_api_key)
+        if (isValidOpenRouterKey(agencyKey)) {
+          openrouterApiKey = agencyKey
+          keySource = 'agency'
+        }
+      } catch {
+        // Ignore decryption errors
+      }
+    }
+  }
+
+  // 4. Fallback to env
+  if (!openrouterApiKey) {
+    const envKey = process.env.OPENROUTER_API_KEY || null
+    if (isValidOpenRouterKey(envKey)) {
+      openrouterApiKey = envKey
+      keySource = 'env'
+    }
+  }
+
+  console.log(`[EXTRACT] OpenRouter key source: ${keySource}, valid: ${!!openrouterApiKey}`)
+
+  if (!openrouterApiKey) {
+    return NextResponse.json({
+      error: 'OpenRouter API key not configured. Please add your API key in Settings > API Keys or configure it at the agency level.',
+      code: 'MISSING_API_KEY',
+      service: 'openrouter',
+    }, { status: 400 })
+  }
+
+  // Create Supabase client with caching disabled to avoid stale data
+  const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { persistSession: false },
+    global: {
+      fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }),
+    },
+  })
   const { id: jobId } = await params
 
   try {
-    // Get job with project info
+    // Get job with project info (using left join so it doesn't fail if project is missing)
     const { data: job, error: jobError } = await supabase
       .from('niche_finder_jobs')
-      .select('*, projects!inner(name, ecp_name, ecp_industry, ecp_target)')
+      .select('*, projects(name)')
       .eq('id', jobId)
       .single()
 
-    if (jobError || !job) {
+    if (jobError) {
+      console.error('[EXTRACT] Job query error:', jobError)
+      return NextResponse.json({ error: 'Job not found', details: jobError.message }, { status: 404 })
+    }
+
+    if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 })
     }
 
@@ -49,22 +157,85 @@ export async function POST(request: NextRequest, { params }: Params) {
     const model = job.config?.extraction_model || 'openai/gpt-4o-mini'
     const extractionPrompt = job.config?.extraction_prompt || EXTRACTION_PROMPT
 
-    // Get project variables
     const project = job.projects
-    const variables = {
-      product: project?.ecp_name || project?.name || 'nuestro producto',
-      target: project?.ecp_target || 'usuarios potenciales',
-      industry: project?.ecp_industry || 'tecnología',
-      company_name: project?.ecp_name || project?.name || 'nuestra empresa',
+    const jobConfig = job.config || {}
+
+    // Try to get campaign variables - with improved fallback logic
+    let campaignVars: Record<string, string> = {}
+    let campaignSource = 'none'
+
+    if (jobConfig.campaign_id) {
+      // Best case: campaign_id in job config
+      const { data: campaign, error: campaignError } = await supabase
+        .from('ecp_campaigns')
+        .select('custom_variables, ecp_name, industry')
+        .eq('id', jobConfig.campaign_id)
+        .single()
+
+      if (campaign?.custom_variables) {
+        campaignVars = campaign.custom_variables as Record<string, string>
+        campaignSource = 'campaign_id'
+      } else {
+        console.warn(`[EXTRACT] Campaign ${jobConfig.campaign_id} found but no custom_variables`, campaignError)
+      }
     }
 
-    // Get scraped URLs pending extraction (only selected ones)
+    // Fallback: look up by project_id if no variables yet
+    if (!campaignVars.product && !campaignVars.target) {
+      console.log(`[EXTRACT] No campaign variables from config, trying project_id lookup...`)
+      const { data: campaigns } = await supabase
+        .from('ecp_campaigns')
+        .select('id, ecp_name, custom_variables')
+        .eq('project_id', job.project_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (campaigns?.[0]?.custom_variables) {
+        campaignVars = campaigns[0].custom_variables as Record<string, string>
+        campaignSource = `project_fallback:${campaigns[0].id}`
+        console.log(`[EXTRACT] Found campaign "${campaigns[0].ecp_name}" via project_id fallback`)
+      }
+    }
+
+    console.log(`[EXTRACT] Campaign vars source: ${campaignSource}`, {
+      hasProduct: !!campaignVars.product,
+      hasTarget: !!campaignVars.target,
+      hasIndustry: !!campaignVars.industry,
+    })
+
+    // Priority: job config > campaign custom_variables > project name > defaults
+    // IMPORTANT: Check for actual values, not just truthy (empty string is falsy but exists)
+    const variables = {
+      product: jobConfig.ecp_product || campaignVars.product || project?.name || 'nuestro producto',
+      target: jobConfig.ecp_target || campaignVars.target || 'usuarios potenciales',
+      industry: jobConfig.ecp_industry || campaignVars.industry || 'tecnología',
+      company_name: jobConfig.ecp_name || campaignVars.company_name || project?.name || 'nuestra empresa',
+      category: jobConfig.ecp_category || campaignVars.category || '',
+      country: jobConfig.ecp_country || campaignVars.country || '',
+    }
+
+    // Validate that we have real product/target (not defaults) to avoid filtering everything
+    if (variables.product === 'nuestro producto' || variables.target === 'usuarios potenciales') {
+      console.error(`[EXTRACT] CRITICAL: Using default variables! This will likely filter all URLs.`, {
+        jobConfig_ecp_product: jobConfig.ecp_product,
+        campaignVars_product: campaignVars.product,
+        project_name: project?.name,
+        final_product: variables.product,
+      })
+    }
+
+    console.log(`[EXTRACT] Using variables:`, {
+      product: variables.product?.slice(0, 80),
+      target: variables.target?.slice(0, 80),
+      industry: variables.industry
+    })
+
+    // Get scraped URLs pending extraction (all scraped URLs)
     const { data: scrapedUrls, error: urlsError } = await supabase
       .from('niche_finder_urls')
       .select('*')
       .eq('job_id', jobId)
       .eq('status', 'scraped')
-      .eq('selected', true)  // Only process URLs that user selected
       .not('content_markdown', 'is', null)
       .limit(batchSize)
 
@@ -74,6 +245,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     if (!scrapedUrls || scrapedUrls.length === 0) {
       // No more URLs to extract, complete job
+      console.log(`[EXTRACT] Job ${jobId}: No more URLs to extract, marking as completed`)
       await supabase
         .from('niche_finder_jobs')
         .update({
@@ -90,6 +262,8 @@ export async function POST(request: NextRequest, { params }: Params) {
         message: 'Extraction complete',
       })
     }
+
+    console.log(`[EXTRACT] Job ${jobId}: Found ${scrapedUrls.length} URLs to extract in this batch`)
 
     let extractedCount = 0
     let filteredCount = 0
@@ -143,7 +317,9 @@ export async function POST(request: NextRequest, { params }: Params) {
         })
 
         if (!response.ok) {
-          throw new Error(`OpenRouter error: ${response.status}`)
+          const errorText = await response.text()
+          console.error(`[EXTRACT] OpenRouter error ${response.status}:`, errorText)
+          throw new Error(`OpenRouter error: ${response.status} - ${errorText.slice(0, 200)}`)
         }
 
         const data = await response.json()
@@ -248,6 +424,11 @@ export async function POST(request: NextRequest, { params }: Params) {
         units: totalInputTokens + totalOutputTokens,
         cost_usd: llmCost,
         metadata: { model, input_tokens: totalInputTokens, output_tokens: totalOutputTokens },
+      })
+
+      // Track usage in Polar (async, don't block response)
+      trackLLMUsage(session.user.id, totalInputTokens + totalOutputTokens, model).catch((err) => {
+        console.warn('[EXTRACT] Failed to track LLM usage in Polar:', err)
       })
     }
 
