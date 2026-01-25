@@ -9,6 +9,8 @@ export { default as ConfigurationMode } from './ConfigurationMode'
 export { default as CampaignWizard } from './CampaignWizard'
 export { default as StartSessionDialog } from './StartSessionDialog'
 export { default as AllSessionsPanel } from './AllSessionsPanel'
+export { default as PlaybookStepContainer } from './PlaybookStepContainer'
+export type { PlaybookStepContainerProps } from './PlaybookStepContainer'
 
 // Types
 export type {
@@ -26,6 +28,8 @@ export type {
   PlaybookShellProps,
   NavigationPanelProps,
   WorkAreaProps,
+  StepGuidance,
+  StepCompletionCriteria,
 } from './types'
 
 // Configurations

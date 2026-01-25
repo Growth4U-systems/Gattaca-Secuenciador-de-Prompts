@@ -107,6 +107,43 @@ export interface StepDefinition {
     estimatedCost?: string
     costService?: string // e.g., "Serper API", "Firecrawl"
   }
+
+  // Guidance configuration for the step container
+  // Provides clear instructions to users about what the step does and what they need to do
+  guidance?: StepGuidance
+}
+
+/**
+ * Step guidance configuration
+ * Displayed in the PlaybookStepContainer to help users understand:
+ * - What this step does (description)
+ * - What actions they need to take (userActions)
+ * - What conditions must be met to proceed (completionCriteria)
+ */
+export interface StepGuidance {
+  /** Brief description of what this step accomplishes */
+  description: string
+  /** List of actions the user needs to take in this step */
+  userActions: string[]
+  /**
+   * Completion criteria - defines when the "Next" button should be enabled
+   * Can be a simple description or structured criteria
+   */
+  completionCriteria: StepCompletionCriteria
+}
+
+/**
+ * Defines completion criteria for a step
+ */
+export interface StepCompletionCriteria {
+  /** Human-readable description of what needs to be done */
+  description: string
+  /** Type of validation to perform */
+  type: 'manual' | 'input_required' | 'selection_required' | 'auto_complete' | 'custom'
+  /** Minimum number of items/characters required (for input_required or selection_required) */
+  minCount?: number
+  /** Custom validation function name (for custom type) */
+  customValidator?: string
 }
 
 export interface PhaseDefinition {
