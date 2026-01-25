@@ -8,6 +8,10 @@ import {
   CheckCircle,
   Circle,
   Info,
+  Database,
+  Check,
+  Loader2,
+  ExternalLink,
 } from 'lucide-react'
 import {
   StepDefinition,
@@ -82,6 +86,28 @@ export interface PlaybookStepContainerProps {
    * Whether Context Lake save is currently in progress
    */
   isSavingToContextLake?: boolean
+  /**
+   * The step output content to save (visible in footer when present)
+   */
+  stepOutput?: string
+  /**
+   * Callback when user clicks the standalone "Save to Context Lake" button
+   * Opens the save modal for the user to configure the save
+   */
+  onOpenSaveModal?: () => void
+  /**
+   * List of documents saved from this step (allows multiple saves)
+   * Each save creates a new document
+   */
+  savedDocuments?: Array<{
+    id: string
+    name: string
+    savedAt: Date
+  }>
+  /**
+   * Base URL for viewing saved documents (e.g., "/projects/123")
+   */
+  documentViewBasePath?: string
 }
 
 
@@ -244,6 +270,10 @@ export default function PlaybookStepContainer({
   progressDescription,
   onSaveToContextLake,
   isSavingToContextLake = false,
+  stepOutput,
+  onOpenSaveModal,
+  savedDocuments = [],
+  documentViewBasePath,
 }: PlaybookStepContainerProps) {
   const [showNavigationWarning, setShowNavigationWarning] = useState(false)
 
@@ -384,20 +414,69 @@ export default function PlaybookStepContainer({
       {/* Footer section */}
       <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
         <div className="flex items-center justify-between">
-          {/* Helper text */}
-          <div className="flex-1 mr-4">
-            {footerHelperText && (
-              <p className="text-sm text-gray-500">{footerHelperText}</p>
-            )}
-            {!footerHelperText && step.guidance?.completionCriteria && !canContinue && (
-              <p className="text-sm text-gray-500">
-                {step.guidance.completionCriteria.description}
-              </p>
+          {/* Left side: Helper text and saved documents indicator */}
+          <div className="flex-1 mr-4 flex items-center gap-4">
+            {/* Helper text */}
+            <div className="flex-1">
+              {footerHelperText && (
+                <p className="text-sm text-gray-500">{footerHelperText}</p>
+              )}
+              {!footerHelperText && step.guidance?.completionCriteria && !canContinue && (
+                <p className="text-sm text-gray-500">
+                  {step.guidance.completionCriteria.description}
+                </p>
+              )}
+            </div>
+
+            {/* Saved documents indicator */}
+            {savedDocuments.length > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 text-sm text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">
+                  <Check className="w-4 h-4" />
+                  <span>
+                    Saved {savedDocuments.length === 1 ? '' : `(${savedDocuments.length})`}
+                  </span>
+                </div>
+                {documentViewBasePath && savedDocuments.length > 0 && (
+                  <a
+                    href={`${documentViewBasePath}?tab=context-lake&highlight=${savedDocuments[savedDocuments.length - 1].id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
+                    title={`View "${savedDocuments[savedDocuments.length - 1].name}" in Context Lake`}
+                  >
+                    View
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
             )}
           </div>
 
-          {/* Navigation buttons */}
+          {/* Right side: Action buttons */}
           <div className="flex items-center gap-3">
+            {/* Save to Context Lake button - visible when step has output */}
+            {stepOutput && onOpenSaveModal && (
+              <button
+                onClick={onOpenSaveModal}
+                disabled={isSavingToContextLake}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 hover:border-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Save this step's output to Context Lake"
+              >
+                {isSavingToContextLake ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Database className="w-4 h-4" />
+                    Save to Context Lake
+                  </>
+                )}
+              </button>
+            )}
+
             {/* Back button */}
             {!isFirst && onBack && (
               <button
