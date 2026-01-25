@@ -13,6 +13,15 @@ export { default as PlaybookStepContainer } from './PlaybookStepContainer'
 export type { PlaybookStepContainerProps } from './PlaybookStepContainer'
 export { default as SavedIndicator } from './SavedIndicator'
 export type { SavedIndicatorProps } from './SavedIndicator'
+export { default as StepExecutionProgress } from './StepExecutionProgress'
+export type {
+  StepExecutionProgressProps,
+  ExecutionType,
+  ExecutionStatus,
+  LogEntry,
+  ProgressData,
+  PartialResults,
+} from './StepExecutionProgress'
 
 // Types
 export type {
