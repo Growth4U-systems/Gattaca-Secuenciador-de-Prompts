@@ -5,7 +5,9 @@ export const dynamic = 'force-dynamic'
 
 interface CreateSessionRequest {
   project_id: string
-  playbook_type: 'niche_finder' | 'ecp' | 'video_viral'
+  playbook_type: 'niche_finder' | 'ecp' | 'video_viral' | 'signal_based_outreach' | 'competitor_analysis'
+  name?: string
+  tags?: string[] | null
   config?: Record<string, unknown>
   variables?: Record<string, unknown>
 }
@@ -14,6 +16,8 @@ interface Session {
   id: string
   project_id: string
   playbook_type: string
+  name: string | null
+  tags: string[] | null
   status: string
   current_phase: string | null
   current_step: string | null
@@ -37,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: CreateSessionRequest = await request.json()
-    const { project_id, playbook_type, config = {}, variables = {} } = body
+    const { project_id, playbook_type, name, tags, config = {}, variables = {} } = body
 
     if (!project_id || !playbook_type) {
       return NextResponse.json(
@@ -46,31 +50,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check for existing active session
-    const { data: existingSession } = await supabase
-      .from('playbook_sessions')
-      .select('*')
-      .eq('project_id', project_id)
-      .eq('playbook_type', playbook_type)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    if (existingSession) {
-      return NextResponse.json({
-        session: existingSession as Session,
-        resumed: true,
-      })
-    }
-
-    // Create new session
+    // Create new session (always create new, let dialog handle resume via list)
     const { data: newSession, error: insertError } = await supabase
       .from('playbook_sessions')
       .insert({
         project_id,
         playbook_type,
-        status: 'active',
+        name: name || null,
+        tags: tags || null,
+        status: 'draft',
         config,
         variables,
       })
@@ -87,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       session: newSession as Session,
-      resumed: false,
+      created: true,
     })
   } catch (error) {
     console.error('Error in sessions endpoint:', error)

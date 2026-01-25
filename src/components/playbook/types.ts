@@ -229,6 +229,7 @@ export interface PlaybookShellProps {
   projectId: string
   playbookConfig: PlaybookConfig
   initialState?: Partial<PlaybookState>
+  sessionId?: string
 }
 
 export interface NavigationPanelProps {
