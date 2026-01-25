@@ -63,3 +63,12 @@ Acceptance Criteria Met:\n- [x] \"Start New Session\" dialog includes \"Or resum
 Acceptance Criteria Met:\n- [x] When step starts, create/update `playbook_session_steps` record with status \"running\"\n- [x] Auto-save step output_data to database every 30 seconds during execution\n- [x] Auto-save immediately when significant data changes (debounced 3s)\n- [x] When step completes, update status to \"completed\" and save final output_data\n- [x] On session resume, load step data from database and restore UI state\n- [x] Show subtle \"Saved\" indicator when auto-save occurs\n\n
 
 ---
+## ✓ Iteration 7 - US-007: Implement Navigation Warning System
+*2026-01-25T19:18:47.628Z (355s)*
+
+**Status:** Completed
+
+**Notes:**
+3. Your current progress (45 URLs scraped) will be saved...\")\n\n### Acceptance Criteria Met:\n- ✅ When user clicks \"Back\" on a step with unsaved/in-progress data, show confirmation dialog\n- ✅ Dialog explains what will happen with progress description\n- ✅ Dialog has options: \"Go Back Anyway\", \"Save to Context Lake First\", \"Cancel\"\n- ✅ Browser beforeunload handler warns if session has unsaved changes\n- ✅ \"Save to Context Lake First\" opens save flow then proceeds with navigation\n\n
+
+---
