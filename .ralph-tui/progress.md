@@ -54,3 +54,12 @@ Acceptance Criteria Met:\n- [x] \"Start New Session\" dialog includes \"Or resum
 - Back warning modal when unsaved data exists\n   - Completion criteria evaluation logic\n3. **`src/components/playbook/index.ts`** - Exported new component and types\n\n### Key Features:\n- **Completion Criteria Types**: `manual`, `input_required`, `selection_required`, `auto_complete`, `custom`\n- **Back Navigation Warning**: Modal warns users if they have entered data that might be lost\n- **Responsive Button States**: Next/Continue button properly disabled based on criteria evaluation\n\n
 
 ---
+## ✓ Iteration 6 - US-006: Implement Step Data Auto-Persistence
+*2026-01-25T19:12:51.379Z (525s)*
+
+**Status:** Completed
+
+**Notes:**
+Acceptance Criteria Met:\n- [x] When step starts, create/update `playbook_session_steps` record with status \"running\"\n- [x] Auto-save step output_data to database every 30 seconds during execution\n- [x] Auto-save immediately when significant data changes (debounced 3s)\n- [x] When step completes, update status to \"completed\" and save final output_data\n- [x] On session resume, load step data from database and restore UI state\n- [x] Show subtle \"Saved\" indicator when auto-save occurs\n\n
+
+---
