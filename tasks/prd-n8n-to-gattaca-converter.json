@@ -1,0 +1,337 @@
+{
+  "name": "n8n to Gattaca Playbook Converter",
+  "description": "Build a converter that transforms any n8n workflow JSON into a native Gattaca playbook that runs independently without n8n. The converter generates playbook configuration, API routes, TypeScript types, and UI components - all living as native Gattaca code.",
+  "branchName": "feature/n8n-to-gattaca-converter",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create n8n Workflow Parser",
+      "description": "As a developer, I want to parse n8n workflow JSON into a typed structure so that I can analyze and transform it.",
+      "acceptanceCriteria": [
+        "Create type definitions for n8n workflow structure in `src/lib/n8n-converter/types/n8n-workflow.types.ts`",
+        "Types include: Workflow, Node, Connection, Credentials, Parameters",
+        "Create parser function `parseN8nWorkflow(json: string): N8nWorkflow`",
+        "Parser validates required fields and throws descriptive errors for invalid JSON",
+        "Parser extracts: nodes array, connections object, workflow settings",
+        "Add unit tests for parser with sample n8n workflow JSON"
+      ],
+      "priority": 1,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-002",
+      "title": "Create Node Type Registry",
+      "description": "As a developer, I want a registry that maps n8n node types to Gattaca step generators so that I can extend support for new nodes.",
+      "acceptanceCriteria": [
+        "Create `src/lib/n8n-converter/registry/node-registry.ts`",
+        "Registry interface: `{ [n8nNodeType: string]: NodeConverter }`",
+        "NodeConverter interface: `{ canConvert(node): boolean, convert(node): GattacaStep, generateCode(node): GeneratedCode }`",
+        "Create `registerNode(type, converter)` function for adding converters",
+        "Create `getConverter(nodeType)` function that returns converter or null",
+        "Create `listSupportedNodes()` function for documentation",
+        "Registry is extensible - new converters can be added without modifying core"
+      ],
+      "priority": 2,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-003",
+      "title": "Implement HTTP Request Node Converter",
+      "description": "As a user, I want n8n HTTP Request nodes converted to Gattaca API calls so that my API integrations work.",
+      "acceptanceCriteria": [
+        "Create converter in `src/lib/n8n-converter/converters/http-request.converter.ts`",
+        "Maps HTTP method, URL, headers, body, authentication",
+        "Generates API route in `/api/playbook/[playbookName]/steps/[stepId]/route.ts`",
+        "Supports dynamic parameters from previous steps using `{{$node[\"name\"].json[\"field\"]}}`",
+        "Converts n8n expression syntax to Gattaca state references",
+        "Handles authentication types: None, Basic, Bearer, API Key, OAuth2",
+        "Generated route includes error handling and response parsing"
+      ],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-004",
+      "title": "Implement AI/LLM Node Converters",
+      "description": "As a user, I want n8n OpenAI/Anthropic nodes converted to Gattaca LLM calls so that my AI workflows work.",
+      "acceptanceCriteria": [
+        "Create converters for: `@n8n/n8n-nodes-langchain.openAi`, `@n8n/n8n-nodes-langchain.anthropic`",
+        "Map model selection, temperature, max tokens, system prompt, user prompt",
+        "Generate step that calls `/api/llm/generate` with correct parameters",
+        "Convert n8n prompt templates to Gattaca prompt format",
+        "Handle chat vs completion modes",
+        "Support structured output / JSON mode if configured",
+        "Map n8n's message history handling to Gattaca state"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-005",
+      "title": "Implement Code/Function Node Converter",
+      "description": "As a user, I want n8n Code nodes converted to Gattaca executable code so that custom logic works.",
+      "acceptanceCriteria": [
+        "Create converter for `n8n-nodes-base.code` and `n8n-nodes-base.function`",
+        "Extract JavaScript code from node parameters",
+        "Generate Supabase Edge Function or inline execution",
+        "Map n8n's `$input`, `$json`, `$node` helpers to Gattaca equivalents",
+        "Create utility functions that replicate n8n helpers: `getInputData()`, `getNodeParameter()`",
+        "Handle async code and external imports",
+        "Generated code includes TypeScript types for inputs/outputs"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-006",
+      "title": "Implement Control Flow Node Converters",
+      "description": "As a user, I want n8n IF/Switch/Loop nodes converted so that branching logic works.",
+      "acceptanceCriteria": [
+        "Create converters for: `n8n-nodes-base.if`, `n8n-nodes-base.switch`, `n8n-nodes-base.splitInBatches`",
+        "IF node: generates step with `condition` field that determines next step",
+        "Switch node: generates step with multiple condition branches",
+        "SplitInBatches: generates loop configuration in playbook",
+        "Map n8n condition expressions to JavaScript boolean expressions",
+        "Handle nested conditions",
+        "Generate proper step connections based on true/false branches"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-007",
+      "title": "Implement Trigger Node Converters",
+      "description": "As a user, I want n8n trigger nodes converted to Gattaca playbook entry points.",
+      "acceptanceCriteria": [
+        "Create converters for: `n8n-nodes-base.webhook`, `n8n-nodes-base.manualTrigger`, `n8n-nodes-base.scheduleTrigger`",
+        "Webhook: generates initial step config with expected input schema",
+        "Manual: generates standard playbook start (user-initiated)",
+        "Schedule: generates cron configuration (or marks as \"requires external scheduler\")",
+        "Extract input schema from trigger configuration",
+        "Generate TypeScript interface for trigger payload"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-008",
+      "title": "Implement Data Transformation Node Converters",
+      "description": "As a user, I want n8n Set/Merge/Split nodes converted so that data manipulation works.",
+      "acceptanceCriteria": [
+        "Create converters for: `n8n-nodes-base.set`, `n8n-nodes-base.merge`, `n8n-nodes-base.itemLists`",
+        "Set node: generates state update logic",
+        "Merge node: generates data combination logic (append, merge by key, etc.)",
+        "ItemLists: generates array operations (split, aggregate, limit, etc.)",
+        "All transformations work with Gattaca's step state model",
+        "Generate helper functions for complex transformations"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-009",
+      "title": "Create Playbook Config Generator",
+      "description": "As a developer, I want to generate a complete playbook config from converted nodes so that the playbook is functional.",
+      "acceptanceCriteria": [
+        "Create `src/lib/n8n-converter/generators/playbook-config.generator.ts`",
+        "Input: array of converted GattacaSteps + workflow metadata",
+        "Output: complete playbook config matching `src/components/playbook/configs/*.config.ts` pattern",
+        "Generate phases based on n8n workflow structure (group sequential nodes)",
+        "Generate step dependencies from n8n connections",
+        "Include step guidance (description, user actions) derived from node names/notes",
+        "Generate variables from n8n workflow variables/settings",
+        "Output is valid TypeScript that can be imported"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-010",
+      "title": "Create API Routes Generator",
+      "description": "As a developer, I want to generate API routes for each step so that the playbook can execute.",
+      "acceptanceCriteria": [
+        "Create `src/lib/n8n-converter/generators/api-routes.generator.ts`",
+        "Generate route files in `/api/playbook/[playbookName]/[stepId]/route.ts`",
+        "Each route handles the step's execution logic",
+        "Routes follow existing Gattaca patterns (auth, error handling, response format)",
+        "Generate shared utilities in `/api/playbook/[playbookName]/_utils/`",
+        "Include proper TypeScript types for request/response",
+        "Routes integrate with Gattaca's state management"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-011",
+      "title": "Create Connection/Flow Analyzer",
+      "description": "As a developer, I want to analyze n8n connections to determine step execution order and dependencies.",
+      "acceptanceCriteria": [
+        "Create `src/lib/n8n-converter/analyzers/flow-analyzer.ts`",
+        "Parse n8n connections object into directed graph",
+        "Detect: linear flows, branches (IF/Switch), merges, loops",
+        "Topological sort to determine execution order",
+        "Identify parallel branches that could execute concurrently",
+        "Detect cycles and report as errors (or convert to loops)",
+        "Output: ordered list of steps with dependencies"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-012",
+      "title": "Create Expression Converter",
+      "description": "As a developer, I want to convert n8n expressions to Gattaca state references so that dynamic values work.",
+      "acceptanceCriteria": [
+        "Create `src/lib/n8n-converter/converters/expression.converter.ts`",
+        "Parse n8n expression syntax: `{{ $json.field }}`, `{{ $node[\"name\"].json.field }}`",
+        "Convert to Gattaca state access: `state.steps.stepName.output.field`",
+        "Handle n8n functions: `$now`, `$today`, `$if()`, `$isEmpty()`",
+        "Create equivalent helper functions in generated code",
+        "Support nested expressions and string interpolation",
+        "Report unconvertible expressions with clear error messages"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-013",
+      "title": "Create CLI Converter Tool",
+      "description": "As a user, I want a CLI command to convert n8n workflows so that I can easily migrate.",
+      "acceptanceCriteria": [
+        "Create CLI script `scripts/convert-n8n.ts`",
+        "Usage: `npx tsx scripts/convert-n8n.ts ./workflow.json --output ./src/playbooks/my-playbook`",
+        "Parses n8n JSON, runs conversion, generates all files",
+        "Shows progress: \"Converting node 1/15: HTTP Request...\"",
+        "Reports warnings for unsupported features",
+        "Generates summary: files created, nodes converted, manual steps needed",
+        "`--dry-run` flag to preview without writing files",
+        "`--validate-only` flag to check if workflow is convertible"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-014",
+      "title": "Create UI Import Component",
+      "description": "As a user, I want to import n8n workflows through the Gattaca UI so that I don't need CLI.",
+      "acceptanceCriteria": [
+        "Create `src/components/playbook/ImportN8nWorkflow.tsx`",
+        "Two input modes: paste JSON or upload .json file",
+        "Preview panel shows: workflow name, node count, detected issues",
+        "\"Analyze\" button shows conversion report before committing",
+        "\"Convert\" button triggers server-side conversion",
+        "Progress indicator during conversion",
+        "Success: redirects to new playbook editor",
+        "Failure: shows detailed error with suggestions"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-015",
+      "title": "Create Conversion Report Generator",
+      "description": "As a user, I want a detailed report of the conversion so that I know what needs manual attention.",
+      "acceptanceCriteria": [
+        "Create `src/lib/n8n-converter/reporters/conversion-report.ts`",
+        "Report includes: converted nodes (green), partially converted (yellow), unsupported (red)",
+        "For each unsupported node: reason + suggested manual implementation",
+        "List of generated files with descriptions",
+        "List of required environment variables / API keys",
+        "List of manual steps needed post-conversion",
+        "Export as JSON, Markdown, or display in UI"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-016",
+      "title": "Implement Credentials Mapping",
+      "description": "As a developer, I want to map n8n credentials to Gattaca's credential system so that authentication works.",
+      "acceptanceCriteria": [
+        "Analyze n8n credential types used in workflow",
+        "Map to Gattaca's existing auth patterns (API keys, OAuth, etc.)",
+        "Generate placeholder environment variables for credentials",
+        "Create setup documentation for each credential type",
+        "Do NOT extract actual credential values (security)",
+        "Generate `.env.example` entries for required credentials"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-017",
+      "title": "Create Integration Tests with Real n8n Workflows",
+      "description": "As a developer, I want integration tests with real n8n workflows so that I can verify the converter works.",
+      "acceptanceCriteria": [
+        "Create `src/lib/n8n-converter/__tests__/` directory",
+        "Add 5+ sample n8n workflow JSON files covering different patterns",
+        "Test 1: Simple HTTP request chain",
+        "Test 2: AI workflow (prompt → LLM → output)",
+        "Test 3: Branching workflow (IF node)",
+        "Test 4: Loop workflow (SplitInBatches)",
+        "Test 5: Complex multi-node workflow",
+        "Each test verifies: parsing, conversion, code generation, type validity",
+        "Generated code compiles without TypeScript errors"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-018",
+      "title": "Create Unsupported Node Fallback System",
+      "description": "As a user, I want unsupported nodes handled gracefully so that partial conversion is still useful.",
+      "acceptanceCriteria": [
+        "Create `src/lib/n8n-converter/converters/fallback.converter.ts`",
+        "Unsupported nodes generate a \"manual step\" placeholder",
+        "Manual step includes: original node config as comment, TODO instructions",
+        "Manual step has clear UI indication \"Requires manual implementation\"",
+        "Conversion continues past unsupported nodes (doesn't fail entirely)",
+        "Final report clearly lists all manual steps needed",
+        "Option to skip unsupported nodes entirely with `--skip-unsupported` flag"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    }
+  ],
+  "metadata": {
+    "createdAt": "2026-01-25T19:08:21.705Z",
+    "version": "1.0.0",
+    "sourcePrd": "prd-n8n-to-gattaca-converter.md"
+  }
+}

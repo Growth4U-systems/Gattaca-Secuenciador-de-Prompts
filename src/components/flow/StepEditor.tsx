@@ -1020,7 +1020,7 @@ export default function StepEditor({
                   Modelo LLM
                 </label>
                 <OpenRouterModelSelector
-                  value={editedStep.model || 'google/gemini-2.5-flash-preview'}
+                  value={editedStep.model || 'google/gemini-3-pro-preview'}
                   onChange={(modelId) =>
                     setEditedStep((prev) => ({ ...prev, model: modelId as LLMModel }))
                   }
@@ -1165,7 +1165,7 @@ export default function StepEditor({
                         <DollarSign size={14} />
                         <span className="text-xs font-medium">
                           Costo estimado: ${(() => {
-                            const model = editedStep.model || 'gemini-2.5-flash'
+                            const model = editedStep.model || 'google/gemini-3-pro-preview'
                             const pricing = MODEL_PRICING[model] || MODEL_PRICING['default']
                             const costPerMillion = pricing.input
                             const estimatedCost = (selectedDocsTokens / 1_000_000) * costPerMillion
@@ -1237,7 +1237,7 @@ export default function StepEditor({
                         <DollarSign size={14} />
                         <span className="text-xs font-medium">
                           Costo estimado: ${(() => {
-                            const model = editedStep.model || 'gemini-2.5-flash'
+                            const model = editedStep.model || 'google/gemini-3-pro-preview'
                             const pricing = MODEL_PRICING[model] || MODEL_PRICING['default']
                             const costPerMillion = pricing.input
                             // RAG typically uses ~5-10K tokens

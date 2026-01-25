@@ -47,7 +47,7 @@ export default function ExecutionCostModal({
     const ragInputTokens = (ragConfig.top_k * 500) + promptTokens + previousStepsTokens // ~500 tokens per chunk
 
     // Get pricing for selected model
-    const model = step.model || 'gemini-2.5-flash'
+    const model = step.model || 'google/gemini-3-pro-preview'
     const pricing = MODEL_PRICING[model] || MODEL_PRICING['default']
 
     // Calculate costs
