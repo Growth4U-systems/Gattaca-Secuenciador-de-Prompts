@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { PlaybookShell, nicheFinderConfig } from '../playbook'
 import { PlaybookState } from '../playbook/types'
 import StartSessionDialog from '../playbook/StartSessionDialog'
+import AllSessionsPanel from '../playbook/AllSessionsPanel'
 
 interface NicheFinderPlaybookV2Props {
   projectId: string
@@ -29,6 +30,7 @@ export default function NicheFinderPlaybookV2({ projectId }: NicheFinderPlaybook
 
   const [sessionId, setSessionId] = useState<string | null>(sessionParam)
   const [showDialog, setShowDialog] = useState(false)
+  const [showAllSessions, setShowAllSessions] = useState(false)
   const [initialState, setInitialState] = useState<Partial<PlaybookState> | undefined>(undefined)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -97,6 +99,37 @@ export default function NicheFinderPlaybookV2({ projectId }: NicheFinderPlaybook
     // Stay on the page but don't show anything
   }
 
+  const handleViewAllSessions = () => {
+    setShowDialog(false)
+    setShowAllSessions(true)
+  }
+
+  const handleAllSessionsClose = () => {
+    setShowAllSessions(false)
+    // Re-show the start dialog if no session is active
+    if (!sessionId) {
+      setShowDialog(true)
+    }
+  }
+
+  const handleAllSessionsStartNew = () => {
+    setShowAllSessions(false)
+    setShowDialog(true)
+  }
+
+  // Show all sessions panel
+  if (showAllSessions) {
+    return (
+      <AllSessionsPanel
+        projectId={projectId}
+        playbookType="niche_finder"
+        onSessionSelect={handleSessionStart}
+        onClose={handleAllSessionsClose}
+        onStartNew={handleAllSessionsStartNew}
+      />
+    )
+  }
+
   // Show dialog if no session
   if (showDialog) {
     return (
@@ -105,6 +138,7 @@ export default function NicheFinderPlaybookV2({ projectId }: NicheFinderPlaybook
         playbookType="niche_finder"
         onSessionStart={handleSessionStart}
         onCancel={handleDialogCancel}
+        onViewAllSessions={handleViewAllSessions}
       />
     )
   }

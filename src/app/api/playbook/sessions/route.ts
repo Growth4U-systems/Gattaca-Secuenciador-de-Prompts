@@ -100,6 +100,11 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const projectId = searchParams.get('project_id')
   const playbookType = searchParams.get('playbook_type')
+  const status = searchParams.get('status')
+  const search = searchParams.get('search')
+  const dateFrom = searchParams.get('date_from')
+  const dateTo = searchParams.get('date_to')
+  const limit = searchParams.get('limit')
 
   if (!projectId) {
     return NextResponse.json({ error: 'project_id is required' }, { status: 400 })
@@ -110,10 +115,36 @@ export async function GET(request: NextRequest) {
       .from('playbook_sessions')
       .select('*')
       .eq('project_id', projectId)
-      .order('created_at', { ascending: false })
+      .order('updated_at', { ascending: false })
 
     if (playbookType) {
       query = query.eq('playbook_type', playbookType)
+    }
+
+    if (status) {
+      query = query.eq('status', status)
+    }
+
+    if (search) {
+      query = query.ilike('name', `%${search}%`)
+    }
+
+    if (dateFrom) {
+      query = query.gte('updated_at', dateFrom)
+    }
+
+    if (dateTo) {
+      // Add one day to include the full end date
+      const endDate = new Date(dateTo)
+      endDate.setDate(endDate.getDate() + 1)
+      query = query.lt('updated_at', endDate.toISOString())
+    }
+
+    if (limit) {
+      const limitNum = parseInt(limit, 10)
+      if (!isNaN(limitNum) && limitNum > 0) {
+        query = query.limit(limitNum)
+      }
     }
 
     const { data: sessions, error } = await query

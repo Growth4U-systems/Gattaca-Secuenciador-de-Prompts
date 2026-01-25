@@ -8,6 +8,7 @@ export { WorkArea } from './WorkArea'
 export { default as ConfigurationMode } from './ConfigurationMode'
 export { default as CampaignWizard } from './CampaignWizard'
 export { default as StartSessionDialog } from './StartSessionDialog'
+export { default as AllSessionsPanel } from './AllSessionsPanel'
 
 // Types
 export type {

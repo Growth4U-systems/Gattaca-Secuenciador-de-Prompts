@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Play, Clock, Tag, History, ChevronRight, Loader2 } from 'lucide-react'
-import { getPlaybookName } from '@/lib/playbook-metadata'
+import { X, Play, Clock, Tag, History, ChevronRight, Loader2, ListFilter } from 'lucide-react'
+import { getPlaybookName, formatStepName } from '@/lib/playbook-metadata'
 
 interface Session {
   id: string
   name: string
   status: string
+  current_step: string | null
   created_at: string
   updated_at: string
   tags: string[] | null
@@ -18,6 +19,7 @@ interface StartSessionDialogProps {
   playbookType: string
   onSessionStart: (sessionId: string) => void
   onCancel: () => void
+  onViewAllSessions?: () => void
 }
 
 /**
@@ -35,6 +37,7 @@ export default function StartSessionDialog({
   playbookType,
   onSessionStart,
   onCancel,
+  onViewAllSessions,
 }: StartSessionDialogProps) {
   const [sessionName, setSessionName] = useState('')
   const [tagsInput, setTagsInput] = useState('')
@@ -54,16 +57,16 @@ export default function StartSessionDialog({
     setSessionName(`${playbookName} - ${dateStr}`)
   }, [playbookType])
 
-  // Load recent sessions
+  // Load recent sessions (last 10)
   useEffect(() => {
     async function loadRecentSessions() {
       try {
         const response = await fetch(
-          `/api/playbook/sessions?project_id=${projectId}&playbook_type=${playbookType}`
+          `/api/playbook/sessions?project_id=${projectId}&playbook_type=${playbookType}&limit=10`
         )
         if (response.ok) {
           const data = await response.json()
-          setRecentSessions(data.sessions?.slice(0, 5) || [])
+          setRecentSessions(data.sessions || [])
         }
       } catch (err) {
         console.error('Error loading recent sessions:', err)
@@ -222,9 +225,21 @@ export default function StartSessionDialog({
           {/* Recent Sessions */}
           {(loadingSessions || recentSessions.length > 0) && (
             <div className="pt-4 border-t border-gray-100">
-              <div className="flex items-center gap-2 mb-3">
-                <History size={14} className="text-gray-400" />
-                <span className="text-sm font-medium text-gray-700">O continúa una sesión anterior</span>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <History size={14} className="text-gray-400" />
+                  <span className="text-sm font-medium text-gray-700">O continúa una sesión anterior</span>
+                </div>
+                {onViewAllSessions && !loadingSessions && recentSessions.length > 0 && (
+                  <button
+                    onClick={onViewAllSessions}
+                    disabled={isCreating}
+                    className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
+                  >
+                    <ListFilter size={12} />
+                    Ver todas
+                  </button>
+                )}
               </div>
 
               {loadingSessions ? (
@@ -232,7 +247,7 @@ export default function StartSessionDialog({
                   <Loader2 size={20} className="animate-spin text-gray-400" />
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-80 overflow-y-auto">
                   {recentSessions.map((session) => (
                     <button
                       key={session.id}
@@ -247,9 +262,14 @@ export default function StartSessionDialog({
                           </span>
                           {getStatusBadge(session.status)}
                         </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Clock size={12} className="text-gray-400" />
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <Clock size={12} className="text-gray-400 flex-shrink-0" />
                           <span className="text-xs text-gray-500">{formatDate(session.updated_at)}</span>
+                          {session.current_step && (
+                            <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                              {formatStepName(session.current_step)}
+                            </span>
+                          )}
                           {session.tags && session.tags.length > 0 && (
                             <span className="text-xs text-gray-400">
                               · {session.tags.slice(0, 2).join(', ')}
@@ -258,7 +278,7 @@ export default function StartSessionDialog({
                           )}
                         </div>
                       </div>
-                      <ChevronRight size={16} className="text-gray-400 flex-shrink-0" />
+                      <ChevronRight size={16} className="text-gray-400 flex-shrink-0 ml-2" />
                     </button>
                   ))}
                 </div>
