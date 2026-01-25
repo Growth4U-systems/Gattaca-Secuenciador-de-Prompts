@@ -14,7 +14,8 @@ import { WorkArea } from './WorkArea'
 import ConfigurationMode from './ConfigurationMode'
 import CampaignWizard from './CampaignWizard'
 import CampaignSettings from './CampaignSettings'
-import { Settings, ChevronDown, Plus, Folder, Pencil, Trash2 } from 'lucide-react'
+import { Settings, ChevronDown, Plus, Folder, Pencil, Trash2, Database } from 'lucide-react'
+import { ArtifactBrowser } from './ArtifactBrowser'
 import { useStepPersistence } from '@/hooks/useStepPersistence'
 import { useStepRetry } from '@/hooks/useStepRetry'
 import { StepAttemptConfig, StepRetryInfo } from './types'
@@ -170,6 +171,8 @@ export default function PlaybookShell({
   const [showCampaignDropdown, setShowCampaignDropdown] = useState(false)
   const [showWizard, setShowWizard] = useState(false)
   const [showCampaignSettings, setShowCampaignSettings] = useState(false)
+  const [showArtifactBrowser, setShowArtifactBrowser] = useState(false)
+  const [projectData, setProjectData] = useState<{ clientId: string; userId: string } | null>(null)
 
   // Load campaigns from database
   const loadCampaigns = useCallback(async () => {
@@ -202,6 +205,25 @@ export default function PlaybookShell({
   useEffect(() => {
     loadCampaigns()
   }, [loadCampaigns])
+
+  // Load project data (for clientId)
+  useEffect(() => {
+    async function loadProjectData() {
+      try {
+        const response = await fetch(`/api/projects/${projectId}`)
+        if (response.ok) {
+          const data = await response.json()
+          setProjectData({
+            clientId: data.client_id || '',
+            userId: 'system', // TODO: Get from auth context
+          })
+        }
+      } catch (error) {
+        console.error('Error loading project data:', error)
+      }
+    }
+    loadProjectData()
+  }, [projectId])
 
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
 
@@ -2621,6 +2643,22 @@ export default function PlaybookShell({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Session Data button */}
+          {selectedCampaignId && mode === 'campaign' && (
+            <button
+              onClick={() => setShowArtifactBrowser(!showArtifactBrowser)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                showArtifactBrowser
+                  ? 'bg-indigo-100 text-indigo-700'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+              title="Browse all session artifacts"
+            >
+              <Database size={16} />
+              Session Data
+            </button>
+          )}
+
           {/* Config Base button */}
           <button
             onClick={() => setMode('config')}
@@ -2815,6 +2853,31 @@ export default function PlaybookShell({
               </>
             )}
           </div>
+
+          {/* Artifact Browser Panel - Right side */}
+          {showArtifactBrowser && selectedCampaignId && (
+            <div className="w-96 flex-shrink-0 border-l border-gray-200">
+              <ArtifactBrowser
+                sessionId={sessionId}
+                projectId={projectId}
+                clientId={projectData?.clientId || ''}
+                userId={projectData?.userId || 'system'}
+                campaignId={selectedCampaignId}
+                campaignName={selectedCampaign?.name || ''}
+                playbookId={playbookConfig.id}
+                playbookName={playbookConfig.name}
+                playbookType={playbookConfig.type}
+                allSteps={playbookConfig.phases.flatMap((phase, phaseIdx) =>
+                  phase.steps.map((stepDef, stepIdx) => ({
+                    definition: stepDef,
+                    state: state.phases[phaseIdx]?.steps[stepIdx] || { id: stepDef.id, status: 'pending' },
+                  }))
+                )}
+                isVisible={showArtifactBrowser}
+                onClose={() => setShowArtifactBrowser(false)}
+              />
+            </div>
+          )}
         </div>
       )}
 
