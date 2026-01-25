@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "sessionId": "a2c55120-b0a5-4f35-89fb-2320b271569e",
+  "status": "running",
+  "startedAt": "2026-01-25T18:38:53.746Z",
+  "updatedAt": "2026-01-25T18:41:58.398Z",
+  "currentIteration": 0,
+  "maxIterations": 15,
+  "tasksCompleted": 0,
+  "isPaused": false,
+  "agentPlugin": "claude",
+  "trackerState": {
+    "plugin": "json",
+    "prdPath": "./tasks/prd-playbook-orchestration-ux.json",
+    "totalTasks": 15,
+    "tasks": [
+      {
+        "id": "US-001",
+        "title": "Create Playbook Session Management Schema",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-002",
+        "title": "Build Session Initialization Flow",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-003",
+        "title": "Build Session Resume and History Panel",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-004",
+        "title": "Create Step-by-Step Wizard Navigation Component",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-005",
+        "title": "Create Step Container Component with Guidance",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-006",
+        "title": "Implement Step Data Auto-Persistence",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-007",
+        "title": "Implement Navigation Warning System",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-008",
+        "title": "Create Universal \"Save to Context Lake\" Button",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-009",
+        "title": "Build Live Execution Progress Component",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-010",
+        "title": "Implement Step Retry Functionality",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-011",
+        "title": "Create Artifact Browser for Session Data",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-012",
+        "title": "Implement Historical Data Reuse",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-013",
+        "title": "Refactor Niche Finder to Use New Playbook Architecture",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-014",
+        "title": "Create Playbook Session API Routes",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-015",
+        "title": "Create Reusable Playbook Shell Component",
+        "status": "open",
+        "completedInSession": false
+      }
+    ]
+  },
+  "iterations": [],
+  "skippedTaskIds": [],
+  "cwd": "/Users/martin/Gattaca-Secuenciador-de-Prompts",
+  "activeTaskIds": [],
+  "subagentPanelVisible": false
+}
