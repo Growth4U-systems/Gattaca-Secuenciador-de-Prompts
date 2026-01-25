@@ -1209,7 +1209,7 @@ serve(async (req) => {
     }
 
     // Check if this is a Deep Research model (uses Google API directly, not OpenRouter)
-    const preferredModelEarly = step_config.model || 'gemini-2.5-flash'
+    const preferredModelEarly = step_config.model || 'google/gemini-3-pro-preview'
     const isDeepResearchModel = preferredModelEarly.startsWith('deep-research')
 
     // Deep Research uses GEMINI_API_KEY directly, doesn't need user_id or OpenRouter
@@ -1497,7 +1497,7 @@ serve(async (req) => {
     const promptWithFormat = finalPrompt + '\n\n' + formatInstructions
 
     // Call LLM (sin fallback automático - el usuario elige reintentar con otro modelo)
-    const preferredModel = step_config.model || 'gemini-2.5-flash'
+    const preferredModel = step_config.model || 'google/gemini-3-pro-preview'
     const temperature = step_config.temperature || 0.7
     const maxTokens = step_config.max_tokens || 8192
 
