@@ -15,6 +15,7 @@ import ConfigurationMode from './ConfigurationMode'
 import CampaignWizard from './CampaignWizard'
 import CampaignSettings from './CampaignSettings'
 import { Settings, ChevronDown, Plus, Folder, Pencil, Trash2 } from 'lucide-react'
+import { useStepPersistence } from '@/hooks/useStepPersistence'
 
 // Mode types for the unified view
 type PlaybookMode = 'config' | 'campaign'
@@ -132,10 +133,18 @@ export default function PlaybookShell({
   projectId,
   playbookConfig,
   initialState,
+  sessionId,
 }: PlaybookShellProps) {
   const [state, setState] = useState<PlaybookState>(() =>
     initializeState(projectId, playbookConfig, initialState)
   )
+
+  // Step persistence hook for auto-saving step data to database
+  const [stepPersistenceState, stepPersistenceActions] = useStepPersistence({
+    sessionId: sessionId || null,
+    autoSaveInterval: 30000, // Auto-save every 30 seconds
+    enabled: !!sessionId, // Only enable if sessionId is provided
+  })
 
   // Flag to distinguish between intentional navigation (Continue button)
   // vs manual navigation (clicking on a step)
@@ -251,6 +260,85 @@ export default function PlaybookShell({
       }, 100)
     }
   }, [selectedCampaignId, campaigns, projectId, playbookConfig])
+
+  // Load step data from database on session resume (if sessionId is provided)
+  useEffect(() => {
+    if (!sessionId) return
+
+    const loadStepData = async () => {
+      try {
+        const savedSteps = await stepPersistenceActions.loadAllSteps()
+        if (Object.keys(savedSteps).length === 0) return
+
+        console.log('[PlaybookShell] Loaded step data from session:', Object.keys(savedSteps))
+
+        // Merge saved step data into current state
+        setState(prev => {
+          const newPhases = prev.phases.map(phase => ({
+            ...phase,
+            steps: phase.steps.map(step => {
+              const savedStep = savedSteps[step.id]
+              if (savedStep) {
+                return {
+                  ...step,
+                  ...savedStep,
+                }
+              }
+              return step
+            }),
+          }))
+
+          // Recalculate phase status
+          newPhases.forEach(phase => {
+            const hasError = phase.steps.some(s => s.status === 'error')
+            const allCompleted = phase.steps.every(s => s.status === 'completed' || s.status === 'skipped')
+            const hasInProgress = phase.steps.some(s => s.status === 'in_progress')
+
+            if (hasError) {
+              phase.status = 'error'
+            } else if (allCompleted) {
+              phase.status = 'completed'
+            } else if (hasInProgress) {
+              phase.status = 'in_progress'
+            } else {
+              phase.status = 'pending'
+            }
+          })
+
+          // Recalculate completed steps
+          const completedSteps = newPhases.reduce(
+            (sum, phase) => sum + phase.steps.filter(s => s.status === 'completed').length,
+            0
+          )
+
+          // Find the first non-completed step to set as current
+          let currentPhaseIndex = 0
+          let currentStepIndex = 0
+          outer: for (let pi = 0; pi < newPhases.length; pi++) {
+            for (let si = 0; si < newPhases[pi].steps.length; si++) {
+              if (newPhases[pi].steps[si].status !== 'completed') {
+                currentPhaseIndex = pi
+                currentStepIndex = si
+                break outer
+              }
+            }
+          }
+
+          return {
+            ...prev,
+            phases: newPhases,
+            completedSteps,
+            currentPhaseIndex,
+            currentStepIndex,
+          }
+        })
+      } catch (error) {
+        console.error('[PlaybookShell] Error loading step data:', error)
+      }
+    }
+
+    loadStepData()
+  }, [sessionId, stepPersistenceActions])
 
   // Delete a campaign
   const deleteCampaign = useCallback(async (campaignId: string) => {
@@ -706,6 +794,22 @@ export default function PlaybookShell({
         ...update,
         output: update.output ? `[output with keys: ${Object.keys(update.output as object).join(', ')}]` : undefined,
       })
+
+      // Persist step changes to database (if sessionId is provided)
+      if (sessionId) {
+        // Handle status-specific persistence
+        if (update.status === 'in_progress') {
+          stepPersistenceActions.markStepRunning(stepId, update.input)
+        } else if (update.status === 'completed') {
+          stepPersistenceActions.markStepCompleted(stepId, update.output)
+        } else if (update.status === 'error') {
+          stepPersistenceActions.markStepFailed(stepId, update.error || 'Unknown error')
+        } else if (update.output !== undefined) {
+          // For output-only updates (during execution), schedule auto-save
+          stepPersistenceActions.scheduleAutoSave(stepId, update.output)
+        }
+      }
+
       setState(prev => {
         // Find the current step to log what we're merging
         const currentStep = prev.phases.flatMap(p => p.steps).find(s => s.id === stepId)
@@ -764,7 +868,7 @@ export default function PlaybookShell({
         }
       })
     },
-    []
+    [sessionId, stepPersistenceActions]
   )
 
   // Execute a step
@@ -2588,6 +2692,7 @@ export default function PlaybookShell({
                     state: state.phases[phaseIdx]?.steps[stepIdx] || { id: stepDef.id, status: 'pending' },
                   }))
                 )}
+                saveState={sessionId ? stepPersistenceState : undefined}
               />
             )}
           </div>

@@ -16,6 +16,7 @@ import {
   StepGuidance,
   StepCompletionCriteria,
 } from './types'
+import SavedIndicator from './SavedIndicator'
 
 export interface PlaybookStepContainerProps {
   /** The step definition containing metadata and guidance */
@@ -54,6 +55,15 @@ export interface PlaybookStepContainerProps {
    * Whether there is user data that would be lost on back navigation
    */
   hasUnsavedData?: boolean
+  /**
+   * Auto-save state for showing saved indicator
+   */
+  saveState?: {
+    isSaving: boolean
+    lastSavedAt: Date | null
+    saveError: string | null
+    isDirty?: boolean
+  }
 }
 
 /**
@@ -275,6 +285,7 @@ export default function PlaybookStepContainer({
   continueLabel,
   footerHelperText,
   hasUnsavedData = false,
+  saveState,
 }: PlaybookStepContainerProps) {
   const [showBackWarning, setShowBackWarning] = useState(false)
 
@@ -337,9 +348,22 @@ export default function PlaybookStepContainer({
             )}
           </div>
 
-          {/* Step counter */}
-          <div className="text-xs text-gray-400 whitespace-nowrap">
-            Step {stepNumber} of {totalSteps}
+          {/* Step counter and save indicator */}
+          <div className="flex items-center gap-3">
+            {/* Save indicator */}
+            {saveState && (
+              <SavedIndicator
+                isSaving={saveState.isSaving}
+                lastSavedAt={saveState.lastSavedAt}
+                saveError={saveState.saveError}
+                isDirty={saveState.isDirty}
+                compact={false}
+              />
+            )}
+            {/* Step counter */}
+            <div className="text-xs text-gray-400 whitespace-nowrap">
+              Step {stepNumber} of {totalSteps}
+            </div>
           </div>
         </div>
       </div>

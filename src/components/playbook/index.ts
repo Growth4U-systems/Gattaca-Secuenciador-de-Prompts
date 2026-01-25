@@ -11,6 +11,8 @@ export { default as StartSessionDialog } from './StartSessionDialog'
 export { default as AllSessionsPanel } from './AllSessionsPanel'
 export { default as PlaybookStepContainer } from './PlaybookStepContainer'
 export type { PlaybookStepContainerProps } from './PlaybookStepContainer'
+export { default as SavedIndicator } from './SavedIndicator'
+export type { SavedIndicatorProps } from './SavedIndicator'
 
 // Types
 export type {

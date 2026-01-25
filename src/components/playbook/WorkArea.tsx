@@ -33,6 +33,7 @@ import KeywordConfigPanel from './KeywordConfigPanel'
 import ApiKeySetupModal from '../settings/ApiKeySetupModal'
 import CSVTableViewer from '../documents/CSVTableViewer'
 import { StepInspectionPanel, StepInfo } from './StepInspectionPanel'
+import SavedIndicator from './SavedIndicator'
 
 // Helper to detect if a string is CSV content (comma or semicolon separated)
 function isCSVContent(content: string | null | undefined): boolean {
@@ -1654,6 +1655,7 @@ export function WorkArea({
   playbookContext,
   projectId,
   allSteps,
+  saveState,
 }: WorkAreaProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [showInspection, setShowInspection] = useState(false)
@@ -2714,8 +2716,18 @@ export function WorkArea({
             </div>
           </div>
 
-          {/* Status indicator and inspection toggle */}
+          {/* Status indicator, save indicator, and inspection toggle */}
           <div className="flex items-center gap-2">
+            {/* Saved indicator */}
+            {saveState && (
+              <SavedIndicator
+                isSaving={saveState.isSaving}
+                lastSavedAt={saveState.lastSavedAt}
+                saveError={saveState.saveError}
+                isDirty={saveState.isDirty}
+                compact={false}
+              />
+            )}
             {stepState.status === 'completed' && (
               <span className="flex items-center gap-1 text-sm text-green-600 bg-green-50 px-2 py-1 rounded-full">
                 <Check size={14} />

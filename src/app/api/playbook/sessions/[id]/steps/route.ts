@@ -10,11 +10,37 @@ interface StepUpdate {
   status?: 'pending' | 'in_progress' | 'completed' | 'error' | 'skipped'
   started_at?: string
   completed_at?: string
-  input?: Record<string, unknown>
-  output?: Record<string, unknown>
+  input?: unknown
+  output?: unknown
   error_message?: string
   job_id?: string
   job_type?: string
+}
+
+// Map API field names to database column names
+// The database uses input_data/output_data, but API accepts input/output for convenience
+function mapToDbFields(fields: Omit<StepUpdate, 'step_id'>): Record<string, unknown> {
+  const dbFields: Record<string, unknown> = {}
+
+  // Map input -> input_data
+  if (fields.input !== undefined) {
+    dbFields.input_data = fields.input
+  }
+
+  // Map output -> output_data
+  if (fields.output !== undefined) {
+    dbFields.output_data = fields.output
+  }
+
+  // Copy other fields directly
+  if (fields.status !== undefined) dbFields.status = fields.status
+  if (fields.started_at !== undefined) dbFields.started_at = fields.started_at
+  if (fields.completed_at !== undefined) dbFields.completed_at = fields.completed_at
+  if (fields.error_message !== undefined) dbFields.error_message = fields.error_message
+  if (fields.job_id !== undefined) dbFields.job_id = fields.job_id
+  if (fields.job_type !== undefined) dbFields.job_type = fields.job_type
+
+  return dbFields
 }
 
 // GET: List steps for a session
@@ -70,6 +96,9 @@ export async function POST(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'step_id is required' }, { status: 400 })
     }
 
+    // Map API fields to database column names
+    const dbFields = mapToDbFields(updateFields)
+
     // Upsert step
     const { data: step, error } = await supabase
       .from('playbook_session_steps')
@@ -77,7 +106,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         {
           session_id: sessionId,
           step_id,
-          ...updateFields,
+          ...dbFields,
         },
         { onConflict: 'session_id,step_id' }
       )

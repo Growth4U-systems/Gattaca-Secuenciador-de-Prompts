@@ -294,4 +294,10 @@ export interface WorkAreaProps {
   projectId?: string            // Project ID for API calls
   playbookContext?: Record<string, unknown>  // Context with all previous step outputs
   allSteps?: Array<{ definition: StepDefinition; state: StepState }>  // All steps info for inspection panel
+  saveState?: {                 // Auto-save state for showing saved indicator
+    isSaving: boolean
+    lastSavedAt: Date | null
+    saveError: string | null
+    isDirty?: boolean
+  }
 }
