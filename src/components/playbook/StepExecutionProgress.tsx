@@ -64,6 +64,16 @@ export interface PartialResults {
   lastItems?: string[]
 }
 
+/**
+ * Retry information for display
+ */
+export interface RetryDisplayInfo {
+  /** Current attempt number (1-based) */
+  attemptNumber: number
+  /** Maximum allowed attempts */
+  maxAttempts: number
+}
+
 export interface StepExecutionProgressProps {
   /** Type of execution for appropriate display */
   executionType: ExecutionType
@@ -85,6 +95,8 @@ export interface StepExecutionProgressProps {
   onResume?: () => void
   /** Callback when retry is clicked after error */
   onRetry?: () => void
+  /** Callback when retry with config modification is requested */
+  onRetryWithConfig?: () => void
   /** Callback when cancel is clicked */
   onCancel?: () => void
   /** Start time for elapsed time calculation - defaults to mount time */
@@ -95,6 +107,8 @@ export interface StepExecutionProgressProps {
   title?: string
   /** Additional class names */
   className?: string
+  /** Retry information for display */
+  retryInfo?: RetryDisplayInfo
 }
 
 /**
@@ -279,11 +293,13 @@ export default function StepExecutionProgress({
   onPause,
   onResume,
   onRetry,
+  onRetryWithConfig,
   onCancel,
   startTime,
   defaultExpanded = false,
   title,
   className = '',
+  retryInfo,
 }: StepExecutionProgressProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(defaultExpanded)
@@ -322,6 +338,11 @@ export default function StepExecutionProgress({
   // Determine display title
   const displayTitle = title || getDefaultTitle(executionType)
 
+  // Calculate retry info for display
+  const canRetry = retryInfo ? retryInfo.attemptNumber < retryInfo.maxAttempts : true
+  const remainingAttempts = retryInfo ? retryInfo.maxAttempts - retryInfo.attemptNumber : undefined
+  const isLastAttempt = remainingAttempts === 1
+
   // Render error state
   if (status === 'error') {
     return (
@@ -332,22 +353,47 @@ export default function StepExecutionProgress({
               <AlertCircle className="w-5 h-5 text-red-600" />
             </div>
             <div className="flex-1">
-              <h4 className="font-medium text-red-900">Execution Failed</h4>
+              <div className="flex items-center gap-2">
+                <h4 className="font-medium text-red-900">Execution Failed</h4>
+                {retryInfo && (
+                  <span className="text-xs bg-red-200 text-red-800 px-2 py-0.5 rounded-full">
+                    Attempt {retryInfo.attemptNumber} of {retryInfo.maxAttempts}
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-red-700 mt-1">
                 {errorMessage || 'An error occurred during execution'}
               </p>
             </div>
           </div>
 
-          {/* Error details and retry button */}
-          <div className="mt-4 flex items-center gap-3">
-            {onRetry && (
+          {/* Retry warning for last attempt */}
+          {isLastAttempt && (
+            <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <p className="text-sm text-orange-800">
+                <strong>Last attempt:</strong> If this retry fails, you can skip this step or contact support.
+              </p>
+            </div>
+          )}
+
+          {/* Error details and retry buttons */}
+          <div className="mt-4 flex items-center gap-3 flex-wrap">
+            {onRetry && canRetry && (
               <button
                 onClick={onRetry}
                 className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
               >
                 <RotateCcw className="w-4 h-4" />
-                Retry
+                Quick Retry
+              </button>
+            )}
+            {onRetryWithConfig && canRetry && (
+              <button
+                onClick={onRetryWithConfig}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors text-sm font-medium"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Retry with Different Settings
               </button>
             )}
             {onCancel && (
@@ -360,6 +406,23 @@ export default function StepExecutionProgress({
               </button>
             )}
           </div>
+
+          {/* Remaining attempts indicator */}
+          {remainingAttempts !== undefined && canRetry && (
+            <div className={`mt-3 flex items-center gap-2 text-sm ${isLastAttempt ? 'text-orange-600' : 'text-gray-600'}`}>
+              <RotateCcw className="w-4 h-4" />
+              <span>{remainingAttempts} {remainingAttempts === 1 ? 'retry' : 'retries'} remaining</span>
+            </div>
+          )}
+
+          {/* Max retries reached */}
+          {!canRetry && (
+            <div className="mt-3 p-3 bg-gray-100 border border-gray-200 rounded-lg">
+              <p className="text-sm text-gray-700">
+                Maximum retry attempts reached. You can skip this step or contact support for help.
+              </p>
+            </div>
+          )}
 
           {/* Elapsed time */}
           {elapsedSeconds > 0 && (
@@ -431,6 +494,11 @@ export default function StepExecutionProgress({
           <div className="flex items-center gap-2">
             <h4 className={`font-medium ${theme.accent}`}>{displayTitle}</h4>
             {getStatusIcon(status)}
+            {retryInfo && retryInfo.attemptNumber > 1 && (
+              <span className={`text-xs px-2 py-0.5 rounded-full ${theme.iconBg} ${theme.iconColor}`}>
+                Attempt {retryInfo.attemptNumber}
+              </span>
+            )}
           </div>
           <p className="text-sm text-gray-600 mt-0.5">{actionText}</p>
         </div>

@@ -214,6 +214,74 @@ export interface StepState {
     extracted?: number // Count of successfully extracted items (for extraction step)
     filtered?: number // Count of filtered/ignored items (for extraction step)
   }
+
+  // Retry tracking for failed steps
+  retryInfo?: StepRetryInfo
+}
+
+/**
+ * Retry information for tracking step execution attempts
+ */
+export interface StepRetryInfo {
+  /** Current attempt number (1-based) */
+  attemptNumber: number
+  /** Maximum allowed attempts before suggesting alternative actions */
+  maxAttempts: number
+  /** History of all attempts for this step */
+  attempts: StepAttempt[]
+}
+
+/**
+ * Individual step execution attempt record
+ */
+export interface StepAttempt {
+  /** Unique identifier for this attempt */
+  attemptId: string
+  /** Attempt number (1-based) */
+  attemptNumber: number
+  /** When this attempt started */
+  startedAt: Date
+  /** When this attempt ended (null if still running) */
+  endedAt?: Date
+  /** Status of this attempt */
+  status: 'running' | 'completed' | 'failed'
+  /** Error message if failed */
+  errorMessage?: string
+  /** Configuration used for this attempt (useful for tracking changes) */
+  configSnapshot?: StepAttemptConfig
+  /** Output data if completed */
+  output?: unknown
+}
+
+/**
+ * Configuration snapshot for a step attempt
+ * Allows users to modify settings before retry
+ */
+export interface StepAttemptConfig {
+  /** Model override (e.g., switch from gpt-4 to gpt-4-turbo) */
+  model?: string
+  /** Temperature override for LLM steps */
+  temperature?: number
+  /** Max tokens override */
+  maxTokens?: number
+  /** Timeout override in milliseconds */
+  timeout?: number
+  /** Custom parameters specific to the step type */
+  customParams?: Record<string, unknown>
+}
+
+/**
+ * Retry configuration for step execution
+ */
+export interface StepRetryConfig {
+  /** Maximum number of retry attempts (default: 3) */
+  maxAttempts?: number
+  /** Whether to allow config modification before retry (default: true) */
+  allowConfigModification?: boolean
+  /** Available models for retry (if different from default) */
+  availableModels?: string[]
+  /** Default retry delay in milliseconds (default: 0 - immediate) */
+  retryDelay?: number
 }
 
 export interface PhaseState {
@@ -287,7 +355,9 @@ export interface WorkAreaProps {
   onEdit?: () => void           // Volver a editar un paso completado
   onCancel?: () => void         // Cancelar ejecución en curso
   onRerunPrevious?: () => void  // Re-ejecutar el paso anterior (para decisiones de regenerar)
-  onRetry?: () => void          // Retry the current step after an error
+  onRetry?: () => void          // Quick retry the current step after an error
+  onRetryWithConfig?: () => void // Open retry dialog with config modification
+  onSkipStep?: () => void       // Skip the current step after max retries
   isFirst: boolean
   isLast: boolean
   previousStepOutput?: unknown  // Output from the previous step
@@ -300,4 +370,7 @@ export interface WorkAreaProps {
     saveError: string | null
     isDirty?: boolean
   }
+  retryInfo?: StepRetryInfo     // Retry tracking information for the step
+  maxRetriesReached?: boolean   // Whether max retries have been reached
+  sessionId?: string            // Session ID for support reference
 }

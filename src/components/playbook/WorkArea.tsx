@@ -34,6 +34,8 @@ import ApiKeySetupModal from '../settings/ApiKeySetupModal'
 import CSVTableViewer from '../documents/CSVTableViewer'
 import { StepInspectionPanel, StepInfo } from './StepInspectionPanel'
 import SavedIndicator from './SavedIndicator'
+import FailedStepActions from './FailedStepActions'
+import { RotateCcw } from 'lucide-react'
 
 // Helper to detect if a string is CSV content (comma or semicolon separated)
 function isCSVContent(content: string | null | undefined): boolean {
@@ -1649,6 +1651,8 @@ export function WorkArea({
   onCancel,
   onRerunPrevious,
   onRetry,
+  onRetryWithConfig,
+  onSkipStep,
   isFirst,
   isLast,
   previousStepOutput,
@@ -1656,6 +1660,9 @@ export function WorkArea({
   projectId,
   allSteps,
   saveState,
+  retryInfo,
+  maxRetriesReached,
+  sessionId,
 }: WorkAreaProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [showInspection, setShowInspection] = useState(false)
@@ -1730,13 +1737,48 @@ export function WorkArea({
       const isApiKeyError = stepState.error?.toLowerCase().includes('api key') ||
                            stepState.error?.toLowerCase().includes('no configurada')
 
+      // Check if max retries reached - show comprehensive FailedStepActions
+      if (maxRetriesReached && retryInfo) {
+        return (
+          <FailedStepActions
+            stepName={step.name}
+            errorMessage={stepState.error || 'Ha ocurrido un error'}
+            retryInfo={retryInfo}
+            sessionId={sessionId}
+            stepId={step.id}
+            onSkip={onSkipStep}
+            disabled={false}
+          />
+        )
+      }
+
+      // Standard error state with retry options
       return (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
-          <div className="flex items-center gap-2 text-red-800">
-            <AlertCircle size={20} />
-            <span className="font-medium">Error</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-red-800">
+              <AlertCircle size={20} />
+              <span className="font-medium">Error</span>
+            </div>
+            {retryInfo && (
+              <span className="text-xs bg-red-200 text-red-800 px-2 py-0.5 rounded-full">
+                Attempt {retryInfo.attemptNumber} of {retryInfo.maxAttempts}
+              </span>
+            )}
           </div>
           <p className="text-sm text-red-700">{stepState.error || 'Ha ocurrido un error'}</p>
+
+          {/* Retry attempts remaining indicator */}
+          {retryInfo && retryInfo.attemptNumber < retryInfo.maxAttempts && (
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <RotateCcw size={14} />
+              <span>
+                {retryInfo.maxAttempts - retryInfo.attemptNumber}{' '}
+                {retryInfo.maxAttempts - retryInfo.attemptNumber === 1 ? 'retry' : 'retries'} remaining
+              </span>
+            </div>
+          )}
+
           <div className="flex gap-2 flex-wrap">
             {onBack && (
               <button
@@ -1759,14 +1801,26 @@ export function WorkArea({
                 Configurar API Key
               </button>
             )}
-            <button
-              onClick={() => {
-                onUpdateState({ status: 'pending', error: undefined })
-              }}
-              className="px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700"
-            >
-              Reintentar
-            </button>
+            {/* Quick retry button */}
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700 flex items-center gap-1"
+              >
+                <RotateCcw size={14} />
+                Quick Retry
+              </button>
+            )}
+            {/* Retry with config button */}
+            {onRetryWithConfig && (
+              <button
+                onClick={onRetryWithConfig}
+                className="px-3 py-1.5 border border-red-300 text-red-700 rounded text-sm hover:bg-red-100 flex items-center gap-1"
+              >
+                <RotateCcw size={14} />
+                Retry with Settings
+              </button>
+            )}
           </div>
         </div>
       )

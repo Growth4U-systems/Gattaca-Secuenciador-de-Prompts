@@ -16,6 +16,10 @@ import CampaignWizard from './CampaignWizard'
 import CampaignSettings from './CampaignSettings'
 import { Settings, ChevronDown, Plus, Folder, Pencil, Trash2 } from 'lucide-react'
 import { useStepPersistence } from '@/hooks/useStepPersistence'
+import { useStepRetry } from '@/hooks/useStepRetry'
+import { StepAttemptConfig, StepRetryInfo } from './types'
+import StepRetryDialog from './StepRetryDialog'
+import FailedStepActions from './FailedStepActions'
 
 // Mode types for the unified view
 type PlaybookMode = 'config' | 'campaign'
@@ -145,6 +149,15 @@ export default function PlaybookShell({
     autoSaveInterval: 30000, // Auto-save every 30 seconds
     enabled: !!sessionId, // Only enable if sessionId is provided
   })
+
+  // Step retry hook for managing retry attempts
+  const [stepRetryState, stepRetryActions] = useStepRetry(sessionId || null, {
+    enabled: !!sessionId,
+  })
+
+  // State for retry dialog
+  const [retryDialogOpen, setRetryDialogOpen] = useState(false)
+  const [retryDialogStepId, setRetryDialogStepId] = useState<string | null>(null)
 
   // Flag to distinguish between intentional navigation (Continue button)
   // vs manual navigation (clicking on a step)
@@ -2328,6 +2341,91 @@ export default function PlaybookShell({
     })
   }, [currentStep?.id, updateStepState])
 
+  // Handle quick retry - retry with same configuration
+  const handleQuickRetry = useCallback(async () => {
+    if (!currentStep || !currentStepState) return
+
+    console.log('[Retry] Quick retry for step:', currentStep.id)
+
+    // Start a new retry attempt
+    try {
+      await stepRetryActions.startRetry(currentStep.id)
+    } catch (error) {
+      console.error('[Retry] Failed to start retry:', error)
+    }
+
+    // Reset step state and re-execute
+    updateStepState(currentStep.id, {
+      status: 'pending',
+      error: undefined,
+      progress: undefined,
+    })
+
+    // Re-execute with the same input
+    executeStep(currentStep.id, currentStepState.input)
+  }, [currentStep, currentStepState, stepRetryActions, updateStepState, executeStep])
+
+  // Handle retry with config modification - opens dialog
+  const handleRetryWithConfig = useCallback(() => {
+    if (!currentStep) return
+    setRetryDialogStepId(currentStep.id)
+    setRetryDialogOpen(true)
+  }, [currentStep])
+
+  // Handle retry from dialog with config overrides
+  const handleRetryFromDialog = useCallback(async (configOverrides?: StepAttemptConfig) => {
+    if (!retryDialogStepId || !currentStepState) return
+
+    console.log('[Retry] Retry from dialog for step:', retryDialogStepId, 'with config:', configOverrides)
+
+    // Start a new retry attempt with config
+    try {
+      await stepRetryActions.startRetry(retryDialogStepId, configOverrides)
+    } catch (error) {
+      console.error('[Retry] Failed to start retry:', error)
+    }
+
+    // Close dialog
+    setRetryDialogOpen(false)
+    setRetryDialogStepId(null)
+
+    // Reset step state
+    updateStepState(retryDialogStepId, {
+      status: 'pending',
+      error: undefined,
+      progress: undefined,
+    })
+
+    // Re-execute with the same input (config overrides are tracked in the attempt)
+    executeStep(retryDialogStepId, currentStepState.input)
+  }, [retryDialogStepId, currentStepState, stepRetryActions, updateStepState, executeStep])
+
+  // Handle skip step - mark as skipped and continue
+  const handleSkipStep = useCallback(() => {
+    if (!currentStep) return
+
+    console.log('[Skip] Skipping step:', currentStep.id)
+
+    updateStepState(currentStep.id, {
+      status: 'skipped',
+      completedAt: new Date(),
+      error: undefined,
+    })
+
+    // Move to next step
+    handleContinue()
+  }, [currentStep, updateStepState, handleContinue])
+
+  // Get retry info for current step
+  const currentStepRetryInfo = currentStep
+    ? stepRetryActions.getRetryInfo(currentStep.id)
+    : null
+
+  // Check if max retries reached
+  const maxRetriesReached = currentStepRetryInfo
+    ? currentStepRetryInfo.attemptNumber >= currentStepRetryInfo.maxAttempts
+    : false
+
   // Auto-start current step if it's an auto step, pending, AND user clicked Continue
   useEffect(() => {
     console.log('[AutoExecute] Check:', {
@@ -2668,32 +2766,53 @@ export default function PlaybookShell({
                 </button>
               </div>
             ) : (
-              <WorkArea
-                step={currentStep}
-                stepState={currentStepState}
-                onContinue={handleContinue}
-                onBack={goToPreviousStep}
-                onExecute={(input) => executeStep(currentStep.id, input)}
-                onUpdateState={(update) => updateStepState(currentStep.id, update)}
-                onEdit={handleEdit}
-                onCancel={handleCancel}
-                onRerunPrevious={rerunPreviousStep}
-                onRetry={() => {
-                  updateStepState(currentStep.id, { status: 'pending', error: undefined })
-                }}
-                isFirst={isFirstStep}
-                isLast={isLastStep}
-                previousStepOutput={getPreviousStepOutput()}
-                projectId={projectId}
-                playbookContext={buildPlaybookContext()}
-                allSteps={playbookConfig.phases.flatMap((phase, phaseIdx) =>
-                  phase.steps.map((stepDef, stepIdx) => ({
-                    definition: stepDef,
-                    state: state.phases[phaseIdx]?.steps[stepIdx] || { id: stepDef.id, status: 'pending' },
-                  }))
+              <>
+                <WorkArea
+                  step={currentStep}
+                  stepState={currentStepState}
+                  onContinue={handleContinue}
+                  onBack={goToPreviousStep}
+                  onExecute={(input) => executeStep(currentStep.id, input)}
+                  onUpdateState={(update) => updateStepState(currentStep.id, update)}
+                  onEdit={handleEdit}
+                  onCancel={handleCancel}
+                  onRerunPrevious={rerunPreviousStep}
+                  onRetry={handleQuickRetry}
+                  onRetryWithConfig={handleRetryWithConfig}
+                  onSkipStep={handleSkipStep}
+                  isFirst={isFirstStep}
+                  isLast={isLastStep}
+                  previousStepOutput={getPreviousStepOutput()}
+                  projectId={projectId}
+                  playbookContext={buildPlaybookContext()}
+                  allSteps={playbookConfig.phases.flatMap((phase, phaseIdx) =>
+                    phase.steps.map((stepDef, stepIdx) => ({
+                      definition: stepDef,
+                      state: state.phases[phaseIdx]?.steps[stepIdx] || { id: stepDef.id, status: 'pending' },
+                    }))
+                  )}
+                  saveState={sessionId ? stepPersistenceState : undefined}
+                  retryInfo={currentStepRetryInfo || undefined}
+                  maxRetriesReached={maxRetriesReached}
+                  sessionId={sessionId}
+                />
+
+                {/* Retry Dialog */}
+                {retryDialogOpen && retryDialogStepId && currentStepRetryInfo && (
+                  <StepRetryDialog
+                    isOpen={retryDialogOpen}
+                    stepName={currentStep.name}
+                    errorMessage={currentStepState.error || 'Unknown error'}
+                    retryInfo={currentStepRetryInfo}
+                    onRetry={handleRetryFromDialog}
+                    onClose={() => {
+                      setRetryDialogOpen(false)
+                      setRetryDialogStepId(null)
+                    }}
+                    isRetrying={stepRetryState.isRetrying}
+                  />
                 )}
-                saveState={sessionId ? stepPersistenceState : undefined}
-              />
+              </>
             )}
           </div>
         </div>
