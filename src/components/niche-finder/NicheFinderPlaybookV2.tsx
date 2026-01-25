@@ -173,6 +173,7 @@ export default function NicheFinderPlaybookV2({ projectId }: NicheFinderPlaybook
       playbookConfig={nicheFinderConfig}
       initialState={initialState}
       sessionId={sessionId}
+      useWizardNav={true}
     />
   )
 }

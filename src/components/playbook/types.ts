@@ -335,6 +335,11 @@ export interface PlaybookShellProps {
   playbookConfig: PlaybookConfig
   initialState?: Partial<PlaybookState>
   sessionId?: string
+  /**
+   * If true, use horizontal wizard-style navigation instead of vertical navigation panel
+   * Default: false (uses NavigationPanel)
+   */
+  useWizardNav?: boolean
 }
 
 export interface NavigationPanelProps {

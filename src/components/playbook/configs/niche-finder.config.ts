@@ -1,4 +1,4 @@
-import { PlaybookConfig } from '../types'
+import { PlaybookConfig, StepGuidance } from '../types'
 
 /**
  * Niche Finder Playbook Configuration
@@ -16,7 +16,123 @@ import { PlaybookConfig } from '../types'
  *    - Deep Research MANUAL - Usuario hace research con ChatGPT/Perplexity
  *    - Step 4: Consolidate - Combina tabla con scores
  * 5. RESULTADOS: Selección, dashboard, exportación
+ *
+ * Architecture Notes (US-013):
+ * - Uses session-based persistence via useStepPersistence hook
+ * - Integrates PlaybookWizardNav for horizontal step navigation
+ * - Each step uses PlaybookStepContainer with guidance configuration
+ * - Context Lake integration available at each step
+ * - Historical data from niche_finder_jobs remains accessible
  */
+
+/**
+ * Step Guidance Configurations
+ * These provide clear instructions to users at each step
+ */
+const STEP_GUIDANCE: Record<string, StepGuidance> = {
+  keyword_config: {
+    description: 'Configure los parámetros de búsqueda: contextos de vida, palabras de necesidad, indicadores de urgencia y fuentes de datos.',
+    userActions: [
+      'Seleccione al menos un contexto de vida (B2C/B2B)',
+      'Agregue palabras de necesidad relacionadas con su producto',
+      'Configure indicadores de urgencia opcionales',
+      'Seleccione las fuentes de datos (Reddit, foros)',
+    ],
+    completionCriteria: {
+      description: 'Seleccione al menos un contexto y una palabra de necesidad',
+      type: 'custom',
+      customValidator: 'hasKeywordConfig',
+    },
+  },
+  search_scrape_extract: {
+    description: 'Este paso automatizado busca conversaciones relevantes, descarga su contenido y extrae problemas usando IA.',
+    userActions: [
+      'Revise la configuración de búsqueda y el costo estimado',
+      'Inicie la búsqueda cuando esté listo',
+      'Seleccione las fuentes a analizar después del SERP',
+      'Configure el prompt de extracción si desea personalizarlo',
+    ],
+    completionCriteria: {
+      description: 'La extracción debe completarse con resultados',
+      type: 'auto_complete',
+    },
+  },
+  clean_filter: {
+    description: 'La IA consolida duplicados, valida problemas y genera una tabla de 30-50 nichos únicos.',
+    userActions: [
+      'Revise los resultados de la extracción anterior',
+      'Ejecute el análisis de limpieza y filtrado',
+      'Revise la tabla consolidada de nichos',
+    ],
+    completionCriteria: {
+      description: 'El análisis debe completarse exitosamente',
+      type: 'auto_complete',
+    },
+  },
+  deep_research_manual: {
+    description: 'Realice investigación profunda de cada nicho usando ChatGPT o Perplexity y pegue los resultados.',
+    userActions: [
+      'Copie el prompt de investigación proporcionado',
+      'Ejecute el prompt en ChatGPT o Perplexity',
+      'Pegue los resultados de su investigación',
+      'Repita para cada nicho importante',
+    ],
+    completionCriteria: {
+      description: 'Pegue los resultados de su deep research',
+      type: 'input_required',
+      minCount: 50,
+    },
+  },
+  consolidate: {
+    description: 'La IA combina la tabla filtrada con su Deep Research para generar scores de oportunidad.',
+    userActions: [
+      'Revise que el deep research esté completo',
+      'Ejecute la consolidación final',
+      'Revise los scores y métricas de cada nicho',
+    ],
+    completionCriteria: {
+      description: 'La consolidación debe completarse exitosamente',
+      type: 'auto_complete',
+    },
+  },
+  select_niches: {
+    description: 'Seleccione los nichos que desea explorar en detalle.',
+    userActions: [
+      'Revise los scores de oportunidad de cada nicho',
+      'Seleccione al menos un nicho para explorar',
+      'Puede seleccionar múltiples nichos',
+    ],
+    completionCriteria: {
+      description: 'Seleccione al menos un nicho',
+      type: 'selection_required',
+      minCount: 1,
+    },
+  },
+  dashboard: {
+    description: 'Visualice los resultados de su análisis en el dashboard interactivo.',
+    userActions: [
+      'Explore los nichos seleccionados',
+      'Analice las métricas y evidencias',
+      'Identifique oportunidades de mercado',
+    ],
+    completionCriteria: {
+      description: 'Continue cuando haya revisado el dashboard',
+      type: 'manual',
+    },
+  },
+  export: {
+    description: 'Descargue los resultados en el formato que prefiera.',
+    userActions: [
+      'Seleccione el formato de exportación (CSV, JSON, PDF)',
+      'Descargue los resultados',
+      'Guarde en Context Lake si desea',
+    ],
+    completionCriteria: {
+      description: 'Exporte o guarde sus resultados',
+      type: 'manual',
+    },
+  },
+}
 
 /**
  * Predefined life contexts for B2C (personal situations)
@@ -108,9 +224,10 @@ export const nicheFinderConfig: PlaybookConfig = {
           id: 'keyword_config',
           name: 'Configurar Búsqueda',
           description: 'Configura contextos, palabras de necesidad, indicadores y fuentes de datos en un solo lugar.',
-          type: 'unified_keyword_config', // New unified config step
-          executor: 'llm', // For generating suggestions
-          promptKey: 'suggest_need_words', // For generating need words
+          type: 'unified_keyword_config',
+          executor: 'llm',
+          promptKey: 'suggest_need_words',
+          guidance: STEP_GUIDANCE.keyword_config,
         },
       ],
     },
@@ -128,10 +245,11 @@ export const nicheFinderConfig: PlaybookConfig = {
           id: 'search_scrape_extract',
           name: 'Buscar y Analizar',
           description: 'Busca conversaciones, descarga su contenido y extrae problemas automáticamente',
-          type: 'unified_search_extract', // All-in-one: SERP → show URLs → scrape → extract
+          type: 'unified_search_extract',
           executor: 'job',
           jobType: 'niche_finder_unified',
           dependsOn: ['keyword_config'],
+          guidance: STEP_GUIDANCE.search_scrape_extract,
           executionExplanation: {
             title: 'Búsqueda y Extracción Unificada',
             steps: [
@@ -163,6 +281,7 @@ export const nicheFinderConfig: PlaybookConfig = {
           executor: 'llm',
           promptKey: 'step_2_clean_filter',
           dependsOn: ['search_scrape_extract'],
+          guidance: STEP_GUIDANCE.clean_filter,
           executionExplanation: {
             title: 'Limpieza y Filtrado',
             steps: [
@@ -179,10 +298,11 @@ export const nicheFinderConfig: PlaybookConfig = {
           id: 'deep_research_manual',
           name: 'Deep Research (Manual)',
           description: 'Haz Deep Research de cada nicho con ChatGPT/Perplexity y pega los resultados',
-          type: 'manual_research', // Nuevo tipo de paso
+          type: 'manual_research',
           executor: 'none',
-          promptKey: 'step_3_scoring', // El prompt que el usuario debe copiar
+          promptKey: 'step_3_scoring',
           dependsOn: ['clean_filter'],
+          guidance: STEP_GUIDANCE.deep_research_manual,
         },
         {
           id: 'consolidate',
@@ -192,6 +312,7 @@ export const nicheFinderConfig: PlaybookConfig = {
           executor: 'llm',
           promptKey: 'step_4_consolidate',
           dependsOn: ['deep_research_manual'],
+          guidance: STEP_GUIDANCE.consolidate,
           executionExplanation: {
             title: 'Consolidación Final',
             steps: [
@@ -222,6 +343,7 @@ export const nicheFinderConfig: PlaybookConfig = {
           type: 'decision',
           executor: 'none',
           dependsOn: ['consolidate'],
+          guidance: STEP_GUIDANCE.select_niches,
           decisionConfig: {
             question: '¿Qué nichos quieres seleccionar para explorar?',
             optionsFrom: 'previous_step',
@@ -236,6 +358,7 @@ export const nicheFinderConfig: PlaybookConfig = {
           type: 'display',
           executor: 'none',
           dependsOn: ['select_niches'],
+          guidance: STEP_GUIDANCE.dashboard,
         },
         {
           id: 'export',
@@ -244,6 +367,7 @@ export const nicheFinderConfig: PlaybookConfig = {
           type: 'action',
           executor: 'none',
           dependsOn: ['dashboard'],
+          guidance: STEP_GUIDANCE.export,
           actionConfig: {
             label: 'Exportar Resultados',
             actionType: 'export',

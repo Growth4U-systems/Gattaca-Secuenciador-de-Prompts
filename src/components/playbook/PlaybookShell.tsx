@@ -10,6 +10,7 @@ import {
   PhaseDefinition,
 } from './types'
 import NavigationPanel from './NavigationPanel'
+import PlaybookWizardNav from './PlaybookWizardNav'
 import { WorkArea } from './WorkArea'
 import ConfigurationMode from './ConfigurationMode'
 import CampaignWizard from './CampaignWizard'
@@ -139,6 +140,7 @@ export default function PlaybookShell({
   playbookConfig,
   initialState,
   sessionId,
+  useWizardNav = false,
 }: PlaybookShellProps) {
   const [state, setState] = useState<PlaybookState>(() =>
     initializeState(projectId, playbookConfig, initialState)
@@ -2770,21 +2772,35 @@ export default function PlaybookShell({
           />
         </div>
       ) : (
-        /* Campaign Mode - Dual panel */
-        <div className="flex flex-1 overflow-hidden">
-          {/* Navigation Panel - Left side */}
-          <div className="w-80 flex-shrink-0">
-            <NavigationPanel
+        /* Campaign Mode - Dual panel or Wizard layout */
+        <div className="flex flex-col flex-1 overflow-hidden">
+          {/* Wizard Navigation - Top (when useWizardNav is true) */}
+          {useWizardNav && (
+            <PlaybookWizardNav
               phases={playbookConfig.phases}
               phaseStates={state.phases}
               currentPhaseIndex={state.currentPhaseIndex}
               currentStepIndex={state.currentStepIndex}
               onStepClick={goToStep}
             />
-          </div>
+          )}
 
-          {/* Work Area - Right side */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex flex-1 overflow-hidden">
+            {/* Navigation Panel - Left side (when useWizardNav is false) */}
+            {!useWizardNav && (
+              <div className="w-80 flex-shrink-0">
+                <NavigationPanel
+                  phases={playbookConfig.phases}
+                  phaseStates={state.phases}
+                  currentPhaseIndex={state.currentPhaseIndex}
+                  currentStepIndex={state.currentStepIndex}
+                  onStepClick={goToStep}
+                />
+              </div>
+            )}
+
+            {/* Work Area - Right side or Full width */}
+            <div className="flex-1 overflow-y-auto">
             {!selectedCampaignId ? (
               /* No campaign selected - prompt to select or create */
               <div className="flex flex-col items-center justify-center h-full bg-white p-8 text-center">
@@ -2854,30 +2870,31 @@ export default function PlaybookShell({
             )}
           </div>
 
-          {/* Artifact Browser Panel - Right side */}
-          {showArtifactBrowser && selectedCampaignId && (
-            <div className="w-96 flex-shrink-0 border-l border-gray-200">
-              <ArtifactBrowser
-                sessionId={sessionId}
-                projectId={projectId}
-                clientId={projectData?.clientId || ''}
-                userId={projectData?.userId || 'system'}
-                campaignId={selectedCampaignId}
-                campaignName={selectedCampaign?.name || ''}
-                playbookId={playbookConfig.id}
-                playbookName={playbookConfig.name}
-                playbookType={playbookConfig.type}
-                allSteps={playbookConfig.phases.flatMap((phase, phaseIdx) =>
-                  phase.steps.map((stepDef, stepIdx) => ({
-                    definition: stepDef,
-                    state: state.phases[phaseIdx]?.steps[stepIdx] || { id: stepDef.id, status: 'pending' },
-                  }))
-                )}
-                isVisible={showArtifactBrowser}
-                onClose={() => setShowArtifactBrowser(false)}
-              />
-            </div>
-          )}
+            {/* Artifact Browser Panel - Right side */}
+            {showArtifactBrowser && selectedCampaignId && (
+              <div className="w-96 flex-shrink-0 border-l border-gray-200">
+                <ArtifactBrowser
+                  sessionId={sessionId}
+                  projectId={projectId}
+                  clientId={projectData?.clientId || ''}
+                  userId={projectData?.userId || 'system'}
+                  campaignId={selectedCampaignId}
+                  campaignName={selectedCampaign?.name || ''}
+                  playbookId={playbookConfig.id}
+                  playbookName={playbookConfig.name}
+                  playbookType={playbookConfig.type}
+                  allSteps={playbookConfig.phases.flatMap((phase, phaseIdx) =>
+                    phase.steps.map((stepDef, stepIdx) => ({
+                      definition: stepDef,
+                      state: state.phases[phaseIdx]?.steps[stepIdx] || { id: stepDef.id, status: 'pending' },
+                    }))
+                  )}
+                  isVisible={showArtifactBrowser}
+                  onClose={() => setShowArtifactBrowser(false)}
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
 

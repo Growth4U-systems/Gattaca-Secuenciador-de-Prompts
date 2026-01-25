@@ -23,6 +23,7 @@ import {
   Save,
   FolderOpen,
 } from 'lucide-react'
+import StepExecutionProgress, { ExecutionType, ExecutionStatus, PartialResults } from './StepExecutionProgress'
 import { generateSearchQueries } from '@/lib/scraper/query-builder'
 import { EXTRACTION_PROMPT } from '@/lib/templates/niche-finder-playbook'
 import { ScrapedContentViewer } from '@/components/niche-finder/ScrapedContentViewer'
@@ -797,36 +798,18 @@ export function UnifiedSearchExtractPanel({
     if (phase === 'serp_executing') {
       return (
         <div className="space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <Loader2 className="animate-spin text-blue-600" size={24} />
-              <div>
-                <p className="font-medium text-blue-900">Buscando conversaciones...</p>
-                {serpProgress && (
-                  <p className="text-sm text-blue-700">
-                    {serpProgress.current} / {serpProgress.total} búsquedas
-                    {serpProgress.label && ` - ${serpProgress.label}`}
-                  </p>
-                )}
-              </div>
-            </div>
-            {serpProgress && (
-              <div className="mt-3 bg-blue-100 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-blue-600 h-full transition-all duration-300"
-                  style={{ width: `${(serpProgress.current / serpProgress.total) * 100}%` }}
-                />
-              </div>
-            )}
-          </div>
-          {onCancel && (
-            <button
-              onClick={onCancel}
-              className="px-4 py-2 text-gray-600 hover:text-red-600 text-sm"
-            >
-              Cancelar
-            </button>
-          )}
+          <StepExecutionProgress
+            executionType="search"
+            status="running"
+            title="Buscando conversaciones..."
+            actionText={serpProgress?.label || 'Iniciando búsqueda SERP...'}
+            progress={serpProgress ? {
+              current: serpProgress.current,
+              total: serpProgress.total,
+              label: 'búsquedas',
+            } : undefined}
+            onCancel={onCancel}
+          />
         </div>
       )
     }
@@ -1023,45 +1006,28 @@ export function UnifiedSearchExtractPanel({
 
     // Phase: Scraping (downloading content)
     if (phase === 'scraping') {
+      const scrapingPartialResults: PartialResults | undefined = scrapingProgress ? {
+        successCount: scrapingProgress.completed - scrapingProgress.failed,
+        failedCount: scrapingProgress.failed,
+      } : undefined
+
       return (
         <div className="space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <Loader2 className="animate-spin text-blue-600" size={24} />
-              <div className="flex-1">
-                <p className="font-medium text-blue-900">Descargando contenido...</p>
-                {scrapingProgress && (
-                  <>
-                    <p className="text-sm text-blue-700">
-                      {scrapingProgress.completed} / {scrapingProgress.total} URLs procesadas
-                    </p>
-                    {scrapingProgress.failed > 0 && (
-                      <p className="text-xs text-amber-600 mt-1">
-                        {scrapingProgress.failed} URLs fallidas
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-            {scrapingProgress && scrapingProgress.total > 0 && (
-              <div className="mt-3 bg-blue-100 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-blue-600 h-full transition-all duration-300"
-                  style={{ width: `${(scrapingProgress.completed / scrapingProgress.total) * 100}%` }}
-                />
-              </div>
-            )}
-          </div>
-
-          {onCancel && (
-            <button
-              onClick={onCancel}
-              className="px-4 py-2 text-gray-600 hover:text-red-600 text-sm"
-            >
-              Cancelar
-            </button>
-          )}
+          <StepExecutionProgress
+            executionType="scrape"
+            status="running"
+            title="Descargando contenido..."
+            actionText={scrapingProgress
+              ? `Procesando URL ${scrapingProgress.completed} de ${scrapingProgress.total}`
+              : 'Iniciando scraping...'}
+            progress={scrapingProgress ? {
+              current: scrapingProgress.completed,
+              total: scrapingProgress.total,
+              label: 'URLs',
+            } : undefined}
+            partialResults={scrapingPartialResults}
+            onCancel={onCancel}
+          />
         </div>
       )
     }
@@ -1218,39 +1184,31 @@ export function UnifiedSearchExtractPanel({
 
     // Phase: Extracting (LLM analysis)
     if (phase === 'extracting') {
+      const extractionPartialResults: PartialResults | undefined = extractionStats ? {
+        itemsFound: extractionStats.niches_extracted,
+        successCount: extractionStats.extract_completed,
+        failedCount: extractionStats.urls_filtered,
+        lastItems: extractedNiches.slice(-3).map(n => n.problem),
+      } : undefined
+
       return (
         <div className="space-y-4">
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <Loader2 className="animate-spin text-purple-600" size={24} />
-              <div className="flex-1">
-                <p className="font-medium text-purple-900">Extrayendo problemas con IA...</p>
-                {extractionStats && (
-                  <>
-                    <p className="text-sm text-purple-700">
-                      {extractionStats.extract_completed} / {extractionStats.extract_total || extractionStats.urls_scraped} URLs analizadas
-                    </p>
-                    <div className="flex gap-4 mt-1 text-xs text-purple-600">
-                      {extractionStats.niches_extracted > 0 && (
-                        <span>Problemas encontrados: {extractionStats.niches_extracted}</span>
-                      )}
-                      {extractionStats.urls_filtered > 0 && (
-                        <span>Filtradas: {extractionStats.urls_filtered}</span>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-            {extractionStats && extractionStats.extract_total > 0 && (
-              <div className="mt-3 bg-purple-100 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-purple-600 h-full transition-all duration-300"
-                  style={{ width: `${(extractionStats.extract_completed / extractionStats.extract_total) * 100}%` }}
-                />
-              </div>
-            )}
-          </div>
+          <StepExecutionProgress
+            executionType="extract"
+            status="running"
+            title="Extrayendo problemas con IA..."
+            actionText={extractionStats
+              ? `Analizando URL ${extractionStats.extract_completed} de ${extractionStats.extract_total || extractionStats.urls_scraped}`
+              : 'Iniciando extracción...'}
+            progress={extractionStats ? {
+              current: extractionStats.extract_completed,
+              total: extractionStats.extract_total || extractionStats.urls_scraped,
+              label: 'URLs analizadas',
+            } : undefined}
+            partialResults={extractionPartialResults}
+            onCancel={onCancel}
+            defaultExpanded={extractedNiches.length > 0}
+          />
 
           {/* Live extraction results table */}
           {extractedNiches.length > 0 && (
