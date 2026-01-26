@@ -17,9 +17,10 @@ import {
   Square,
   Eye,
   EyeOff,
+  Info,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { WorkAreaProps, StepDefinition, StepState } from './types'
+import { WorkAreaProps, StepDefinition, StepState, PlaybookConfig, StepGuidance } from './types'
 import DeepResearchManualStep from './steps/DeepResearchManualStep'
 import { getDefaultPrompt } from './utils/getDefaultPrompts'
 import { B2C_CONTEXTS, B2B_CONTEXTS } from './configs/niche-finder.config'
@@ -36,6 +37,159 @@ import { StepInspectionPanel, StepInfo } from './StepInspectionPanel'
 import SavedIndicator from './SavedIndicator'
 import FailedStepActions from './FailedStepActions'
 import { RotateCcw } from 'lucide-react'
+
+/**
+ * GuidanceSection - Shows step guidance with description and user actions
+ * Helps users understand what the step does and what they need to do
+ */
+function GuidanceSection({ guidance, stepDescription }: {
+  guidance?: StepGuidance
+  stepDescription?: string
+}) {
+  if (!guidance && !stepDescription) return null
+
+  const description = guidance?.description || stepDescription
+  const userActions = guidance?.userActions || []
+
+  return (
+    <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4">
+      <div className="flex items-start gap-3">
+        <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+        <div className="flex-1">
+          {description && (
+            <p className="text-sm text-blue-800 mb-3">{description}</p>
+          )}
+          {userActions.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">
+                Qué necesitas hacer
+              </p>
+              <ul className="space-y-1.5">
+                {userActions.map((action, index) => (
+                  <li key={index} className="flex items-start gap-2 text-sm text-blue-700">
+                    <span className="text-blue-400 mt-1">•</span>
+                    <span>{action}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * SmartOutputRenderer - Renders output with special formatting for known structures
+ * Handles articles, LinkedIn posts, and other common output types
+ */
+function SmartOutputRenderer({ output, maxHeight = '500px' }: { output: unknown; maxHeight?: string }) {
+  if (!output) return null
+
+  // Try to extract articles from various structures
+  const outputObj = output as Record<string, unknown>
+  const articles = (
+    outputObj?.articles ||
+    (outputObj?.data as Record<string, unknown>)?.articles
+  ) as Array<{
+    index?: number
+    title?: string
+    url?: string
+    snippet?: string
+    content?: string
+    hasContent?: boolean
+  }> | undefined
+
+  // Render articles with nice cards
+  if (articles && Array.isArray(articles) && articles.length > 0) {
+    return (
+      <div className="space-y-4" style={{ maxHeight, overflow: 'auto' }}>
+        <div className="text-sm text-gray-600 mb-2">
+          Se encontraron <span className="font-semibold text-gray-800">{articles.length} artículos</span> relevantes:
+        </div>
+        {articles.map((article, i) => (
+          <div key={i} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <span className="text-blue-600 font-semibold text-sm">{article.index || i + 1}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-gray-900">{article.title || `Artículo ${i + 1}`}</p>
+                {article.url && (
+                  <a
+                    href={article.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:underline block truncate mt-1"
+                  >
+                    {article.url}
+                  </a>
+                )}
+                {(article.snippet || article.content) && (
+                  <p className="text-sm text-gray-600 mt-2 line-clamp-3">
+                    {(() => {
+                      const text = article.snippet || article.content || ''
+                      return text.length > 300 ? `${text.slice(0, 300)}...` : text
+                    })()}
+                  </p>
+                )}
+                {(article.content || article.hasContent) && (
+                  <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                    Contenido extraído correctamente
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  // Check for LinkedIn post output
+  const linkedinPost = (
+    outputObj?.post ||
+    (outputObj?.data as Record<string, unknown>)?.post
+  ) as string | undefined
+
+  if (linkedinPost && typeof linkedinPost === 'string') {
+    return (
+      <div className="space-y-4" style={{ maxHeight, overflow: 'auto' }}>
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
+              in
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900 text-sm">LinkedIn Post</p>
+              <p className="text-xs text-gray-500">Listo para publicar</p>
+            </div>
+          </div>
+          <div className="whitespace-pre-wrap text-gray-800 text-sm leading-relaxed">
+            {linkedinPost}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Default: show as formatted JSON or string
+  if (typeof output === 'string') {
+    return (
+      <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono" style={{ maxHeight, overflow: 'auto' }}>
+        {output.slice(0, 3000)}{output.length > 3000 ? '\n...(truncado)' : ''}
+      </pre>
+    )
+  }
+
+  return (
+    <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono" style={{ maxHeight, overflow: 'auto' }}>
+      {JSON.stringify(output, null, 2).slice(0, 3000)}
+    </pre>
+  )
+}
 
 // Helper to detect if a string is CSV content (comma or semicolon separated)
 function isCSVContent(content: string | null | undefined): boolean {
@@ -601,6 +755,136 @@ function DecisionStep({ step, stepState, onUpdateState, onContinue, previousOutp
   )
 }
 
+// Input step component - renders form fields from playbook variables
+interface InputStepProps {
+  step: StepDefinition
+  stepState: StepState
+  onUpdateState: (update: Partial<StepState>) => void
+  onContinue: () => void
+  playbookConfig?: PlaybookConfig
+}
+
+function InputStep({ step, stepState, onUpdateState, onContinue, playbookConfig }: InputStepProps) {
+  // Initialize form values from stepState.output or defaults
+  const [formValues, setFormValues] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {}
+    const savedOutput = stepState.output as Record<string, string> | undefined
+
+    playbookConfig?.variables?.forEach(variable => {
+      initial[variable.key] = savedOutput?.[variable.key] ?? variable.defaultValue ?? ''
+    })
+    return initial
+  })
+
+  const variables = playbookConfig?.variables || []
+
+  // Check if all required fields are filled
+  const isValid = useMemo(() => {
+    return variables
+      .filter(v => v.required)
+      .every(v => formValues[v.key]?.trim())
+  }, [variables, formValues])
+
+  const handleChange = (key: string, value: string) => {
+    setFormValues(prev => ({ ...prev, [key]: value }))
+    // Auto-save to stepState
+    onUpdateState({
+      output: { ...formValues, [key]: value }
+    })
+  }
+
+  const handleContinue = () => {
+    onUpdateState({
+      status: 'completed',
+      completedAt: new Date(),
+      output: formValues,
+    })
+    onContinue()
+  }
+
+  if (variables.length === 0) {
+    return (
+      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <p className="text-yellow-800">
+          Este paso requiere configuración de variables en el playbook.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Step guidance - helps user understand what to do */}
+      <GuidanceSection guidance={step.guidance} stepDescription={step.description} />
+
+      {variables.map(variable => (
+        <div key={variable.key} className="space-y-1.5">
+          <label className="block text-sm font-medium text-gray-700">
+            {variable.label}
+            {variable.required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+
+          {variable.description && (
+            <p className="text-xs text-gray-500">{variable.description}</p>
+          )}
+
+          {variable.type === 'textarea' ? (
+            <textarea
+              value={formValues[variable.key] || ''}
+              onChange={(e) => handleChange(variable.key, e.target.value)}
+              placeholder={variable.placeholder}
+              rows={4}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y placeholder:text-gray-400"
+            />
+          ) : variable.type === 'select' ? (
+            <select
+              value={formValues[variable.key] || ''}
+              onChange={(e) => handleChange(variable.key, e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Seleccionar...</option>
+              {variable.options?.map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          ) : variable.type === 'number' ? (
+            <input
+              type="number"
+              value={formValues[variable.key] || ''}
+              onChange={(e) => handleChange(variable.key, e.target.value)}
+              placeholder={variable.placeholder}
+              min={variable.min}
+              max={variable.max}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-400"
+            />
+          ) : (
+            <input
+              type="text"
+              value={formValues[variable.key] || ''}
+              onChange={(e) => handleChange(variable.key, e.target.value)}
+              placeholder={variable.placeholder}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-400"
+            />
+          )}
+        </div>
+      ))}
+
+      <div className="flex justify-end pt-4 border-t">
+        <button
+          onClick={handleContinue}
+          disabled={!isValid}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          Continuar
+          <ChevronRight size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // Auto step with review component
 interface AutoWithReviewStepProps {
   step: StepDefinition
@@ -663,19 +947,22 @@ function AutoWithReviewStep({
   if (!stepState.output && stepState.status !== 'completed' && !isReviewOnlyStep) {
     return (
       <div className="space-y-4">
+        {/* Step guidance - helps user understand what to do */}
+        <GuidanceSection guidance={step.guidance} stepDescription={step.description} />
+
         {/* Execution explanation if available */}
         {step.executionExplanation && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-            <h4 className="font-medium text-blue-800">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+            <h4 className="font-medium text-amber-800">
               {step.executionExplanation.title || 'Este paso va a:'}
             </h4>
-            <ol className="list-decimal list-inside space-y-1 text-sm text-blue-700">
+            <ol className="list-decimal list-inside space-y-1 text-sm text-amber-700">
               {step.executionExplanation.steps.map((s, i) => (
                 <li key={i}>{s}</li>
               ))}
             </ol>
             {(step.executionExplanation.estimatedCost || step.executionExplanation.costService) && (
-              <p className="text-xs text-blue-600 pt-2 border-t border-blue-200">
+              <p className="text-xs text-amber-600 pt-2 border-t border-amber-200">
                 {step.executionExplanation.estimatedCost && (
                   <span>Costo estimado: {step.executionExplanation.estimatedCost}</span>
                 )}
@@ -843,11 +1130,8 @@ function AutoWithReviewStep({
               /* Render sources config as visual cards */
               <SourcesDisplay data={outputToDisplay as SourcesData} />
             ) : (
-              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono overflow-auto max-h-[400px]">
-                {typeof outputToDisplay === 'string'
-                  ? outputToDisplay
-                  : JSON.stringify(outputToDisplay, null, 2)}
-              </pre>
+              /* Use SmartOutputRenderer for articles and other structured outputs */
+              <SmartOutputRenderer output={outputToDisplay} maxHeight="400px" />
             )}
           </div>
         </div>
@@ -953,18 +1237,18 @@ function AutoStep({
         </div>
 
         {/* Show preview of output if it's substantial */}
-        {output && typeof output === 'string' && output.length > 50 && (
+        {output && (
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Vista previa del resultado</span>
-              <span className="text-xs text-gray-500">
-                {output.length.toLocaleString()} caracteres
-              </span>
+              <span className="text-sm font-medium text-gray-700">Resultado</span>
+              {typeof output === 'string' && (
+                <span className="text-xs text-gray-500">
+                  {output.length.toLocaleString()} caracteres
+                </span>
+              )}
             </div>
-            <div className="p-4 max-h-48 overflow-auto bg-white">
-              <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono">
-                {output.slice(0, 1000)}{output.length > 1000 ? '\n...(truncado)' : ''}
-              </pre>
+            <div className="p-4 bg-white">
+              <SmartOutputRenderer output={output} maxHeight="400px" />
             </div>
           </div>
         )}
@@ -981,19 +1265,22 @@ function AutoStep({
 
   return (
     <div className="space-y-4">
+      {/* Step guidance - helps user understand what to do */}
+      <GuidanceSection guidance={step.guidance} stepDescription={step.description} />
+
       {/* Execution explanation if available */}
       {step.executionExplanation && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-          <h4 className="font-medium text-blue-800">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+          <h4 className="font-medium text-amber-800">
             {step.executionExplanation.title || 'Este paso va a:'}
           </h4>
-          <ol className="list-decimal list-inside space-y-1 text-sm text-blue-700">
+          <ol className="list-decimal list-inside space-y-1 text-sm text-amber-700">
             {step.executionExplanation.steps.map((s, i) => (
               <li key={i}>{s}</li>
             ))}
           </ol>
           {(step.executionExplanation.estimatedCost || step.executionExplanation.costService) && (
-            <p className="text-xs text-blue-600 pt-2 border-t border-blue-200">
+            <p className="text-xs text-amber-600 pt-2 border-t border-amber-200">
               {step.executionExplanation.estimatedCost && (
                 <span>Costo estimado: {step.executionExplanation.estimatedCost}</span>
               )}
@@ -1507,12 +1794,8 @@ function ManualReviewStep({
       </div>
 
       {showOutput && dataToReview && (
-        <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 max-h-96 overflow-auto">
-          <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
-            {typeof dataToReview === 'string'
-              ? dataToReview
-              : JSON.stringify(dataToReview, null, 2)}
-          </pre>
+        <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+          <SmartOutputRenderer output={dataToReview} maxHeight="384px" />
         </div>
       )}
 
@@ -1558,11 +1841,7 @@ function DisplayStep({ stepState, previousOutput }: DisplayStepProps) {
     <div className="space-y-4">
       <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
         {dataToDisplay ? (
-          <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
-            {typeof dataToDisplay === 'string'
-              ? dataToDisplay
-              : JSON.stringify(dataToDisplay, null, 2)}
-          </pre>
+          <SmartOutputRenderer output={dataToDisplay} />
         ) : (
           <p className="text-gray-500 italic">No hay datos para mostrar</p>
         )}
@@ -1657,6 +1936,7 @@ export function WorkArea({
   isLast,
   previousStepOutput,
   playbookContext,
+  playbookConfig,
   projectId,
   allSteps,
   saveState,
@@ -2310,7 +2590,9 @@ export function WorkArea({
                   }),
                 })
                 const data = await response.json()
-                if (data.suggestions) {
+
+                // Check for successful response with suggestions
+                if (data.suggestions && data.suggestions.length > 0) {
                   // Preserve selected items, only replace unselected ones
                   const selectedItems = (keywordOutput.needWords || []).filter(w => w.selected)
                   const newSuggestions = data.suggestions.map((s: string, i: number) => ({
@@ -2324,11 +2606,41 @@ export function WorkArea({
                       needWords: [...selectedItems, ...newSuggestions],
                     },
                   })
+                } else if (data.error) {
+                  // API returned an error - use fallback suggestions
+                  console.warn('[WorkArea] LLM generation error:', data.error)
+                  useFallbackNeedWords()
+                } else {
+                  // Empty response - use fallback
+                  console.warn('[WorkArea] LLM returned empty suggestions')
+                  useFallbackNeedWords()
                 }
               } catch (error) {
                 console.error('Error generating need words:', error)
+                // Use fallback suggestions on error
+                useFallbackNeedWords()
               } finally {
                 setIsGeneratingNeedWords(false)
+              }
+
+              // Fallback function for when LLM fails
+              function useFallbackNeedWords() {
+                const selectedItems = (keywordOutput.needWords || []).filter(w => w.selected)
+                const fallbackSuggestions = [
+                  'problema con', 'cómo solucionar', 'necesito ayuda', 'recomiendan',
+                  'opiniones sobre', 'alternativas a', 'no funciona', 'mejor manera de',
+                  'alguien sabe', 'experiencia con', 'qué hacer si', 'consejos para',
+                ].map((s, i) => ({
+                  id: `fallback_${Date.now()}_${i}`,
+                  label: s,
+                  selected: false,
+                }))
+                onUpdateState({
+                  output: {
+                    ...keywordOutput,
+                    needWords: [...selectedItems, ...fallbackSuggestions],
+                  },
+                })
               }
             }}
             onGenerateSubreddits={async () => {
@@ -2665,6 +2977,17 @@ export function WorkArea({
             onUpdateState={onUpdateState}
             onContinue={onContinue}
             playbookContext={playbookContext}
+          />
+        )
+
+      case 'input':
+        return (
+          <InputStep
+            step={step}
+            stepState={stepState}
+            onUpdateState={onUpdateState}
+            onContinue={onContinue}
+            playbookConfig={playbookConfig}
           />
         )
 

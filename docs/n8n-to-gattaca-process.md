@@ -2,9 +2,35 @@
 
 Este documento define el proceso recurrente para convertir workflows de n8n en playbooks funcionales de Gattaca.
 
-**Última actualización**: 2026-01-20
+**Última actualización**: 2026-01-25
 
 ---
+
+## Conversor Automatizado
+
+Para conversiones rápidas, usa el **n8n Converter** automatizado:
+
+```typescript
+import { convertN8nWorkflow } from '@/lib/n8n-converter'
+
+const result = await convertN8nWorkflow(jsonString, {
+  playbookId: 'my-playbook',
+  outputDir: 'src/app/api/playbook/my-playbook',
+})
+```
+
+O la interfaz web en `/api/n8n-converter/convert`.
+
+**Documentación técnica completa**: [docs/n8n-converter/README.md](./n8n-converter/README.md)
+
+---
+
+## Proceso Manual (para casos complejos)
+
+El proceso manual sigue siendo útil para:
+- Workflows con lógica de negocio compleja
+- Nodos no soportados por el conversor
+- Personalización avanzada de playbooks
 
 ## Resumen del Proceso
 
@@ -256,14 +282,33 @@ Desarrollar inline (Claude implementa)
 
 **Estos 3 archivos son los más olvidados y causan que el playbook no aparezca en la UI. SIN ESTOS PASOS, EL PLAYBOOK NO FUNCIONA:**
 
-#### 1. Exportar config desde `src/components/playbook/index.ts`
+#### 1. Registrar config en `src/components/playbook/configs/index.ts`
+
+**Este es el paso que hace que el playbook aparezca en la sección de playbooks:**
+
+```typescript
+// Agregar import del nuevo config
+import [nombre]Config from './[nombre].config'
+
+// Agregar al objeto playbookConfigs
+export const playbookConfigs: Record<string, PlaybookConfig> = {
+  niche_finder: nicheFinderConfig,
+  video_viral_ia: videoViralIAConfig,
+  '[nombre-con-guiones]': [nombre]Config,  // ← AGREGAR AQUÍ
+}
+
+// Exportar el config individual
+export { [nombre]Config }
+```
+
+#### 2. Exportar config desde `src/components/playbook/index.ts`
 
 ```typescript
 // Agregar el nuevo config al export existente
-export { playbookConfigs, getPlaybookConfig, nicheFinderConfig, videoViralIAConfig } from './configs'
+export { playbookConfigs, getPlaybookConfig, nicheFinderConfig, videoViralIAConfig, [nombre]Config } from './configs'
 ```
 
-#### 2. Crear componente wrapper en `src/components/[nombre]/`
+#### 3. Crear componente wrapper en `src/components/[nombre]/`
 
 **Archivo: `src/components/[nombre]/[Nombre]Playbook.tsx`**
 ```typescript
@@ -323,20 +368,61 @@ export default function [Nombre]Playbook({ projectId }: [Nombre]PlaybookProps) {
 export { default as [Nombre]Playbook } from './[Nombre]Playbook'
 ```
 
-#### 3. Integrar en `src/app/projects/[projectId]/page.tsx`
+#### 4. Agregar metadata en `src/lib/playbook-metadata.ts`
 
-**3a. Agregar imports (cerca del inicio del archivo):**
+**Este paso es CRÍTICO para que el playbook aparezca en el catálogo (`/playbooks`):**
+
+```typescript
+// Agregar al objeto playbookMetadata
+export const playbookMetadata: Record<string, PlaybookMeta> = {
+  // ... playbooks existentes
+  '[nombre-con-guiones]': {
+    // Información básica (requerida)
+    purpose: 'Descripción breve del propósito',
+    whenToUse: [
+      'Caso de uso 1',
+      'Caso de uso 2',
+    ],
+    outcome: 'Qué output concreto produce',
+    relatedPlaybooks: ['niche_finder', 'ecp'],
+    targetAudience: 'Para quién es',
+    steps: {
+      step_1: 'Descripción del paso 1',
+      step_2: 'Descripción del paso 2',
+    },
+    // Información extendida (para página de librería)
+    icon: '🔍',  // Emoji representativo
+    description: `Descripción larga del playbook...`,
+    objectives: ['Objetivo 1', 'Objetivo 2'],
+    requirements: ['Requisito 1', 'Requisito 2'],
+    duration: '15-30 minutos',
+  },
+}
+
+// Agregar al objeto names en getPlaybookName
+export const getPlaybookName = (type: string): string => {
+  const names: Record<string, string> = {
+    // ... nombres existentes
+    '[nombre-con-guiones]': '[Nombre Display]',
+  }
+  return names[type] || type
+}
+```
+
+#### 5. Integrar en `src/app/projects/[projectId]/page.tsx`
+
+**5a. Agregar imports (cerca del inicio del archivo):**
 ```typescript
 import { [Nombre]Playbook } from '@/components/[nombre]'
 import { [IconName] } from 'lucide-react'  // Ej: Video, Search, Users
 ```
 
-**3b. Agregar al tipo TabType:**
+**5b. Agregar al tipo TabType:**
 ```typescript
 type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder' | 'signal-outreach' | '[nombre-con-guiones]'
 ```
 
-**3c. Agregar condición para tab inicial (en useEffect):**
+**5c. Agregar condición para tab inicial (en useEffect):**
 ```typescript
 useEffect(() => {
   if (project && activeTab === null) {
@@ -350,7 +436,7 @@ useEffect(() => {
 }, [project, activeTab])
 ```
 
-**3d. Agregar array de tabs específicos:**
+**5d. Agregar array de tabs específicos:**
 ```typescript
 // [Nombre] playbook: Uses unified view with config and campaigns integrated
 const [nombre]Tabs = [
@@ -359,7 +445,7 @@ const [nombre]Tabs = [
 ]
 ```
 
-**3e. Agregar condición en selección de tabs:**
+**5e. Agregar condición en selección de tabs:**
 ```typescript
 const tabs = project?.playbook_type === 'niche_finder'
   ? nicheFinderTabs
@@ -372,7 +458,7 @@ const tabs = project?.playbook_type === 'niche_finder'
         : baseTabs
 ```
 
-**3f. Agregar renderizado del componente:**
+**5f. Agregar renderizado del componente:**
 ```typescript
 {activeTab === '[nombre-con-guiones]' && (
   <[Nombre]Playbook projectId={params.projectId} />
@@ -447,7 +533,7 @@ describe('[Nombre] Playbook Integration', () => {
 - [ ] Template TypeScript compila sin errores (`src/lib/templates/[nombre]-playbook.ts`)
 - [ ] Template registrado en `src/lib/templates/index.ts`
 - [ ] Config visual creada (`src/components/playbook/configs/[nombre].config.ts`)
-- [ ] Config registrada en `src/components/playbook/configs/index.ts`
+- [ ] **Config registrada en `src/components/playbook/configs/index.ts`** ⚠️ (import + playbookConfigs + export)
 - [ ] **Config exportada desde `src/components/playbook/index.ts`** ⚠️
 - [ ] **Componente wrapper creado** (`src/components/[nombre]/[Nombre]Playbook.tsx`) ⚠️
 - [ ] **Componente integrado en página del proyecto** (`src/app/projects/[projectId]/page.tsx`) ⚠️
@@ -457,7 +543,7 @@ describe('[Nombre] Playbook Integration', () => {
   - [ ] Array de tabs específicos
   - [ ] Renderizado en switch de contenido
 - [ ] PlaybookType agregado a `src/types/database.types.ts`
-- [ ] Metadata agregada a `src/lib/playbook-metadata.ts`
+- [ ] **Metadata agregada a `src/lib/playbook-metadata.ts`** ⚠️ (playbookMetadata + getPlaybookName)
 - [ ] Migraciones creadas (enum + insert)
 - [ ] `npx tsc --noEmit` pasa sin errores
 

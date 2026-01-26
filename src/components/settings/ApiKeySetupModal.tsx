@@ -61,6 +61,13 @@ const SERVICE_INFO: Record<string, ServiceInfo> = {
     docsUrl: 'https://my.blotato.com/settings',
     placeholder: 'blotato_xxxxxxxxxxxx',
   },
+  dumpling: {
+    name: 'dumpling',
+    label: 'Dumpling AI',
+    description: 'Búsqueda web y scraping de artículos con IA',
+    docsUrl: 'https://app.dumplingai.com/api-keys',
+    placeholder: 'dpl_xxxxxxxxxxxx',
+  },
 };
 
 interface ApiKeySetupModalProps {
@@ -234,8 +241,8 @@ export default function ApiKeySetupModal({
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && handleSave()}
                 placeholder={serviceInfo?.placeholder || 'Tu API key...'}
-                className={`w-full px-4 py-3 pr-10 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm ${
-                  error ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                className={`w-full px-4 py-3 pr-10 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm text-gray-900 placeholder:text-gray-400 ${
+                  error ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
                 }`}
                 autoFocus
               />

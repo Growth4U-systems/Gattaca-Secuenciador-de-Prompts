@@ -9,7 +9,7 @@ const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const ALGORITHM = 'aes-256-gcm';
 
 // Supported services (OpenRouter se configura desde el Header modal para ver créditos/consumo)
-const SUPPORTED_SERVICES = ['apify', 'firecrawl', 'serper', 'wavespeed', 'fal', 'blotato'] as const;
+const SUPPORTED_SERVICES = ['apify', 'firecrawl', 'serper', 'wavespeed', 'fal', 'blotato', 'dumpling'] as const;
 type ServiceName = (typeof SUPPORTED_SERVICES)[number];
 
 // ============================================

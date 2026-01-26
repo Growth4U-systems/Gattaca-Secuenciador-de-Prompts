@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { PlaybookShell, nicheFinderConfig } from '../playbook'
+import { PlaybookShellV2, nicheFinderConfig } from '../playbook'
 import { PlaybookState } from '../playbook/types'
 import StartSessionDialog from '../playbook/StartSessionDialog'
 import AllSessionsPanel from '../playbook/AllSessionsPanel'
@@ -34,6 +34,52 @@ export default function NicheFinderPlaybookV2({ projectId }: NicheFinderPlaybook
   const [initialState, setInitialState] = useState<Partial<PlaybookState> | undefined>(undefined)
   const [isLoading, setIsLoading] = useState(true)
 
+  // Memoized function to load session state - handles both new and legacy APIs
+  // Uses Promise.allSettled to avoid race conditions with deterministic merge priority
+  const loadSessionState = useCallback(async (sid: string) => {
+    try {
+      // Fetch both APIs in parallel with Promise.allSettled
+      // This ensures we wait for both to complete before merging
+      const [sessionResult, legacyResult] = await Promise.allSettled([
+        fetch(`/api/playbook/sessions/${sid}`).then(async (res) => {
+          if (!res.ok) return null
+          const data = await res.json()
+          return data.session
+        }),
+        fetch(`/api/projects/${projectId}/playbook-state`).then(async (res) => {
+          if (!res.ok) return null
+          const data = await res.json()
+          return data.success ? data.state : null
+        }),
+      ])
+
+      // Build state with deterministic priority: legacy first, then new API (new overwrites)
+      let mergedState: Partial<PlaybookState> = {}
+
+      // 1. Apply legacy state first (lower priority)
+      if (legacyResult.status === 'fulfilled' && legacyResult.value) {
+        mergedState = { ...mergedState, ...legacyResult.value }
+      }
+
+      // 2. Apply new session API state (higher priority - overwrites legacy)
+      if (sessionResult.status === 'fulfilled' && sessionResult.value) {
+        const session = sessionResult.value
+        if (session.config && Object.keys(session.config).length > 0) {
+          mergedState = { ...mergedState, config: session.config }
+        }
+      }
+
+      // Only set state if we have data
+      if (Object.keys(mergedState).length > 0) {
+        setInitialState(mergedState)
+      }
+    } catch (error) {
+      console.error('Error loading session state:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [projectId])
+
   // Check for session param or show dialog
   useEffect(() => {
     if (sessionParam) {
@@ -45,42 +91,7 @@ export default function NicheFinderPlaybookV2({ projectId }: NicheFinderPlaybook
       setShowDialog(true)
       setIsLoading(false)
     }
-  }, [sessionParam])
-
-  async function loadSessionState(sid: string) {
-    try {
-      // First try to load from session API
-      const sessionResponse = await fetch(`/api/playbook/sessions/${sid}`)
-      if (sessionResponse.ok) {
-        const sessionData = await sessionResponse.json()
-        if (sessionData.session) {
-          // Set initial state from session config if present
-          const session = sessionData.session
-          if (session.config && Object.keys(session.config).length > 0) {
-            setInitialState({
-              config: session.config,
-            })
-          }
-        }
-      }
-
-      // Also try to load from legacy playbook-state API
-      const response = await fetch(`/api/projects/${projectId}/playbook-state`)
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success && data.state) {
-          setInitialState(prev => ({
-            ...prev,
-            ...data.state,
-          }))
-        }
-      }
-    } catch (error) {
-      console.error('Error loading session state:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  }, [sessionParam, loadSessionState])
 
   const handleSessionStart = (newSessionId: string) => {
     setSessionId(newSessionId)
@@ -168,12 +179,12 @@ export default function NicheFinderPlaybookV2({ projectId }: NicheFinderPlaybook
   }
 
   return (
-    <PlaybookShell
+    <PlaybookShellV2
       projectId={projectId}
       playbookConfig={nicheFinderConfig}
       initialState={initialState}
       sessionId={sessionId}
-      useWizardNav={true}
+      navigationStyle="wizard"
     />
   )
 }

@@ -579,6 +579,277 @@ Resultado: De ~5% respuestas (outreach frío) a >15% respuestas.`,
       },
     ],
   },
+  'seo-seed-keywords': {
+    // Información básica
+    purpose:
+      'Genera 15-20 seed keywords SEO basadas en tu Ideal Customer Profile usando análisis de IA.',
+    whenToUse: [
+      'Iniciar una estrategia SEO desde cero',
+      'Encontrar keywords que tu ICP realmente busca',
+      'Validar ideas de contenido antes de producir',
+    ],
+    outcome:
+      'Lista de seed keywords alineadas con pain points y goals de tu ICP.',
+    relatedPlaybooks: ['niche_finder', 'ecp'],
+    targetAudience: 'SEO managers, content marketers, fundadores',
+    steps: {
+      define_icp: 'Define tu Ideal Customer Profile',
+      generate_keywords: 'IA genera keywords basadas en tu ICP',
+      review_keywords: 'Revisa y selecciona las keywords finales',
+    },
+    // Información extendida
+    icon: '🔑',
+    description: `SEO Seed Keywords Generator usa IA para generar keywords basadas en tu ICP.
+
+En lugar de adivinar keywords, este playbook analiza:
+• Pain points de tu cliente ideal
+• Goals y objetivos que quieren lograr
+• Cómo buscan soluciones actualmente
+• Nivel de expertise técnico
+
+El resultado son keywords que tu audiencia realmente busca.`,
+    objectives: [
+      'Generar 15-20 seed keywords relevantes',
+      'Alinear keywords con pain points reales',
+      'Identificar intención de búsqueda del ICP',
+      'Crear base para estrategia de contenido',
+    ],
+    requirements: [
+      'Descripción clara de tu producto/servicio',
+      'Conocimiento de pain points de tus clientes',
+      'Goals y objetivos de tu audiencia',
+    ],
+    duration: '10-15 minutos',
+    detailedSteps: {
+      define_icp: {
+        brief: 'Define tu Ideal Customer Profile',
+        detailed:
+          'Completa información sobre tu ICP: producto/servicio, pain points, goals, soluciones actuales, nivel de expertise e industria.',
+        tips: [
+          'Sé específico en los pain points',
+          'Incluye el lenguaje que usa tu audiencia',
+          'Menciona cómo buscan soluciones actualmente',
+        ],
+      },
+      generate_keywords: {
+        brief: 'IA genera keywords basadas en tu ICP',
+        detailed:
+          'La IA analiza tu ICP para generar keywords que reflejan cómo tu audiencia busca soluciones a sus problemas.',
+      },
+      review_keywords: {
+        brief: 'Revisa y selecciona las keywords finales',
+        detailed:
+          'Revisa las keywords generadas, elimina las irrelevantes y selecciona las que mejor se alinean con tu estrategia.',
+      },
+    },
+    examples: [
+      {
+        title: 'SaaS de Project Management',
+        description:
+          'Generó keywords como "cómo organizar proyectos freelance", "herramientas gestión equipo remoto" basadas en pain points de equipos distribuidos.',
+      },
+    ],
+    faqs: [
+      {
+        question: '¿Cuántas keywords debo esperar?',
+        answer:
+          'El playbook genera 15-20 seed keywords. Puedes expandirlas luego con herramientas SEO tradicionales.',
+      },
+      {
+        question: '¿Son keywords long-tail o head?',
+        answer:
+          'Son principalmente seed keywords (2-4 palabras) que luego puedes expandir a long-tail según tu estrategia.',
+      },
+    ],
+  },
+  'linkedin-post-generator': {
+    // Información básica
+    purpose:
+      'Genera posts virales de LinkedIn basados en tu perfil de creador y contenido existente.',
+    whenToUse: [
+      'Mantener presencia activa en LinkedIn sin escribir desde cero',
+      'Replicar el estilo de posts exitosos',
+      'Escalar producción de contenido personal',
+    ],
+    outcome:
+      'Post de LinkedIn listo para publicar con estructura viral y hook optimizado.',
+    relatedPlaybooks: ['video_viral_ia', 'ecp'],
+    targetAudience: 'Creadores de contenido, personal branding, thought leaders',
+    steps: {
+      input_profile: 'Define tu perfil de creador',
+      add_reference: 'Agrega contenido de referencia',
+      generate_post: 'IA genera el post',
+      review_post: 'Revisa y aprueba antes de publicar',
+    },
+    // Información extendida
+    icon: '💼',
+    description: `LinkedIn Post Generator automatiza la creación de posts usando IA.
+
+El proceso:
+1. **Perfil de creador**: Define tu tono, audiencia y temas
+2. **Contenido de referencia**: Agrega posts exitosos como inspiración
+3. **Generación**: IA crea posts en tu estilo con hooks virales
+4. **Review**: Revisa y ajusta antes de publicar
+
+Mantén tu presencia en LinkedIn sin el bloqueo de escritor.`,
+    objectives: [
+      'Generar posts con estructura viral probada',
+      'Mantener consistencia de voz y estilo',
+      'Reducir tiempo de creación de contenido',
+      'Optimizar hooks para engagement',
+    ],
+    requirements: [
+      'Definición de tu audiencia objetivo',
+      'Tono y estilo de comunicación preferido',
+      'Ejemplos de posts exitosos (opcional)',
+    ],
+    duration: '5-10 minutos por post',
+    detailedSteps: {
+      input_profile: {
+        brief: 'Define tu perfil de creador',
+        detailed:
+          'Especifica tu audiencia objetivo, tono de comunicación, temas principales y cualquier restricción de estilo.',
+        tips: [
+          'Define si tu tono es profesional, casual o mixto',
+          'Lista 3-5 temas principales que cubres',
+          'Menciona qué tipo de CTAs prefieres',
+        ],
+      },
+      add_reference: {
+        brief: 'Agrega contenido de referencia',
+        detailed:
+          'Proporciona posts exitosos (tuyos o de otros) como referencia de estructura y estilo. Estos ayudan a la IA a entender qué funciona.',
+      },
+      generate_post: {
+        brief: 'IA genera el post',
+        detailed:
+          'La IA genera un post completo con hook, cuerpo y CTA basado en tu perfil y referencias proporcionadas.',
+      },
+      review_post: {
+        brief: 'Revisa y aprueba antes de publicar',
+        detailed:
+          'Revisa el post generado, haz ajustes si es necesario y aprueba para publicación.',
+        tips: [
+          'Personaliza con anécdotas propias',
+          'Ajusta el hook si no te convence',
+          'Verifica que el CTA sea claro',
+        ],
+      },
+    },
+    examples: [
+      {
+        title: 'Founder de SaaS',
+        description:
+          'Genera 3 posts semanales sobre lecciones de emprendimiento, manteniendo engagement promedio de 200+ reacciones.',
+      },
+    ],
+    faqs: [
+      {
+        question: '¿Necesito dar ejemplos de posts?',
+        answer:
+          'Es opcional pero muy recomendado. Los ejemplos mejoran significativamente la calidad del output.',
+      },
+      {
+        question: '¿Qué longitud tienen los posts?',
+        answer:
+          'Se optimizan para el sweet spot de LinkedIn: 150-300 palabras con estructura de whitespace para legibilidad.',
+      },
+    ],
+  },
+  'github-fork-to-crm': {
+    // Información básica
+    purpose:
+      'Convierte forks de GitHub en leads de CRM automáticamente usando la API de Pipedrive.',
+    whenToUse: [
+      'Tienes un producto open source y quieres capturar leads',
+      'Quieres hacer outreach a desarrolladores que forkearon tu repo',
+      'Necesitas enriquecer datos de GitHub con info de CRM',
+    ],
+    outcome:
+      'Lead creado en Pipedrive con datos de GitHub enriquecidos y notas automáticas.',
+    relatedPlaybooks: ['signal_based_outreach'],
+    targetAudience: 'DevRel, sales de productos developer-focused, fundadores OSS',
+    steps: {
+      input_fork: 'Ingresa datos del fork de GitHub',
+      fetch_github_user: 'Obtén información del usuario de GitHub',
+      check_contact: 'Verifica si existe en Pipedrive',
+      decide_create_lead: 'Decide si crear el lead',
+      create_lead: 'Crea persona y lead en Pipedrive',
+    },
+    // Información extendida
+    icon: '🔀',
+    description: `GitHub Fork to CRM automatiza la captura de leads de desarrolladores.
+
+Cuando alguien forkea tu repositorio:
+1. Extrae datos del usuario de GitHub (nombre, email, bio, empresa)
+2. Verifica si ya existe en tu CRM
+3. Crea automáticamente persona + lead en Pipedrive
+4. Agrega notas con contexto del fork
+
+Ideal para productos developer-focused y estrategias DevRel.`,
+    objectives: [
+      'Capturar leads de desarrolladores interesados',
+      'Automatizar entrada de datos a CRM',
+      'Enriquecer perfiles con datos de GitHub',
+      'Habilitar follow-up personalizado',
+    ],
+    requirements: [
+      'API key de Pipedrive',
+      'Token de GitHub (opcional, mejora rate limits)',
+      'Repositorio con forks activos',
+    ],
+    duration: '2-3 minutos por fork',
+    detailedSteps: {
+      input_fork: {
+        brief: 'Ingresa datos del fork de GitHub',
+        detailed:
+          'Proporciona el username de GitHub, nombre del repositorio y URL del fork.',
+      },
+      fetch_github_user: {
+        brief: 'Obtén información del usuario de GitHub',
+        detailed:
+          'Se consulta la API de GitHub para obtener: nombre, email (si es público), bio, empresa, ubicación, repos públicos y seguidores.',
+      },
+      check_contact: {
+        brief: 'Verifica si existe en Pipedrive',
+        detailed:
+          'Busca en Pipedrive por email (si disponible) o username de GitHub para evitar duplicados.',
+      },
+      decide_create_lead: {
+        brief: 'Decide si crear el lead',
+        detailed:
+          'Revisa los datos obtenidos y decide si crear el lead o saltarlo.',
+        tips: [
+          'Verifica que el perfil sea de una persona real',
+          'Considera la relevancia del fork para tu producto',
+        ],
+      },
+      create_lead: {
+        brief: 'Crea persona y lead en Pipedrive',
+        detailed:
+          'Crea la persona (si no existe) y el lead con título descriptivo. Agrega notas con detalles de GitHub y del fork.',
+      },
+    },
+    examples: [
+      {
+        title: 'CLI Tool Open Source',
+        description:
+          'Automatizó captura de 50+ leads/mes de forks, resultando en 5 enterprise trials.',
+      },
+    ],
+    faqs: [
+      {
+        question: '¿Funciona con otros CRMs?',
+        answer:
+          'Actualmente soporta Pipedrive. Soporte para HubSpot y Salesforce está en roadmap.',
+      },
+      {
+        question: '¿Qué pasa si el usuario no tiene email público?',
+        answer:
+          'Se crea el lead con el username de GitHub. Puedes enriquecer manualmente después.',
+      },
+    ],
+  },
 }
 
 /**
@@ -591,6 +862,9 @@ export const getPlaybookName = (type: string): string => {
     competitor_analysis: 'Competitor Analysis',
     signal_based_outreach: 'Signal-Based Outreach',
     video_viral_ia: 'Video Viral IA',
+    'seo-seed-keywords': 'SEO Seed Keywords Generator',
+    'linkedin-post-generator': 'LinkedIn Post Generator',
+    'github-fork-to-crm': 'GitHub Fork to CRM',
   }
   return names[type] || type
 }

@@ -17,6 +17,7 @@ import CampaignWizard from './CampaignWizard'
 import CampaignSettings from './CampaignSettings'
 import { Settings, ChevronDown, Plus, Folder, Pencil, Trash2, Database } from 'lucide-react'
 import { ArtifactBrowser } from './ArtifactBrowser'
+import PlaybookIntroScreen from './PlaybookIntroScreen'
 import { useStepPersistence } from '@/hooks/useStepPersistence'
 import { useStepRetry } from '@/hooks/useStepRetry'
 import { StepAttemptConfig, StepRetryInfo } from './types'
@@ -175,6 +176,8 @@ export default function PlaybookShell({
   const [showCampaignSettings, setShowCampaignSettings] = useState(false)
   const [showArtifactBrowser, setShowArtifactBrowser] = useState(false)
   const [projectData, setProjectData] = useState<{ clientId: string; userId: string } | null>(null)
+  // Show intro screen before starting playbook (only if playbook has presentation metadata)
+  const [showIntroScreen, setShowIntroScreen] = useState(!!playbookConfig.presentation)
 
   // Load campaigns from database
   const loadCampaigns = useCallback(async () => {
@@ -276,14 +279,19 @@ export default function PlaybookShell({
   useEffect(() => {
     if (!selectedCampaignId) {
       shouldSaveRef.current = false
+      // Show intro screen when no campaign is selected (if playbook has presentation)
+      if (playbookConfig.presentation) {
+        setShowIntroScreen(true)
+      }
       return
     }
 
     const campaign = campaigns.find(c => c.id === selectedCampaignId)
     if (campaign?.playbookState) {
-      // Load saved state
+      // Load saved state - campaign already started, don't show intro
       shouldSaveRef.current = false // Don't save while loading
       setState(initializeState(projectId, playbookConfig, campaign.playbookState))
+      setShowIntroScreen(false) // Hide intro for existing campaigns
       // Enable saving after a short delay
       setTimeout(() => {
         shouldSaveRef.current = true
@@ -291,7 +299,54 @@ export default function PlaybookShell({
     } else {
       // Fresh state for new campaign
       shouldSaveRef.current = false
-      setState(initializeState(projectId, playbookConfig))
+      const freshState = initializeState(projectId, playbookConfig)
+
+      // IMPORTANT: Initialize input steps with campaign's customVariables
+      // This fixes the bug where wizard-collected variables weren't being passed to input steps
+      if (campaign?.customVariables && Object.keys(campaign.customVariables).length > 0) {
+        console.log('[PlaybookShell] Initializing input steps with campaign variables:', campaign.customVariables)
+
+        // Find input steps and set their output to customVariables
+        for (let phaseIdx = 0; phaseIdx < playbookConfig.phases.length; phaseIdx++) {
+          const phaseDef = playbookConfig.phases[phaseIdx]
+          for (let stepIdx = 0; stepIdx < phaseDef.steps.length; stepIdx++) {
+            const stepDef = phaseDef.steps[stepIdx]
+            if (stepDef.type === 'input') {
+              // Mark this step as completed since the wizard already collected these values
+              freshState.phases[phaseIdx].steps[stepIdx] = {
+                ...freshState.phases[phaseIdx].steps[stepIdx],
+                status: 'completed',
+                completedAt: new Date(),
+                output: campaign.customVariables as Record<string, unknown>,
+              }
+              console.log('[PlaybookShell] Set input step', stepDef.id, 'output to campaign variables')
+            }
+          }
+        }
+
+        // Recalculate completedSteps
+        freshState.completedSteps = freshState.phases.reduce(
+          (sum, phase) => sum + phase.steps.filter(s => s.status === 'completed').length,
+          0
+        )
+
+        // Move to the first non-completed step (skip the input step we just completed)
+        outer: for (let pi = 0; pi < freshState.phases.length; pi++) {
+          for (let si = 0; si < freshState.phases[pi].steps.length; si++) {
+            if (freshState.phases[pi].steps[si].status !== 'completed') {
+              freshState.currentPhaseIndex = pi
+              freshState.currentStepIndex = si
+              break outer
+            }
+          }
+        }
+
+        // Campaign has variables from wizard, so it's ready to start
+        // Hide intro screen since user already went through wizard
+        setShowIntroScreen(false)
+      }
+
+      setState(freshState)
       setTimeout(() => {
         shouldSaveRef.current = true
       }, 100)
@@ -2296,10 +2351,10 @@ export default function PlaybookShell({
           output: result,
         })
 
-        // Auto-advance for auto steps
-        if (['auto', 'auto_with_review'].includes(step.type)) {
-          setTimeout(goToNextStep, 500)
-        }
+        // NOTE: We do NOT auto-advance here anymore.
+        // - For 'auto' steps: user should see the results and click "Siguiente" when ready
+        // - For 'auto_with_review' steps: user must click "Aprobar y continuar" in the WorkArea
+        // Auto-advancing defeats the purpose of showing results to the user.
       } catch (error) {
         updateStepState(stepId, {
           status: 'error',
@@ -2802,23 +2857,36 @@ export default function PlaybookShell({
             {/* Work Area - Right side or Full width */}
             <div className="flex-1 overflow-y-auto">
             {!selectedCampaignId ? (
-              /* No campaign selected - prompt to select or create */
-              <div className="flex flex-col items-center justify-center h-full bg-white p-8 text-center">
-                <Folder className="text-gray-300 mb-4" size={64} />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Selecciona o crea una campaña
-                </h3>
-                <p className="text-gray-500 mb-6 max-w-md">
-                  Para ejecutar el playbook, primero debes seleccionar una campaña existente o crear una nueva.
-                </p>
-                <button
-                  onClick={() => setShowWizard(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  <Plus size={16} />
-                  Nueva Campaña
-                </button>
-              </div>
+              /* No campaign selected - show intro screen if available, else prompt */
+              playbookConfig.presentation ? (
+                <PlaybookIntroScreen
+                  playbookConfig={playbookConfig}
+                  onStart={() => setShowWizard(true)}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full bg-white p-8 text-center">
+                  <Folder className="text-gray-300 mb-4" size={64} />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Selecciona o crea una campaña
+                  </h3>
+                  <p className="text-gray-500 mb-6 max-w-md">
+                    Para ejecutar el playbook, primero debes seleccionar una campaña existente o crear una nueva.
+                  </p>
+                  <button
+                    onClick={() => setShowWizard(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <Plus size={16} />
+                    Nueva Campaña
+                  </button>
+                </div>
+              )
+            ) : showIntroScreen && playbookConfig.presentation ? (
+              /* Campaign selected but intro not dismissed yet */
+              <PlaybookIntroScreen
+                playbookConfig={playbookConfig}
+                onStart={() => setShowIntroScreen(false)}
+              />
             ) : (
               <>
                 <WorkArea
@@ -2839,6 +2907,7 @@ export default function PlaybookShell({
                   previousStepOutput={getPreviousStepOutput()}
                   projectId={projectId}
                   playbookContext={buildPlaybookContext()}
+                  playbookConfig={playbookConfig}
                   allSteps={playbookConfig.phases.flatMap((phase, phaseIdx) =>
                     phase.steps.map((stepDef, stepIdx) => ({
                       definition: stepDef,

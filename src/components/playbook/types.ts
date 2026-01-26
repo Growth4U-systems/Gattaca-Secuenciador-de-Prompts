@@ -153,6 +153,43 @@ export interface PhaseDefinition {
   steps: StepDefinition[]
 }
 
+/**
+ * Preview output type for the intro screen
+ * Shows users what they'll get from the playbook
+ */
+export type PreviewOutputType = 'linkedin-post' | 'report' | 'data' | 'keywords' | 'custom'
+
+/**
+ * Presentation metadata for the playbook intro screen
+ * Helps users understand what the playbook does before starting
+ */
+export interface PlaybookPresentation {
+  /** Short tagline describing the playbook (e.g., "Genera posts de LinkedIn en minutos") */
+  tagline: string
+  /** List of benefits/outputs the user will get */
+  valueProposition: string[]
+  /** Optional example of what the output looks like */
+  exampleOutput?: {
+    type: PreviewOutputType
+    preview: {
+      text?: string
+      imageUrl?: string
+      /** Component name for custom previews */
+      customComponent?: string
+    }
+  }
+  /** Estimated time to complete (e.g., "2-3 minutos") */
+  estimatedTime: string
+  /** Estimated cost (e.g., "~$0.05 USD") */
+  estimatedCost: string
+  /** Required services/APIs with their status */
+  requiredServices?: Array<{
+    key: string // API key service name (e.g., 'openrouter', 'dumpling')
+    name: string // Display name (e.g., 'OpenRouter', 'Dumpling AI')
+    description: string // What it's used for
+  }>
+}
+
 export interface PlaybookConfig {
   id: string
   type: string // playbook_type from database
@@ -160,6 +197,12 @@ export interface PlaybookConfig {
   description?: string
   icon?: string
   phases: PhaseDefinition[]
+
+  /**
+   * Presentation metadata for the intro screen
+   * Communicates value and sets expectations before user starts
+   */
+  presentation?: PlaybookPresentation
 
   // Variables needed for this playbook
   variables?: Array<{
@@ -368,6 +411,7 @@ export interface WorkAreaProps {
   previousStepOutput?: unknown  // Output from the previous step
   projectId?: string            // Project ID for API calls
   playbookContext?: Record<string, unknown>  // Context with all previous step outputs
+  playbookConfig?: PlaybookConfig  // Full playbook config for input steps
   allSteps?: Array<{ definition: StepDefinition; state: StepState }>  // All steps info for inspection panel
   saveState?: {                 // Auto-save state for showing saved indicator
     isSaving: boolean

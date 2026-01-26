@@ -27,6 +27,8 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/components/ui'
 import ReactMarkdown from 'react-markdown'
+import PlaybookIntroScreen from '@/components/playbook/PlaybookIntroScreen'
+import { signalOutreachConfig } from '@/components/playbook/configs'
 
 interface SignalBasedOutreachPlaybookProps {
   projectId: string
@@ -230,6 +232,9 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
   const [foundPosts, setFoundPosts] = useState<EvaluatedPost[]>([])
   const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(new Set())
   const [isScrapingEngagers, setIsScrapingEngagers] = useState(false)
+
+  // Intro screen state
+  const [showIntro, setShowIntro] = useState(true)
 
   // Load saved config from project
   useEffect(() => {
@@ -682,6 +687,16 @@ export default function SignalBasedOutreachPlaybook({ projectId }: SignalBasedOu
     return foundPosts
       .filter(p => selectedPostIds.has(p.id))
       .reduce((sum, p) => sum + (p.likes || 0) + (p.comments || 0), 0)
+  }
+
+  // Show intro screen if not dismissed
+  if (showIntro) {
+    return (
+      <PlaybookIntroScreen
+        playbookConfig={signalOutreachConfig}
+        onStart={() => setShowIntro(false)}
+      />
+    )
   }
 
   return (

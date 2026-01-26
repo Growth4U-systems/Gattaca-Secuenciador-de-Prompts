@@ -305,8 +305,8 @@ These commands must pass for every user story:
 
 ---
 
-### US-016: Generate Playbook Config File
-**Description:** As a developer, I want to generate a complete playbook config from analyzed workflow.
+### US-016: Generate Playbook Config File (with UX Metadata)
+**Description:** As a developer, I want to generate a complete playbook config that includes all UX presentation data so that playbooks feel engaging and communicate value clearly.
 
 **Acceptance Criteria:**
 - [ ] Create `src/lib/n8n-converter/generators/playbook-config.generator.ts`
@@ -320,6 +320,90 @@ These commands must pass for every user story:
 - [ ] Infer step descriptions from node names
 - [ ] Output valid TypeScript matching `PlaybookConfig` interface
 - [ ] Include imports and exports
+- [ ] **Generate `presentation` block** (see US-016b)
+- [ ] **Generate `guidance` for each step** (see US-016c)
+- [ ] **Generate `executionExplanation` for auto steps** (see US-016d)
+
+---
+
+### US-016b: Generate Presentation Metadata for Onboarding
+**Description:** As a user, I want the generated playbook to have an engaging intro screen that explains what it does and what I'll get.
+
+**Acceptance Criteria:**
+- [ ] Generate `presentation` block in PlaybookConfig:
+  ```typescript
+  presentation: {
+    tagline: string;              // Auto-inferred from workflow name/description
+    valueProposition: string[];   // What the user will get (inferred from output nodes)
+    exampleOutput?: {             // Preview of expected result
+      type: 'linkedin-post' | 'report' | 'data' | 'keywords' | 'custom';
+      preview: { text?: string; imageUrl?: string; };
+    };
+    estimatedTime: string;        // Sum of all step estimated times
+    estimatedCost: string;        // Based on API services used
+    requiredServices?: Array<{    // Services shown in intro screen with config status
+      key: string;                // Must match ServiceName in getUserApiKey (e.g., 'dumpling')
+      name: string;               // Display name (e.g., 'Dumpling AI')
+      description: string;        // What this service does
+    }>;
+  }
+  ```
+
+**Note:** The `requiredServices` array enables the intro screen to check if services are configured. The `key` must match the service names used in `getUserApiKey.ts`.
+- [ ] Infer `tagline` from workflow name: "Auto-Generate LinkedIn Posts" → "Genera posts de LinkedIn automáticamente"
+- [ ] Infer `valueProposition` from output node types:
+  - If has image generation → "Imagen profesional generada con IA"
+  - If has text generation → "Contenido listo para publicar"
+  - If has data scraping → "Datos de fuentes verificadas"
+- [ ] Calculate `estimatedTime` summing step estimates (default 30s per API call)
+- [ ] Calculate `estimatedCost` based on services:
+  - OpenRouter/GPT-4: ~$0.03 per call
+  - Dumpling AI: ~$0.02 per search
+  - Image generation: ~$0.05 per image
+
+---
+
+### US-016c: Generate Step Guidance
+**Description:** As a user, I want each step to have clear guidance that explains what to do and what's happening.
+
+**Acceptance Criteria:**
+- [ ] Generate `guidance` for each step:
+  ```typescript
+  guidance: {
+    description: string;           // What this step does (human-friendly)
+    userActions: string[];         // What the user needs to do
+    completionCriteria: {
+      description: string;
+      type: 'input_required' | 'auto_complete' | 'manual';
+    };
+  }
+  ```
+- [ ] For input steps: guidance explains what to enter and why
+- [ ] For auto steps: guidance explains what's happening behind the scenes
+- [ ] For review steps: guidance explains what to check
+- [ ] Infer from n8n node descriptions and parameters
+
+---
+
+### US-016d: Generate Execution Explanations
+**Description:** As a user, I want to see progress details while steps execute so I understand what's happening.
+
+**Acceptance Criteria:**
+- [ ] Generate `executionExplanation` for auto/API steps:
+  ```typescript
+  executionExplanation: {
+    title: string;                 // "Buscando artículos relevantes..."
+    steps: string[];               // Sub-steps shown during execution
+    estimatedTime: string;         // "30-45 segundos"
+    estimatedCost: string;         // "~$0.02"
+    costService: string;           // "Dumpling AI"
+  }
+  ```
+- [ ] Infer `steps` from n8n node type:
+  - HTTP Request → ["Conectando con API...", "Procesando respuesta..."]
+  - AI/LLM → ["Analizando contenido...", "Generando respuesta...", "Formateando salida..."]
+  - Search → ["Buscando resultados...", "Filtrando relevantes...", "Descargando contenido..."]
+- [ ] Map n8n credential types to `costService` names
 
 ---
 
@@ -410,7 +494,33 @@ These commands must pass for every user story:
 
 ---
 
-### US-022: Handle Unsupported Nodes Gracefully
+### US-022: Generate Integration Artifacts (Multi-File)
+**Description:** As a developer, I want the converter to generate ALL required integration artifacts across multiple files so that playbooks work end-to-end without manual fixes.
+
+**Acceptance Criteria:**
+- [ ] Detect all external API services used in the workflow
+- [ ] For each NEW service not in Gattaca, generate updates for ALL 5 files:
+  - `/api/user/api-keys/route.ts` - add to `SUPPORTED_SERVICES`
+  - `/api/user/api-keys/check/route.ts` - add to `ServiceName` type
+  - `/lib/getUserApiKey.ts` - add to `ServiceName` type AND both `envVarMap` objects
+  - `/components/settings/ApiKeySetupModal.tsx` - add to `SERVICE_INFO`
+  - `/components/settings/ApiKeysConfig.tsx` - add to `SERVICE_INFO`
+- [ ] Generated API routes MUST use `getUserApiKey()` pattern, NOT direct DB queries
+- [ ] Generated AI/LLM routes MUST use OpenRouter OAuth pattern (`user_openrouter_tokens` + `decryptToken`)
+- [ ] Generated API routes read from `previousOutputs.<stepId>` correctly
+- [ ] Generate SQL migration to insert playbook in database
+- [ ] Update `configs/index.ts` to register the new playbook
+- [ ] Generate variables array in config matching input step fields
+- [ ] Step configs include correct `requiredApiKeys` array
+- [ ] Include comprehensive checklist in conversion report:
+  - Files modified/created
+  - Environment variables needed
+  - Services to configure in settings
+  - Manual steps if any
+
+---
+
+### US-023: Handle Unsupported Nodes Gracefully
 **Description:** As a user, I want unsupported nodes handled gracefully so partial conversion is useful.
 
 **Acceptance Criteria:**
@@ -437,7 +547,7 @@ These commands must pass for every user story:
 
 ---
 
-### US-023: Create Test Suite with Real Workflows
+### US-024: Create Test Suite with Real Workflows
 **Description:** As a developer, I want integration tests with real n8n workflows to verify conversion quality.
 
 **Acceptance Criteria:**
@@ -456,7 +566,7 @@ These commands must pass for every user story:
 
 ---
 
-### US-024: Write Converter Documentation
+### US-025: Write Converter Documentation
 **Description:** As a developer, I want documentation so others can extend the converter.
 
 **Acceptance Criteria:**
@@ -551,6 +661,344 @@ src/lib/n8n-converter/
 - Clear, actionable conversion report
 - New node converter can be added in < 2 hours
 
+## Integration Requirements (Critical)
+
+Based on actual conversion testing, these requirements are **MANDATORY** for generated playbooks to work end-to-end without manual fixes.
+
+### 1. API Service Registration (MULTI-FILE)
+
+Any API service used by the playbook MUST be registered in **ALL 5 LOCATIONS**:
+
+| File | Location | What to Add |
+|------|----------|-------------|
+| `/src/app/api/user/api-keys/route.ts` | `SUPPORTED_SERVICES` array | `'servicename'` |
+| `/src/app/api/user/api-keys/check/route.ts` | `ServiceName` type | `'servicename'` |
+| `/src/lib/getUserApiKey.ts` | `ServiceName` type | `'servicename'` |
+| `/src/lib/getUserApiKey.ts` | BOTH `envVarMap` objects (lines ~80 and ~124) | `servicename: 'SERVICE_ENV_VAR'` |
+| `/src/components/settings/ApiKeySetupModal.tsx` | `SERVICE_INFO` object | Full service config (see below) |
+| `/src/components/settings/ApiKeysConfig.tsx` | `SERVICE_INFO` object | Full service config (see below) |
+
+**SERVICE_INFO entry format:**
+```typescript
+servicename: {
+  name: 'servicename',           // Internal key (must match SUPPORTED_SERVICES)
+  label: 'Service Display Name', // UI display name
+  description: 'What this service does',
+  docsUrl: 'https://service.com/api-keys',
+  placeholder: 'sk_xxxxxxxxxxxx', // API key format hint
+},
+```
+
+**The converter must**:
+- Detect ALL external services the n8n workflow uses
+- Generate code/instructions to update ALL 5 files
+- Include environment variable names in conversion report
+
+**Checking API key configuration (for intro screens):**
+```typescript
+// ✅ CORRECT - use `services` (PLURAL) parameter
+const response = await fetch(`/api/user/api-keys/check?services=${serviceKey}`)
+const data = await response.json()
+// Response: { results: { [serviceKey]: { configured: boolean } }, allConfigured, missing }
+const isConfigured = data.results?.[serviceKey]?.configured ?? false
+
+// ❌ WRONG - `service` (singular) doesn't exist
+const response = await fetch(`/api/user/api-keys/check?service=${serviceKey}`)
+```
+
+### 2. API Key Retrieval Pattern (Use getUserApiKey)
+
+Generated API routes MUST use `getUserApiKey()` from `@/lib/getUserApiKey`:
+
+```typescript
+// ❌ WRONG - old pattern with wrong column names
+const { data: apiKeys } = await supabase
+  .from('user_api_keys')
+  .select('key_value')           // WRONG column!
+  .eq('provider', 'servicename') // WRONG column!
+  .single()
+
+// ✅ CORRECT - use getUserApiKey utility
+import { getUserApiKey } from '@/lib/getUserApiKey'
+
+const apiKey = await getUserApiKey({
+  userId: user.id,
+  serviceName: 'servicename',  // Must match ServiceName type
+  supabase,
+})
+
+if (!apiKey) {
+  return NextResponse.json(
+    { error: 'Service API key not configured. Please add it in settings.' },
+    { status: 400 }
+  )
+}
+```
+
+**Important:** `getUserApiKey` handles:
+- Fetching user's encrypted key from `user_api_keys.api_key_encrypted`
+- Decrypting with the correct salt format (`'salt'`, hex encoding)
+- Fallback to environment variable if user has no key
+
+### 3. OpenRouter (AI/LLM) Special Pattern
+
+OpenRouter uses OAuth, NOT the standard `user_api_keys` table. Generated AI routes MUST use:
+
+```typescript
+import { decryptToken } from '@/lib/encryption'
+
+async function getOpenRouterKey(userId: string, supabase: any): Promise<string | null> {
+  // 1. Try user's OAuth token (user_openrouter_tokens table)
+  const { data: tokenRecord } = await supabase
+    .from('user_openrouter_tokens')
+    .select('encrypted_api_key')
+    .eq('user_id', userId)
+    .single()
+
+  if (tokenRecord?.encrypted_api_key && tokenRecord.encrypted_api_key !== 'PENDING') {
+    try {
+      const oauthKey = decryptToken(tokenRecord.encrypted_api_key)
+      // Validate it looks like an OpenRouter key
+      if (oauthKey && (oauthKey.startsWith('sk-or-') || oauthKey.length > 20)) {
+        return oauthKey
+      }
+    } catch {
+      // Ignore decryption errors, fall through
+    }
+  }
+
+  // 2. Fallback to environment
+  return process.env.OPENROUTER_API_KEY || null
+}
+```
+
+**Key difference:** `decryptToken` uses salt `'gattaca-api-keys'` with base64 encoding (different from `getUserApiKey`).
+
+### 4. API Route Data Access Pattern (CRITICAL)
+
+Generated API routes MUST read input from `previousOutputs` (PLURAL), NOT from `previousStepOutput` (singular) or `input`:
+
+```typescript
+// ❌ WRONG - uses singular (doesn't match what PlaybookShell sends!)
+const { input, previousStepOutput, sessionId, stepId } = body
+const articles = previousStepOutput?.articles  // Will be undefined!
+
+// ❌ WRONG - reads directly from input (only works for current step)
+const topic = input?.topic
+
+// ✅ CORRECT - how PlaybookShell passes data (uses PLURAL previousOutputs)
+const body = await request.json()
+const { input, previousOutputs, sessionId, stepId } = body
+
+// Get data from previous step output BY STEP ID
+const inputStepOutput = previousOutputs?.define_topic as Record<string, string> | undefined
+const searchStepOutput = previousOutputs?.search_articles as Record<string, unknown> | undefined
+
+const topic = inputStepOutput?.topic || input?.topic
+const articles = searchStepOutput?.articles || input?.articles
+```
+
+**Common Bug:** Using `previousStepOutput` (singular) instead of `previousOutputs` (plural). This will cause "No data provided" errors because the variable is always undefined.
+
+PlaybookShell sends this payload:
+```json
+{
+  "projectId": "...",
+  "stepId": "current_step",
+  "input": null,
+  "previousOutputs": {
+    "define_topic": { "topic": "AI in Marketing", "tone": "professional" },
+    "search_articles": { "articles": [...], "topic": "..." }
+  },
+  "sessionId": "..."
+}
+```
+
+**Key points:**
+- Access data by step ID: `previousOutputs.step_id_here`
+- Input step data is in `previousOutputs.define_topic` (or whatever the input step ID is)
+- Always use fallback: `previousOutputs?.step_id?.field || input?.field`
+
+### 5. Input Step Type Handling
+
+The `'input'` step type requires:
+- Step config with `type: 'input'` and `executor: 'form'`
+- WorkArea.tsx already handles this via InputStep component
+- Form fields with explicit dark text styling: `text-gray-900 bg-white placeholder:text-gray-400`
+
+### 6. PlaybookConfig Variables
+
+Input steps derive their form fields from `playbookConfig.variables`:
+
+```typescript
+variables: [
+  {
+    key: 'topic',           // Used as form field name and state key
+    label: 'Topic',         // Display label
+    type: 'text',           // text | textarea | select | number
+    required: true,         // Validation
+    placeholder: '...',     // Placeholder text
+    options?: [...]         // For select type
+  }
+]
+```
+
+### 7. requiredApiKeys in Step Config
+
+If a step needs an API key, include it in the step config:
+
+```typescript
+{
+  id: 'search_articles',
+  name: 'Search Articles',
+  type: 'auto',
+  executor: '/api/playbook/linkedin-post-generator/search-articles',
+  requiredApiKeys: ['dumpling'],  // Will show setup modal if not configured
+  dependsOn: ['define_topic'],
+}
+```
+
+WorkArea.tsx checks these before executing and shows ApiKeySetupModal for missing keys.
+
+### 8. API Response Format for Display
+
+Generated API routes should return data in formats that WorkArea can display nicely:
+
+```typescript
+// ✅ GOOD - articles with structured data (WorkArea renders as nice list)
+return NextResponse.json({
+  success: true,
+  data: {
+    topic: "AI in Marketing",
+    articleCount: 3,
+    articles: [
+      { title: "Article Title", url: "https://...", snippet: "Preview text..." },
+      // ...
+    ]
+  }
+})
+
+// ✅ GOOD - text content (WorkArea renders as preformatted text)
+return NextResponse.json({
+  success: true,
+  data: {
+    postText: "Your generated LinkedIn post...",
+    imagePrompt: "A professional image showing..."
+  }
+})
+
+// ❌ AVOID - deeply nested data that's hard to display
+return NextResponse.json({
+  result: { nested: { deeply: { data: "..." } } }
+})
+```
+
+**WorkArea auto-detects and renders:**
+- Objects with `articles` array → Formatted article list with title/URL/snippet
+- String content → Preformatted text with character count
+- Other objects → JSON formatted display
+
+**Important:** The step's `output` in state should contain the `data` field content, not the entire response wrapper.
+
+### 9. Step Types and User Experience
+
+**Critical Rule:** Steps with `type: 'auto'` do NOT auto-advance to the next step after completion. The user must see the results and click "Siguiente" in the navigation panel when ready.
+
+**Step Type Behaviors:**
+
+| Type | Execution | After Completion | User Action Required |
+|------|-----------|------------------|---------------------|
+| `input` | User fills form | User clicks "Continuar" | Yes |
+| `auto` | Executes when user clicks "Ejecutar" | Shows results, waits for user | User clicks "Siguiente" in nav |
+| `auto_with_review` | Executes when user clicks "Ejecutar" | Shows results with edit options | User clicks "Aprobar y continuar" |
+| `suggestion` | Shows AI suggestions | User selects option | User clicks "Continuar" |
+| `decision` | Shows options | User selects | User clicks "Continuar" |
+| `manual` | No execution | User manually completes | User clicks "Marcar completado" |
+
+**Why No Auto-Advance:**
+
+1. **User visibility:** Users need to see and verify step results (e.g., "3 articles found") before proceeding
+2. **Error awareness:** If something unexpected happens, user can review and decide to re-execute
+3. **Flow control:** User maintains control over when to proceed
+4. **Preview expectations:** Users expect to review what was generated/found
+
+**Generated Config Example:**
+```typescript
+// ✅ CORRECT - auto step that waits for user review
+{
+  id: 'search_articles',
+  name: 'Search Articles',
+  type: 'auto',  // Will show results and wait for "Siguiente"
+  executor: 'api',
+  apiEndpoint: '/api/playbook/linkedin-post-generator/search-articles',
+}
+
+// ✅ CORRECT - if user must approve output before continuing
+{
+  id: 'review_post',
+  name: 'Review Post',
+  type: 'auto_with_review',  // Has "Aprobar y continuar" button
+  executor: 'none',
+}
+```
+
+### 10. Generated Files Checklist
+
+For a complete conversion, the converter must generate/update:
+
+| File | Purpose | Required? |
+|------|---------|-----------|
+| `src/components/playbook/configs/[name].config.ts` | Playbook configuration | ✅ Always |
+| `src/components/playbook/configs/index.ts` | Add to playbookConfigs registry | ✅ Always |
+| `src/app/api/playbook/[name]/[step]/route.ts` | API routes for auto steps | ✅ Per step |
+| `/src/app/api/user/api-keys/route.ts` | Add to SUPPORTED_SERVICES | If new service |
+| `/src/app/api/user/api-keys/check/route.ts` | Add to ServiceName type | If new service |
+| `/src/lib/getUserApiKey.ts` | Add to ServiceName + both envVarMaps | If new service |
+| `/src/components/settings/ApiKeySetupModal.tsx` | Add to SERVICE_INFO | If new service |
+| `/src/components/settings/ApiKeysConfig.tsx` | Add to SERVICE_INFO | If new service |
+| Database INSERT | Add playbook to `playbooks` table | ✅ Always |
+
+### 11. Database Registration
+
+Playbooks must be registered in both:
+1. **TypeScript config** (`configs/index.ts`)
+2. **Database table** (`playbooks`)
+
+Generate SQL migration:
+```sql
+INSERT INTO playbooks (agency_id, name, slug, description, playbook_type, type, is_public, version, config)
+VALUES (
+  (SELECT id FROM agencies LIMIT 1),
+  'LinkedIn Post Generator',
+  'linkedin-post-generator',
+  'Generate LinkedIn posts from any topic',
+  'linkedin-post-generator',
+  'linkedin-post-generator',
+  true,
+  '1.0.0',
+  '{"source": "n8n", "n8n_workflow_name": "Auto-Generate LinkedIn Posts"}'
+);
+```
+
+### 10. Known Services Mapping
+
+The converter should recognize these n8n credential types and map to Gattaca services:
+
+| n8n Credential Type | Gattaca Service Name | Env Variable |
+|---------------------|---------------------|--------------|
+| `dumplingAiApi` | `dumpling` | `DUMPLING_API_KEY` |
+| `openAiApi`, `openRouterApi` | `openrouter` (OAuth) | `OPENROUTER_API_KEY` |
+| `apifyApi` | `apify` | `APIFY_TOKEN` |
+| `firecrawlApi` | `firecrawl` | `FIRECRAWL_API_KEY` |
+| `serperApi` | `serper` | `SERPER_API_KEY` |
+| `perplexityApi` | `perplexity` | `PERPLEXITY_API_KEY` |
+| `phantombusterApi` | `phantombuster` | `PHANTOMBUSTER_API_KEY` |
+
+If a new service is detected that's not in this list, the converter should:
+1. Flag it in the conversion report
+2. Generate placeholder code with TODO comments
+3. List the required file updates
+
 ## Open Questions
 
 1. Should parallel fan-out be converted to sequential (simpler) or flagged for manual parallel implementation?
@@ -558,11 +1006,97 @@ src/lib/n8n-converter/
 3. Should we generate one mega API route or per-step routes?
 4. How do we handle n8n's binary data in expressions?
 
+## UX Requirements (Critical)
+
+> **Documento relacionado:** [PRD: Playbook UX Redesign](./prd-playbook-ux-redesign.md)
+
+Los playbooks generados deben sentirse **cálidos, claros y orientados al valor**, no fríos ni técnicos. El convertidor debe generar toda la metadata necesaria para una buena UX.
+
+### Principios de UX para Playbooks Generados
+
+1. **Valor antes que proceso**: El usuario debe entender QUÉ va a obtener antes de ver los pasos
+2. **Contexto en cada paso**: Explicar qué está pasando y por qué, no solo el nombre técnico
+3. **Feedback constante**: Mostrar progreso, tiempo estimado, qué se está haciendo
+4. **Resultado celebrado**: El output final debe presentarse de forma atractiva
+
+### Metadata UX Requerida en Config
+
+Cada playbook generado DEBE incluir:
+
+```typescript
+// 1. Bloque de presentación para pantalla de inicio
+presentation: {
+  tagline: "Genera posts de LinkedIn en minutos",
+  valueProposition: [
+    "Post listo para publicar con hook atractivo",
+    "Imagen profesional generada con IA",
+    "Fuentes verificadas de artículos reales"
+  ],
+  exampleOutput: {
+    type: 'linkedin-post',
+    preview: { text: "Ejemplo de post...", imageUrl: "/examples/..." }
+  },
+  estimatedTime: "2-3 minutos",
+  estimatedCost: "~$0.05 USD",
+  // IMPORTANT: requiredServices enables intro screen to check configuration status
+  requiredServices: [
+    { key: 'openrouter', name: 'OpenRouter (IA)', description: 'Genera el contenido usando GPT-4o' },
+    { key: 'dumpling', name: 'Dumpling AI', description: 'Busca y extrae artículos' }
+  ]
+}
+
+// 2. Guidance en cada step
+steps: [{
+  id: 'search_articles',
+  guidance: {
+    description: "Buscando los mejores artículos sobre tu tema...",
+    userActions: ["Espera mientras buscamos fuentes de calidad"],
+    completionCriteria: { type: 'auto_complete', description: "Artículos encontrados" }
+  },
+  executionExplanation: {
+    title: "Investigando tu tema",
+    steps: [
+      "Buscando artículos relevantes en Google",
+      "Filtrando por calidad y relevancia",
+      "Extrayendo contenido de los mejores 3"
+    ],
+    estimatedTime: "30-45 segundos",
+    estimatedCost: "~$0.02",
+    costService: "Dumpling AI"
+  }
+}]
+```
+
+### Inferencia de UX desde n8n
+
+El convertidor debe inferir la metadata UX:
+
+| Elemento n8n | Metadata UX generada |
+|--------------|---------------------|
+| Nombre del workflow | `presentation.tagline` |
+| Output nodes (tipo) | `presentation.valueProposition` |
+| Total de API calls | `presentation.estimatedTime` |
+| Credenciales usadas | `presentation.estimatedCost` |
+| Nombre del nodo | `step.guidance.description` |
+| Tipo de nodo | `step.executionExplanation.steps` |
+
+### Validación de UX
+
+El convertidor debe validar que:
+- [ ] Todos los steps tienen `guidance` con `description` no vacía
+- [ ] Todos los steps `auto` tienen `executionExplanation`
+- [ ] El playbook tiene `presentation` completa
+- [ ] Los tiempos y costos estimados son realistas (no placeholder)
+
 ## Implementation Order
 
 1. **Week 1**: US-001 → US-004 (Foundation: types, parser, analyzer)
 2. **Week 2**: US-005 → US-008 (Patterns: detection algorithms)
 3. **Week 3**: US-009 → US-014 (Converters: node-specific logic)
-4. **Week 4**: US-015 → US-018 (Generation: code output)
+4. **Week 4**: US-015 → US-018 (Generation: code output + UX metadata)
 5. **Week 5**: US-019 → US-022 (UX: CLI, UI, reporting)
 6. **Week 6**: US-023 → US-024 (Quality: tests, docs)
+
+## Related Documents
+
+- [PRD: Playbook UX Redesign](./prd-playbook-ux-redesign.md) - Especificación completa de la nueva UX de playbooks

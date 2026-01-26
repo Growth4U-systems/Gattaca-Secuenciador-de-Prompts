@@ -13,6 +13,7 @@ import PlaybookWizardNav from './PlaybookWizardNav'
 import NavigationPanel from './NavigationPanel'
 import PlaybookStepContainer from './PlaybookStepContainer'
 import SessionDataPanel from './SessionDataPanel'
+import PlaybookIntroScreen from './PlaybookIntroScreen'
 import { PlaybookContextProvider } from './PlaybookContext'
 import { useStepPersistence } from '@/hooks/useStepPersistence'
 import { useStepRetry } from '@/hooks/useStepRetry'
@@ -243,6 +244,9 @@ export default function PlaybookShellV2({
   const [state, setState] = useState<PlaybookState>(() =>
     initializeState(projectId, playbookConfig, initialState)
   )
+
+  // Intro screen state - show if config has presentation metadata
+  const [showIntroScreen, setShowIntroScreen] = useState(!!playbookConfig.presentation)
 
   // Session panel visibility
   const [showDataPanel, setShowDataPanel] = useState(false)
@@ -604,6 +608,16 @@ export default function PlaybookShellV2({
           sessionId={sessionId}
         />
       </PlaybookStepContainer>
+    )
+  }
+
+  // Show intro screen if enabled and config has presentation
+  if (showIntroScreen && playbookConfig.presentation) {
+    return (
+      <PlaybookIntroScreen
+        playbookConfig={playbookConfig}
+        onStart={() => setShowIntroScreen(false)}
+      />
     )
   }
 

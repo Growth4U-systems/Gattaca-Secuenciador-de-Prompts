@@ -3,6 +3,7 @@ import { createClient as createServerClient } from '@/lib/supabase-server'
 import { getUserApiKey } from '@/lib/getUserApiKey'
 import { decryptToken } from '@/lib/encryption'
 import { trackLLMUsage } from '@/lib/polar-usage'
+import { parseLLMArrayResponse } from '@/lib/llm-parser'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -112,24 +113,48 @@ export async function POST(request: NextRequest) {
 
     switch (promptKey) {
       case 'suggest_need_words':
-        prompt = `Eres un experto en investigación de mercado y análisis de necesidades del consumidor.
+        // Build context-aware prompt for product-specific need words
+        const hasContext = product || target || industry
+        prompt = hasContext
+          ? `Eres un experto en investigación de mercado y Jobs To Be Done (JTBD).
 
-**Producto/Servicio:** ${product}
-**Público objetivo:** ${target}
-**Industria:** ${industry}
+**PRODUCTO/SERVICIO:** ${product || 'No especificado'}
+${target ? `**PÚBLICO OBJETIVO:** ${target}` : ''}
+${industry ? `**INDUSTRIA:** ${industry}` : ''}
 
-**Tu tarea:** Genera una lista de 15-20 palabras o frases cortas que las personas usan cuando buscan soluciones al problema que este producto resuelve.
+**TU TAREA:**
+1. Analiza qué hace este producto y qué problemas resuelve
+2. Identifica los Jobs To Be Done (JTBD) que cubre
+3. Traduce esas funcionalidades/JTBD a PALABRAS que las personas usan cuando tienen esa necesidad
 
-Piensa en:
-- Palabras que alguien escribiría en Google cuando tiene este problema
-- Frases que inician con "cómo", "problemas con", "no puedo", "necesito ayuda"
-- Términos que expresan frustración o necesidad
-- Palabras específicas de la industria
+**QUÉ SON LAS PALABRAS DE NECESIDAD:**
+Son los sustantivos y términos que las personas mencionan cuando hablan de su problema o necesidad, ANTES de conocer la solución.
 
-**Formato de respuesta:** Devuelve SOLO un array JSON de strings, sin explicaciones.
+**PROCESO DE TRANSFORMACIÓN (ejemplos):**
 
-Ejemplo de formato:
-["problemas con", "cómo solucionar", "necesito ayuda", "no funciona"]
+Producto: "App de facturación para freelancers"
+- Funcionalidad: Crear facturas automáticas → Palabra: "facturas"
+- Funcionalidad: Calcular impuestos → Palabras: "impuestos", "IVA", "retenciones"
+- JTBD: Cobrar más rápido → Palabras: "cobros", "clientes morosos", "pagos pendientes"
+- JTBD: Controlar gastos → Palabras: "gastos", "deducciones", "recibos"
+
+Producto: "CRM para inmobiliarias"
+- Funcionalidad: Gestionar propiedades → Palabras: "propiedades", "inmuebles", "cartera"
+- Funcionalidad: Seguimiento de clientes → Palabras: "prospectos", "visitas", "cierres"
+- JTBD: Vender más rápido → Palabras: "ventas", "comisiones", "exclusivas"
+
+**GENERA 10-15 palabras de necesidad para este producto específico.**
+
+Piensa en al menos 10 palabras: "¿Qué palabras usa alguien que tiene el problema que este producto resuelve?"
+
+**Formato:** Array JSON de strings. Solo la lista, sin explicaciones.
+
+Responde SOLO con el array JSON:`
+          : `Genera una lista de 10-15 palabras de necesidad genéricas comunes en negocios.
+
+Ejemplos: "costos", "tiempo", "clientes", "ventas", "reportes", "datos", "equipo", "procesos"
+
+**Formato:** Array JSON de strings.
 
 Responde SOLO con el array JSON:`
         break
@@ -240,71 +265,41 @@ Responde SOLO con el array JSON:`
       })
     }
 
-    // Parse response
-    try {
-      // Try to extract JSON from the response
-      let jsonStr = output.trim()
+    // Parse response using robust parser
+    const parseResult = parseLLMArrayResponse<string[]>(output, { truncateRaw: 150 })
 
-      // Remove markdown code blocks if present
-      const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
-      if (jsonMatch) {
-        jsonStr = jsonMatch[1].trim()
-      }
-
-      // Try to find array in the response
-      const arrayMatch = jsonStr.match(/\[[\s\S]*\]/)
-      if (arrayMatch) {
-        const parsed = JSON.parse(arrayMatch[0])
-
-        // Return based on promptKey
-        if (promptKey === 'suggest_subreddits') {
-          return NextResponse.json({ success: true, subreddits: parsed })
-        } else if (promptKey === 'suggest_forums') {
-          return NextResponse.json({ success: true, forums: parsed })
-        } else {
-          return NextResponse.json({ success: true, suggestions: parsed })
-        }
-      }
-
-      // Try direct parse
-      const parsed = JSON.parse(jsonStr)
-      if (Array.isArray(parsed)) {
-        if (promptKey === 'suggest_subreddits') {
-          return NextResponse.json({ success: true, subreddits: parsed })
-        } else if (promptKey === 'suggest_forums') {
-          return NextResponse.json({ success: true, forums: parsed })
-        } else {
-          return NextResponse.json({ success: true, suggestions: parsed })
-        }
-      }
-
-      throw new Error('Could not parse LLM response')
-    } catch (parseError) {
-      console.error('[generate-suggestions] Parse error:', parseError, 'Output:', output)
-
-      // Return empty result with the raw output for debugging
+    if (parseResult.success && parseResult.data) {
+      // Return based on promptKey
       if (promptKey === 'suggest_subreddits') {
-        return NextResponse.json({
-          success: false,
-          subreddits: [],
-          error: 'Could not parse subreddits',
-          raw: output
-        })
+        return NextResponse.json({ success: true, subreddits: parseResult.data })
       } else if (promptKey === 'suggest_forums') {
-        return NextResponse.json({
-          success: false,
-          forums: [],
-          error: 'Could not parse forums',
-          raw: output
-        })
+        return NextResponse.json({ success: true, forums: parseResult.data })
       } else {
-        return NextResponse.json({
-          success: false,
-          suggestions: [],
-          error: 'Could not parse suggestions',
-          raw: output
-        })
+        return NextResponse.json({ success: true, suggestions: parseResult.data })
       }
+    }
+
+    // Parse failed - return error with truncated raw output (no sensitive data leak)
+    console.error('[generate-suggestions] Parse error:', parseResult.error)
+
+    if (promptKey === 'suggest_subreddits') {
+      return NextResponse.json({
+        success: false,
+        subreddits: [],
+        error: parseResult.error || 'Could not parse subreddits',
+      })
+    } else if (promptKey === 'suggest_forums') {
+      return NextResponse.json({
+        success: false,
+        forums: [],
+        error: parseResult.error || 'Could not parse forums',
+      })
+    } else {
+      return NextResponse.json({
+        success: false,
+        suggestions: [],
+        error: parseResult.error || 'Could not parse suggestions',
+      })
     }
 
   } catch (error) {

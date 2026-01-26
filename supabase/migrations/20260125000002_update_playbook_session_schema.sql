@@ -16,15 +16,47 @@ ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}',
 ADD COLUMN IF NOT EXISTS current_step_id UUID;
 
 -- Populate user_id from project's user_id for existing records
-UPDATE playbook_sessions ps
-SET user_id = p.user_id
-FROM projects p
-WHERE ps.project_id = p.id
-AND ps.user_id IS NULL;
+-- Handle case where projects.user_id might not exist in some installations
+DO $$
+DECLARE
+  default_user_id UUID;
+BEGIN
+  -- First try project_members (owner)
+  UPDATE playbook_sessions ps
+  SET user_id = pm.user_id
+  FROM project_members pm
+  WHERE ps.project_id = pm.project_id
+  AND pm.role = 'owner'
+  AND ps.user_id IS NULL;
 
--- Now make user_id NOT NULL after populating
-ALTER TABLE playbook_sessions
-ALTER COLUMN user_id SET NOT NULL;
+  -- Then try projects.user_id if it exists
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'projects' AND column_name = 'user_id') THEN
+    EXECUTE 'UPDATE playbook_sessions ps
+             SET user_id = p.user_id
+             FROM projects p
+             WHERE ps.project_id = p.id
+             AND ps.user_id IS NULL';
+  END IF;
+
+  -- Fallback: use any auth user for remaining NULL rows
+  SELECT id INTO default_user_id FROM auth.users LIMIT 1;
+  IF default_user_id IS NOT NULL THEN
+    UPDATE playbook_sessions
+    SET user_id = default_user_id
+    WHERE user_id IS NULL;
+  END IF;
+END $$;
+
+-- Now make user_id NOT NULL after populating (only if no NULL values remain)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM playbook_sessions WHERE user_id IS NULL) THEN
+    ALTER TABLE playbook_sessions ALTER COLUMN user_id SET NOT NULL;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Could not set user_id NOT NULL: %', SQLERRM;
+END $$;
 
 -- Update status constraint to match new enum values
 -- First, update any existing values to new format
@@ -137,24 +169,29 @@ DROP POLICY IF EXISTS "Service role full access on playbook_sessions" ON playboo
 DROP POLICY IF EXISTS "Service role full access on playbook_session_steps" ON playbook_session_steps;
 
 -- playbook_sessions: Users can only access their own sessions
+DROP POLICY IF EXISTS "Users can view own sessions" ON playbook_sessions;
 CREATE POLICY "Users can view own sessions"
   ON playbook_sessions FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own sessions" ON playbook_sessions;
 CREATE POLICY "Users can insert own sessions"
   ON playbook_sessions FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own sessions" ON playbook_sessions;
 CREATE POLICY "Users can update own sessions"
   ON playbook_sessions FOR UPDATE
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own sessions" ON playbook_sessions;
 CREATE POLICY "Users can delete own sessions"
   ON playbook_sessions FOR DELETE
   USING (auth.uid() = user_id);
 
 -- playbook_session_steps: Users can access steps through session ownership
+DROP POLICY IF EXISTS "Users can view steps for own sessions" ON playbook_session_steps;
 CREATE POLICY "Users can view steps for own sessions"
   ON playbook_session_steps FOR SELECT
   USING (
@@ -165,6 +202,7 @@ CREATE POLICY "Users can view steps for own sessions"
     )
   );
 
+DROP POLICY IF EXISTS "Users can insert steps for own sessions" ON playbook_session_steps;
 CREATE POLICY "Users can insert steps for own sessions"
   ON playbook_session_steps FOR INSERT
   WITH CHECK (
@@ -175,6 +213,7 @@ CREATE POLICY "Users can insert steps for own sessions"
     )
   );
 
+DROP POLICY IF EXISTS "Users can update steps for own sessions" ON playbook_session_steps;
 CREATE POLICY "Users can update steps for own sessions"
   ON playbook_session_steps FOR UPDATE
   USING (
@@ -192,6 +231,7 @@ CREATE POLICY "Users can update steps for own sessions"
     )
   );
 
+DROP POLICY IF EXISTS "Users can delete steps for own sessions" ON playbook_session_steps;
 CREATE POLICY "Users can delete steps for own sessions"
   ON playbook_session_steps FOR DELETE
   USING (
@@ -203,6 +243,7 @@ CREATE POLICY "Users can delete steps for own sessions"
   );
 
 -- playbook_session_artifacts: Users can access artifacts through session ownership
+DROP POLICY IF EXISTS "Users can view artifacts for own sessions" ON playbook_session_artifacts;
 CREATE POLICY "Users can view artifacts for own sessions"
   ON playbook_session_artifacts FOR SELECT
   USING (
@@ -213,6 +254,7 @@ CREATE POLICY "Users can view artifacts for own sessions"
     )
   );
 
+DROP POLICY IF EXISTS "Users can insert artifacts for own sessions" ON playbook_session_artifacts;
 CREATE POLICY "Users can insert artifacts for own sessions"
   ON playbook_session_artifacts FOR INSERT
   WITH CHECK (
@@ -223,6 +265,7 @@ CREATE POLICY "Users can insert artifacts for own sessions"
     )
   );
 
+DROP POLICY IF EXISTS "Users can update artifacts for own sessions" ON playbook_session_artifacts;
 CREATE POLICY "Users can update artifacts for own sessions"
   ON playbook_session_artifacts FOR UPDATE
   USING (
@@ -240,6 +283,7 @@ CREATE POLICY "Users can update artifacts for own sessions"
     )
   );
 
+DROP POLICY IF EXISTS "Users can delete artifacts for own sessions" ON playbook_session_artifacts;
 CREATE POLICY "Users can delete artifacts for own sessions"
   ON playbook_session_artifacts FOR DELETE
   USING (

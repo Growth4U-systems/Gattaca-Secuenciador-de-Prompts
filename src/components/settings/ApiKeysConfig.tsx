@@ -65,6 +65,13 @@ const SERVICE_INFO: Record<string, ServiceInfo> = {
     docsUrl: 'https://my.blotato.com/settings',
     placeholder: 'blotato_xxxxxxxxxxxx',
   },
+  dumpling: {
+    name: 'dumpling',
+    label: 'Dumpling AI',
+    description: 'Búsqueda web y scraping de artículos con IA',
+    docsUrl: 'https://app.dumplingai.com/api-keys',
+    placeholder: 'dpl_xxxxxxxxxxxx',
+  },
 };
 
 export default function ApiKeysConfig() {
@@ -251,7 +258,7 @@ export default function ApiKeysConfig() {
                           value={newKeyValue}
                           onChange={(e) => setNewKeyValue(e.target.value)}
                           placeholder={info?.placeholder || 'Nueva API key...'}
-                          className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm text-gray-900 bg-white placeholder:text-gray-400"
                         />
                         <button
                           type="button"
@@ -352,7 +359,7 @@ export default function ApiKeysConfig() {
                           value={newKeyValue}
                           onChange={(e) => setNewKeyValue(e.target.value)}
                           placeholder={info?.placeholder || 'Tu API key...'}
-                          className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm text-gray-900 bg-white placeholder:text-gray-400"
                           autoFocus
                         />
                         <button

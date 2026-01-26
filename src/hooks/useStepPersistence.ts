@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { StepState, StepStatus } from '@/components/playbook/types'
 
 export interface StepPersistenceConfig {
@@ -374,8 +374,9 @@ export function useStepPersistence(
     isDirty,
   }
 
-  // Build actions object
-  const actions: StepPersistenceActions = {
+  // Build actions object with stable reference
+  // This is critical to avoid re-running useEffects that depend on actions
+  const actions: StepPersistenceActions = useMemo(() => ({
     saveStep,
     markStepRunning,
     markStepCompleted,
@@ -385,7 +386,17 @@ export function useStepPersistence(
     loadStepData,
     loadAllSteps,
     clearSaveError,
-  }
+  }), [
+    saveStep,
+    markStepRunning,
+    markStepCompleted,
+    markStepFailed,
+    saveStepOutput,
+    scheduleAutoSave,
+    loadStepData,
+    loadAllSteps,
+    clearSaveError,
+  ])
 
   return [state, actions]
 }

@@ -9,6 +9,11 @@ export const dynamic = 'force-dynamic'
 const FIRECRAWL_COST_PER_PAGE = 0.001
 const LLM_COST_PER_URL = 0.0002 // Approximate for GPT-4o-mini
 
+// Limits to prevent exponential combinations
+const MAX_LIFE_CONTEXTS = 15
+const MAX_PRODUCT_WORDS = 15
+const MAX_COMBINATIONS = 100
+
 export async function POST(
   request: NextRequest
 ): Promise<NextResponse<EstimateScraperCostResponse | { error: string }>> {
@@ -28,8 +33,32 @@ export async function POST(
       )
     }
 
+    // Validate limits to prevent exponential cost explosion
+    if (config.life_contexts.length > MAX_LIFE_CONTEXTS) {
+      return NextResponse.json(
+        { error: `Maximum ${MAX_LIFE_CONTEXTS} life contexts allowed. You have ${config.life_contexts.length}.` },
+        { status: 400 }
+      )
+    }
+
+    if (config.product_words.length > MAX_PRODUCT_WORDS) {
+      return NextResponse.json(
+        { error: `Maximum ${MAX_PRODUCT_WORDS} product words allowed. You have ${config.product_words.length}.` },
+        { status: 400 }
+      )
+    }
+
     // Calculate totals
     const totalCombinations = config.life_contexts.length * config.product_words.length
+
+    if (totalCombinations > MAX_COMBINATIONS) {
+      return NextResponse.json(
+        {
+          error: `Maximum ${MAX_COMBINATIONS} combinations allowed. You have ${totalCombinations} (${config.life_contexts.length} contexts × ${config.product_words.length} words). Please reduce selection.`
+        },
+        { status: 400 }
+      )
+    }
     const totalQueries = calculateTotalQueries(config)
     const serpPages = config.serp_pages || 5
     const totalSearches = totalQueries * serpPages

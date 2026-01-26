@@ -1,0 +1,453 @@
+{
+  "name": "n8n to Gattaca Converter",
+  "branchName": "ralph/n8n-converter",
+  "description": "Build a converter that transforms n8n workflow JSON into native Gattaca playbooks, bridging the architectural differences between n8n's DAG model and Gattaca's sequential playbook model.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Define n8n Workflow Type System",
+      "description": "As a developer, I want complete TypeScript types for n8n workflow JSON so that I can safely parse and analyze workflows.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/types/n8n-workflow.types.ts",
+        "Define N8nWorkflow interface with: id, name, nodes, connections, settings, active",
+        "Define N8nNode interface with: id, name, type, position, parameters, typeVersion, credentials, disabled",
+        "Define N8nConnections type with main and ai connection types",
+        "Define N8nConnection interface: { node, type, index }",
+        "Add JSDoc comments explaining each field's purpose",
+        "Export all types from index file",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented in src/lib/n8n-converter/types/n8n-workflow.types.ts",
+      "dependsOn": []
+    },
+    {
+      "id": "US-002",
+      "title": "Build Workflow Parser with Validation",
+      "description": "As a developer, I want to parse and validate n8n JSON so that I catch invalid inputs early.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/parser/workflow-parser.ts",
+        "Function parseN8nWorkflow(json: string) returns parsed workflow or throws error",
+        "Validate required fields: nodes array, connections object",
+        "Validate each node has: id, name, type, position",
+        "Handle both minified and pretty-printed JSON",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented in src/lib/n8n-converter/parser/workflow-parser.ts",
+      "dependsOn": ["US-001"]
+    },
+    {
+      "id": "US-003",
+      "title": "Build Graph Analyzer for Topology Detection",
+      "description": "As a developer, I want to analyze the workflow graph topology so that I can identify conversion patterns.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/analyzers/flow-analyzer.ts",
+        "Build adjacency list from connections object",
+        "Detect trigger nodes (entry points)",
+        "Detect terminal nodes (no outgoing connections)",
+        "Detect fan-out and fan-in points",
+        "Implement topological sort for execution order",
+        "Return FlowAnalysis object with topology metadata",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented in src/lib/n8n-converter/analyzers/flow-analyzer.ts",
+      "dependsOn": ["US-001"]
+    },
+    {
+      "id": "US-004",
+      "title": "Create Node Categorization System",
+      "description": "As a developer, I want to categorize n8n nodes by their role so that I know how to convert each one.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/analyzers/node-categorizer.ts",
+        "Define categories: trigger, action, transform, logic, ai, utility, unknown",
+        "Map common node types to categories with patterns",
+        "Return categorized node list with confidence score",
+        "Flag unknown nodes for manual review",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented in src/lib/n8n-converter/analyzers/node-categorizer.ts",
+      "dependsOn": ["US-001"]
+    },
+    {
+      "id": "US-005",
+      "title": "Detect Linear Chain Patterns",
+      "description": "As a developer, I want to detect linear chains in the workflow so that I can convert them to sequential steps.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/patterns/linear-chain.detector.ts",
+        "Identify sequences of nodes with single input/output",
+        "Group consecutive transform nodes into compound steps",
+        "Preserve node order from topological sort",
+        "Return LinearChain[] with start, end, and intermediate nodes",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented in src/lib/n8n-converter/patterns/linear-chain.detector.ts",
+      "dependsOn": ["US-003"]
+    },
+    {
+      "id": "US-006",
+      "title": "Detect Branch Patterns (IF/Switch)",
+      "description": "As a developer, I want to detect conditional branches so that I can convert them to Gattaca step conditions.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/patterns/branch.detector.ts",
+        "Identify IF nodes and their two output branches",
+        "Identify Switch nodes and their multiple output branches",
+        "Track which branch leads where (true/false path)",
+        "Detect if branches merge back (reconvergence point)",
+        "Return BranchPattern with: condition node, branches[], mergePoint",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-003"]
+    },
+    {
+      "id": "US-007",
+      "title": "Detect Parallel Execution Patterns",
+      "description": "As a developer, I want to detect fan-out patterns so that I can handle them appropriately.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/patterns/parallel.detector.ts",
+        "Identify fan-out: one node connects to multiple independent nodes",
+        "Distinguish from IF branches (parallel vs conditional)",
+        "Identify fan-in: multiple nodes connect to one",
+        "Return ParallelPattern with: source, parallel branches[], sink",
+        "Flag for manual review since Gattaca is sequential",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-003"]
+    },
+    {
+      "id": "US-008",
+      "title": "Detect Loop Patterns",
+      "description": "As a developer, I want to detect loop patterns so that I can convert them to Gattaca batch processing.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/patterns/loop.detector.ts",
+        "Identify splitInBatches nodes (n8n's loop construct)",
+        "Identify splitOut → process → aggregate patterns",
+        "Track loop body (nodes between split and aggregate)",
+        "Return LoopPattern with: splitter, body nodes[], aggregator",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-003"]
+    },
+    {
+      "id": "US-009",
+      "title": "Create Base Converter Interface",
+      "description": "As a developer, I want a consistent interface for node converters so that they're easy to implement and test.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/registry/node-registry.ts",
+        "Define NodeConverter interface with: nodeTypes, canConvert, convert, generateCode",
+        "Define ConversionContext with workflow, analysis, converted nodes",
+        "Create registry for registering and retrieving converters",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented in src/lib/n8n-converter/registry/node-registry.ts",
+      "dependsOn": ["US-001"]
+    },
+    {
+      "id": "US-010",
+      "title": "Implement HTTP Request Converter",
+      "description": "As a developer, I want to convert n8n HTTP Request nodes so that API calls work in Gattaca.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/converters/http-request.converter.ts",
+        "Handle methods: GET, POST, PUT, DELETE, PATCH",
+        "Map URL with expression conversion",
+        "Map headers, query params, body",
+        "Handle auth types: None, Basic Auth, Bearer Token",
+        "Generate API route code",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented in src/lib/n8n-converter/converters/http-request.converter.ts",
+      "dependsOn": ["US-009", "US-015"]
+    },
+    {
+      "id": "US-011",
+      "title": "Implement AI/LLM Node Converters",
+      "description": "As a developer, I want to convert n8n LangChain nodes so that AI functionality works in Gattaca.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/converters/ai-llm.converter.ts",
+        "Handle lmChatOpenAi, lmChatAnthropic, lmChatGoogleGemini",
+        "Handle chainLlm and agent nodes",
+        "Map model names to Gattaca's OpenRouter format",
+        "Extract and convert prompt templates",
+        "Map temperature, maxTokens, systemMessage",
+        "Generate step that calls /api/llm/generate",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-009", "US-015"]
+    },
+    {
+      "id": "US-012",
+      "title": "Implement Data Transform Converters",
+      "description": "As a developer, I want to convert n8n Set/Code nodes so that data transformations work.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/converters/transform.converter.ts",
+        "Handle n8n-nodes-base.set: Map field assignments",
+        "Handle n8n-nodes-base.code: Extract JS code",
+        "Handle n8n-nodes-base.function",
+        "Convert n8n helpers ($json, $input.all(), etc.)",
+        "Generate utility functions for complex transformations",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-009", "US-015"]
+    },
+    {
+      "id": "US-013",
+      "title": "Implement Trigger Converters",
+      "description": "As a developer, I want to convert n8n triggers to Gattaca playbook entry points.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/converters/trigger.converter.ts",
+        "Handle manualTrigger: Standard playbook start",
+        "Handle webhook: Generate webhook route",
+        "Handle scheduleTrigger: Note cron config",
+        "First trigger becomes first step in first phase",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented in src/lib/n8n-converter/converters/trigger.converter.ts",
+      "dependsOn": ["US-009"]
+    },
+    {
+      "id": "US-014",
+      "title": "Implement Logic Converters (IF/Switch)",
+      "description": "As a developer, I want to convert n8n IF/Switch nodes to Gattaca conditional logic.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/converters/logic.converter.ts",
+        "Handle n8n-nodes-base.if: Extract condition, map branches",
+        "Handle n8n-nodes-base.switch: Extract routing rules",
+        "Handle n8n-nodes-base.filter: Convert to transform with filter",
+        "Generate step with condition field",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-009", "US-015", "US-006"]
+    },
+    {
+      "id": "US-015",
+      "title": "Implement Expression Converter",
+      "description": "As a developer, I want to convert n8n expressions to Gattaca state access so that dynamic values work.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/converters/expression.converter.ts",
+        "Parse n8n expression syntax: ={{ expression }}",
+        "Convert $json.field to state access",
+        "Convert $node[\"name\"].json to state.steps.name.output",
+        "Convert built-in functions ($now, $today, $if, $isEmpty)",
+        "Handle nested expressions",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented in src/lib/n8n-converter/converters/expression.converter.ts",
+      "dependsOn": ["US-001"]
+    },
+    {
+      "id": "US-016",
+      "title": "Generate Playbook Config File",
+      "description": "As a developer, I want to generate a complete playbook config from analyzed workflow.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/generators/playbook-config.generator.ts",
+        "Input: analyzed workflow + converted steps",
+        "Generate phases based on workflow topology",
+        "Generate step dependencies from connections",
+        "Output valid TypeScript matching PlaybookConfig interface",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-005", "US-006", "US-009"]
+    },
+    {
+      "id": "US-017",
+      "title": "Generate API Route Files",
+      "description": "As a developer, I want to generate API routes for each step that needs server execution.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/generators/api-routes.generator.ts",
+        "Create directory structure: /api/playbook/[playbookName]/",
+        "Generate route.ts for each step that needs server execution",
+        "Routes follow existing Gattaca patterns",
+        "Include file header with source attribution",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-010", "US-011", "US-012"]
+    },
+    {
+      "id": "US-018",
+      "title": "Generate Step UI Components (Optional)",
+      "description": "As a developer, I want to optionally generate basic UI components for custom steps.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/generators/ui-components.generator.ts",
+        "Generate React component for steps needing user input",
+        "Use existing Gattaca UI patterns",
+        "Generate form fields from node parameters",
+        "Mark as optional in conversion report",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-016"]
+    },
+    {
+      "id": "US-019",
+      "title": "Create CLI Converter Tool",
+      "description": "As a user, I want a CLI to convert n8n workflows so I can automate migration.",
+      "acceptanceCriteria": [
+        "Create scripts/convert-n8n.ts",
+        "Usage: npx tsx scripts/convert-n8n.ts <input.json> [options]",
+        "Process: parse → analyze → convert → generate → write files",
+        "Show progress and conversion status per node",
+        "--dry-run flag for preview",
+        "--validate-only flag for validation",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Implemented in scripts/convert-n8n.ts",
+      "dependsOn": ["US-016", "US-017"]
+    },
+    {
+      "id": "US-020",
+      "title": "Create Web Import UI",
+      "description": "As a user, I want to import n8n workflows through the Gattaca UI.",
+      "acceptanceCriteria": [
+        "Create /app/playbook/import/page.tsx",
+        "Textarea for pasting n8n JSON",
+        "File upload alternative for .json files",
+        "Analyze button shows preview with conversion status",
+        "Convert button triggers server-side conversion",
+        "Success: download generated files or create in project",
+        "pnpm typecheck passes",
+        "pnpm lint passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-016", "US-017", "US-021"]
+    },
+    {
+      "id": "US-021",
+      "title": "Generate Conversion Report",
+      "description": "As a user, I want a detailed report of what was converted and what needs manual work.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/reporters/conversion-report.ts",
+        "Report sections: Summary, Converted Nodes, Partial, Manual Steps, Files, Env Vars",
+        "Output formats: Markdown (default), JSON",
+        "Include as CONVERSION_NOTES.md in generated playbook",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-016"]
+    },
+    {
+      "id": "US-022",
+      "title": "Handle Unsupported Nodes Gracefully",
+      "description": "As a user, I want unsupported nodes handled gracefully so partial conversion is useful.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/converters/fallback.converter.ts",
+        "Unsupported nodes generate placeholder step",
+        "Generate TODO comment with original node config",
+        "Conversion continues past unsupported nodes",
+        "Report clearly lists what's missing",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-009"]
+    },
+    {
+      "id": "US-023",
+      "title": "Create Test Suite with Real Workflows",
+      "description": "As a developer, I want integration tests with real n8n workflows to verify conversion quality.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/__tests__/",
+        "Add 5 test workflow JSONs covering different patterns",
+        "Test: parser produces valid N8nWorkflow",
+        "Test: analyzer detects correct patterns",
+        "Test: generated config matches PlaybookConfig",
+        "Test: generated code compiles without errors",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-016", "US-017"]
+    },
+    {
+      "id": "US-024",
+      "title": "Write Converter Documentation",
+      "description": "As a developer, I want documentation so others can extend the converter.",
+      "acceptanceCriteria": [
+        "Create src/lib/n8n-converter/README.md",
+        "Document architecture and design decisions",
+        "Document how to add a new node converter",
+        "Document expression syntax mapping table",
+        "Document known limitations and workarounds",
+        "Include architecture diagram",
+        "pnpm typecheck passes",
+        "pnpm lint passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "",
+      "dependsOn": ["US-016"]
+    }
+  ]
+}

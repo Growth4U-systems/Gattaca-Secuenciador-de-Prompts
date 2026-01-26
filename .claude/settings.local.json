@@ -32,7 +32,11 @@
       "Skill(merge-and-deploy)",
       "Skill(merge-and-deploy:*)",
       "Skill(deploy)",
-      "Skill(deploy:*)"
+      "Skill(deploy:*)",
+      "Skill(ralph-tui-create-beads)",
+      "Skill(ralph-tui-create-beads:*)",
+      "Skill(ralph-tui-create-json)",
+      "Skill(ralph-tui-create-json:*)"
     ]
   }
 }

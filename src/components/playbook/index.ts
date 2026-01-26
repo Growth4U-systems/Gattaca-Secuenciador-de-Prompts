@@ -66,4 +66,12 @@ export type {
 } from './types'
 
 // Configurations
-export { playbookConfigs, getPlaybookConfig, nicheFinderConfig, videoViralIAConfig } from './configs'
+export {
+  playbookConfigs,
+  getPlaybookConfig,
+  nicheFinderConfig,
+  videoViralIAConfig,
+  seoSeedKeywordsConfig,
+  linkedinPostGeneratorConfig,
+  githubForkToCrmConfig,
+} from './configs'

@@ -1,4 +1,4 @@
-import { PlaybookConfig, StepGuidance } from '../types'
+import { PlaybookConfig, StepGuidance, PlaybookPresentation } from '../types'
 
 /**
  * Niche Finder Playbook Configuration
@@ -203,12 +203,46 @@ export const B2B_CONTEXTS = [
   { id: 'empleados', label: 'empleados', category: 'Equipo', contextType: 'b2b' as const },
   { id: 'remoto', label: 'remoto', category: 'Equipo', contextType: 'b2b' as const },
 ]
+/**
+ * Presentation metadata for the intro screen
+ */
+const PRESENTATION: PlaybookPresentation = {
+  tagline: 'Descubre nichos de mercado ocultos analizando conversaciones reales',
+  valueProposition: [
+    'Nichos validados con problemas reales de usuarios',
+    'Análisis de 100+ conversaciones de Reddit y foros',
+    'Score de oportunidad calculado por IA',
+    'Keywords listas para usar en campañas',
+  ],
+  exampleOutput: {
+    type: 'keywords',
+    preview: {
+      text: '📊 Nichos encontrados:\n• "dolor de espalda teletrabajo" - Oportunidad: 85/100\n• "ansiedad productividad" - Oportunidad: 78/100\n• "herramientas freelancer" - Oportunidad: 72/100',
+    },
+  },
+  estimatedTime: '10-15 minutos',
+  estimatedCost: '~$0.10-0.20 USD',
+  requiredServices: [
+    {
+      key: 'serp',
+      name: 'SERP API',
+      description: 'Busca conversaciones relevantes en Google',
+    },
+    {
+      key: 'openrouter',
+      name: 'OpenRouter (IA)',
+      description: 'Extrae y analiza problemas con GPT-4',
+    },
+  ],
+}
+
 export const nicheFinderConfig: PlaybookConfig = {
   id: 'niche_finder',
   type: 'niche_finder',
   name: 'Buscador de Nichos 100x',
   description: 'Encuentra nichos de mercado analizando conversaciones reales en foros y redes sociales',
   icon: '🔍',
+  presentation: PRESENTATION,
 
   phases: [
     // =========================================

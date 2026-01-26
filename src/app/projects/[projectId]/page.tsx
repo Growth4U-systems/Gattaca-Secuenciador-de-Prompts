@@ -25,10 +25,12 @@ import NicheFinderPlaybook from '@/components/niche-finder/NicheFinderPlaybook'
 import NicheFinderPlaybookV2 from '@/components/niche-finder/NicheFinderPlaybookV2'
 import SignalBasedOutreachPlaybook from '@/components/signal-outreach/SignalBasedOutreachPlaybook'
 import { VideoViralIAPlaybook } from '@/components/video-viral-ia'
-import { Video } from 'lucide-react'
+import { Video, Linkedin, GitFork, KeyRound } from 'lucide-react'
 import ClientSidebar from '@/components/layout/ClientSidebar'
+import { PlaybookShell } from '@/components/playbook'
+import { getPlaybookConfig } from '@/components/playbook/configs'
 
-type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder' | 'signal-outreach' | 'video-viral-ia'
+type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder' | 'signal-outreach' | 'video-viral-ia' | 'seo-seed-keywords' | 'linkedin-post-generator' | 'github-fork-to-crm'
 
 // Loading Skeleton
 function LoadingSkeleton() {
@@ -90,15 +92,20 @@ export default function ProjectPage({
     if (project && activeTab === null) {
       // Check for tab query parameter first
       const tabParam = searchParams.get('tab') as TabType | null
-      if (tabParam && ['documents', 'setup', 'campaigns', 'export', 'niche-finder', 'signal-outreach', 'video-viral-ia'].includes(tabParam)) {
+      const validTabs = ['documents', 'setup', 'campaigns', 'export', 'niche-finder', 'signal-outreach', 'video-viral-ia', 'seo-seed-keywords', 'linkedin-post-generator', 'github-fork-to-crm']
+      if (tabParam && validTabs.includes(tabParam)) {
         setActiveTab(tabParam)
       } else {
-        setActiveTab(
-          project.playbook_type === 'niche_finder' ? 'niche-finder' :
-          project.playbook_type === 'signal_based_outreach' ? 'signal-outreach' :
-          project.playbook_type === 'video_viral_ia' ? 'video-viral-ia' :
-          'documents'
-        )
+        // Map playbook_type to default tab
+        const playbookTabMap: Record<string, TabType> = {
+          'niche_finder': 'niche-finder',
+          'signal_based_outreach': 'signal-outreach',
+          'video_viral_ia': 'video-viral-ia',
+          'seo-seed-keywords': 'seo-seed-keywords',
+          'linkedin-post-generator': 'linkedin-post-generator',
+          'github-fork-to-crm': 'github-fork-to-crm',
+        }
+        setActiveTab(playbookTabMap[project.playbook_type] || 'documents')
       }
     }
   }, [project, activeTab, searchParams])
@@ -129,16 +136,38 @@ export default function ProjectPage({
     { id: 'setup' as TabType, label: 'API Keys', icon: Sliders, description: 'Configurar APIs' },
   ]
 
-  // Add Export tab only for ECP projects
-  const tabs = project?.playbook_type === 'niche_finder'
-    ? nicheFinderTabs
-    : project?.playbook_type === 'signal_based_outreach'
-      ? signalOutreachTabs
-      : project?.playbook_type === 'video_viral_ia'
-        ? videoViralIATabs
-        : project?.playbook_type === 'ecp'
-          ? [...baseTabs, { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' }]
-          : baseTabs
+  // SEO Seed Keywords: Generate keywords from ICP
+  const seoSeedKeywordsTabs = [
+    { id: 'seo-seed-keywords' as TabType, label: 'SEO Keywords', icon: KeyRound, description: 'Generar keywords SEO' },
+    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
+  ]
+
+  // LinkedIn Post Generator: Create viral posts
+  const linkedinPostGeneratorTabs = [
+    { id: 'linkedin-post-generator' as TabType, label: 'LinkedIn Posts', icon: Linkedin, description: 'Generar posts virales' },
+    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
+  ]
+
+  // GitHub Fork to CRM: Convert forks to leads
+  const githubForkToCrmTabs = [
+    { id: 'github-fork-to-crm' as TabType, label: 'Fork → CRM', icon: GitFork, description: 'Convertir forks en leads' },
+    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
+  ]
+
+  // Select tabs based on playbook type
+  const getTabsForPlaybook = (playbookType: string | undefined) => {
+    switch (playbookType) {
+      case 'niche_finder': return nicheFinderTabs
+      case 'signal_based_outreach': return signalOutreachTabs
+      case 'video_viral_ia': return videoViralIATabs
+      case 'seo-seed-keywords': return seoSeedKeywordsTabs
+      case 'linkedin-post-generator': return linkedinPostGeneratorTabs
+      case 'github-fork-to-crm': return githubForkToCrmTabs
+      case 'ecp': return [...baseTabs, { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' }]
+      default: return baseTabs
+    }
+  }
+  const tabs = getTabsForPlaybook(project?.playbook_type)
 
   if (projectLoading || activeTab === null) {
     return <LoadingSkeleton />
@@ -493,6 +522,24 @@ export default function ProjectPage({
             )}
             {activeTab === 'video-viral-ia' && (
               <VideoViralIAPlaybook projectId={params.projectId} />
+            )}
+            {activeTab === 'seo-seed-keywords' && getPlaybookConfig('seo-seed-keywords') && (
+              <PlaybookShell
+                projectId={params.projectId}
+                playbookConfig={getPlaybookConfig('seo-seed-keywords')!}
+              />
+            )}
+            {activeTab === 'linkedin-post-generator' && getPlaybookConfig('linkedin-post-generator') && (
+              <PlaybookShell
+                projectId={params.projectId}
+                playbookConfig={getPlaybookConfig('linkedin-post-generator')!}
+              />
+            )}
+            {activeTab === 'github-fork-to-crm' && getPlaybookConfig('github-fork-to-crm') && (
+              <PlaybookShell
+                projectId={params.projectId}
+                playbookConfig={getPlaybookConfig('github-fork-to-crm')!}
+              />
             )}
           </div>
         </div>
