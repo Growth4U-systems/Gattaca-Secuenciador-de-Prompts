@@ -1,0 +1,6 @@
+export { AssistantProvider, useAssistant } from './AssistantContext'
+export type { AssistantMessage } from './AssistantContext'
+export { default as FloatingAssistant } from './FloatingAssistant'
+export { default as ChatMessage } from './ChatMessage'
+export { default as ActionIndicator } from './ActionIndicator'
+export { default as AssistantWrapper } from './AssistantWrapper'
