@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase-server'
 import { createClient as createAdminClient } from '@/lib/supabase-server-admin'
 import { getUserApiKey } from '@/lib/getUserApiKey'
+import { decryptToken } from '@/lib/encryption'
 import { playbookMetadata } from '@/lib/playbook-metadata'
 
 export const dynamic = 'force-dynamic'
@@ -341,20 +342,88 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Get OpenRouter API key
-  const apiKey = await getUserApiKey({
+  // Get OpenRouter API key (same pattern as execute-step)
+  let apiKey: string | null = null
+  let keySource = 'none'
+
+  // Helper to validate OpenRouter key format
+  const isValidOpenRouterKey = (key: string | null): boolean => {
+    return !!key && key.startsWith('sk-or-') && key.length > 20
+  }
+
+  // 1. Try user_api_keys table
+  const userKey = await getUserApiKey({
     userId: session.user.id,
     serviceName: 'openrouter',
     supabase: adminClient,
   })
+  if (isValidOpenRouterKey(userKey)) {
+    apiKey = userKey
+    keySource = 'user_api_keys'
+  }
+
+  // 2. Try user_openrouter_tokens (OAuth)
+  if (!apiKey) {
+    const { data: tokenRecord } = await adminClient
+      .from('user_openrouter_tokens')
+      .select('encrypted_api_key')
+      .eq('user_id', session.user.id)
+      .single()
+
+    if (tokenRecord?.encrypted_api_key && tokenRecord.encrypted_api_key !== 'PENDING') {
+      try {
+        const oauthKey = decryptToken(tokenRecord.encrypted_api_key)
+        if (isValidOpenRouterKey(oauthKey)) {
+          apiKey = oauthKey
+          keySource = 'user_openrouter_tokens'
+        }
+      } catch (e) {
+        console.warn('[Assistant Chat] Failed to decrypt OAuth token:', e)
+      }
+    }
+  }
+
+  // 3. Try agency key
+  if (!apiKey) {
+    const { data: membership } = await adminClient
+      .from('agency_members')
+      .select('agency_id, agencies(id, openrouter_api_key)')
+      .eq('user_id', session.user.id)
+      .single()
+
+    const agencyData = membership?.agencies as unknown as {
+      id: string
+      openrouter_api_key: string | null
+    } | null
+
+    if (agencyData?.openrouter_api_key) {
+      try {
+        const agencyKey = decryptToken(agencyData.openrouter_api_key)
+        if (isValidOpenRouterKey(agencyKey)) {
+          apiKey = agencyKey
+          keySource = 'agency'
+        }
+      } catch (e) {
+        console.warn('[Assistant Chat] Failed to decrypt agency key:', e)
+      }
+    }
+  }
+
+  // 4. Fallback to env
+  if (!apiKey && process.env.OPENROUTER_API_KEY) {
+    if (isValidOpenRouterKey(process.env.OPENROUTER_API_KEY)) {
+      apiKey = process.env.OPENROUTER_API_KEY
+      keySource = 'env'
+    }
+  }
 
   if (!apiKey) {
     console.log('[Assistant Chat] No OpenRouter API key found for user:', session.user.id)
     return NextResponse.json({
-      error: 'No hay API key de OpenRouter configurada. Por favor configura tu API key en ajustes.',
+      error: 'No hay API key de OpenRouter configurada. Conecta tu cuenta en la página principal.',
     }, { status: 400 })
   }
-  console.log('[Assistant Chat] OpenRouter API key found, length:', apiKey.length, 'starts with:', apiKey.substring(0, 10))
+  console.log('[Assistant Chat] OpenRouter API key found from:', keySource, ', length:', apiKey.length)
 
   // Build messages for the LLM
   const systemPrompt = buildSystemPrompt(projectName, currentPlaybook, currentStep)
