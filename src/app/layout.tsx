@@ -1,9 +1,16 @@
 import type { Metadata, Viewport } from 'next'
+import dynamic from 'next/dynamic'
 import './globals.css'
 import { AuthProvider } from '@/lib/auth-context'
 import { OpenRouterProvider } from '@/lib/openrouter-context'
 import { UIProviders } from '@/components/ui'
 import Header from '@/components/Header'
+
+// Dynamic import with ssr: false to ensure client-only rendering
+const AssistantWrapper = dynamic(
+  () => import('@/components/assistant/AssistantWrapper'),
+  { ssr: false }
+)
 
 export const metadata: Metadata = {
   title: 'Gattaca | Secuenciador de prompts de marketing con IA',
@@ -37,6 +44,7 @@ export default function RootLayout({
                 <div className="flex-1">
                   {children}
                 </div>
+                <AssistantWrapper />
               </div>
             </OpenRouterProvider>
           </UIProviders>
