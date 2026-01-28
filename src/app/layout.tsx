@@ -13,7 +13,7 @@ const AssistantWrapper = dynamic(
 )
 
 export const metadata: Metadata = {
-  title: 'Gattaca | Secuenciador de prompts de marketing con IA',
+  title: 'Gattaca | Marketing con IA',
   description: 'Sistema automatizado para generar estrategias de marketing con IA',
   manifest: '/manifest.json',
 }
