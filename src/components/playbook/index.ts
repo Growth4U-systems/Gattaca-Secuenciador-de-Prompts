@@ -28,6 +28,15 @@ export type {
   PartialResults,
 } from './StepExecutionProgress'
 
+// Document requirements components
+export { default as DocumentRequirementsMap } from './DocumentRequirementsMap'
+export type {
+  DocumentRequirement,
+  StepRequirements,
+  DocumentStatus,
+} from './DocumentRequirementsMap'
+export { default as DocumentChecklist, useDocumentStatus } from './DocumentChecklist'
+
 // Context and hooks for PlaybookShellV2
 export {
   PlaybookContextProvider,

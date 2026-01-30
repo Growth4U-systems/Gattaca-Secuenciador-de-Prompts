@@ -8,6 +8,12 @@ import CampaignBulkUpload from './CampaignBulkUpload'
 import CampaignComparison from './CampaignComparison'
 import { ReportGenerator } from '@/components/reports'
 import DeepResearchProgress from './DeepResearchProgress'
+import KnowledgeBaseGenerator from '@/lib/playbooks/competitor-analysis/components/KnowledgeBaseGenerator'
+import { getDocumentsForStep, STEP_DOCUMENT_REQUIREMENTS } from '@/lib/playbooks/competitor-analysis/constants'
+import CampaignWizard from '@/components/playbook/CampaignWizard'
+import { getPlaybookConfig } from '@/components/playbook/configs'
+import { getDocumentStatusForStep, type SupabaseClientLike } from '@/lib/playbooks/competitor-analysis/documentMatcher'
+import { createClient } from '@/lib/supabase-browser'
 import StatusManager, { CustomStatus, DEFAULT_STATUSES, getStatusIcon, getStatusColors } from './StatusManager'
 import { FlowConfig, FlowStep, LLMModel } from '@/types/flow.types'
 import { useToast, useModal } from '@/components/ui'
@@ -97,6 +103,7 @@ interface Project {
     id: string
     name: string
   }
+  playbook_type?: string
   variable_definitions: Array<{
     name: string
     default_value: string
@@ -128,6 +135,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   const [project, setProject] = useState<Project | null>(projectProp || null)
   const [loading, setLoading] = useState(true)
   const [showNewForm, setShowNewForm] = useState(false)
+  const [showWizard, setShowWizard] = useState(false)
   const [creating, setCreating] = useState(false)
   const [running, setRunning] = useState<string | null>(null)
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null)
@@ -149,6 +157,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
   const [showReportGenerator, setShowReportGenerator] = useState(false)
+  const [knowledgeBaseCampaign, setKnowledgeBaseCampaign] = useState<Campaign | null>(null)
 
   // Status management state
   const [statusDropdownOpen, setStatusDropdownOpen] = useState<{
@@ -821,6 +830,72 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     }
   }
 
+  /**
+   * Check for missing documents before running a step (for competitor-analysis playbook)
+   * Shows a non-blocking warning if documents are missing
+   */
+  const checkMissingDocumentsForStep = async (
+    campaignId: string,
+    stepId: string,
+    campaign: Campaign
+  ): Promise<void> => {
+    try {
+      // Check if this is a competitor-analysis playbook step
+      const stepReq = STEP_DOCUMENT_REQUIREMENTS.find(s => s.stepId === stepId)
+      if (!stepReq || stepReq.source_types.length === 0) {
+        return // No document requirements for this step
+      }
+
+      // Get competitor name from campaign variables
+      const customVars = campaign.custom_variables as Record<string, string> | null
+      const competitorName = customVars?.competitor_name
+      if (!competitorName) {
+        return // Not a competitor-analysis campaign
+      }
+
+      // Check document status using Supabase
+      const supabase = createClient() as unknown as SupabaseClientLike
+      const docStatuses = await getDocumentStatusForStep(
+        supabase,
+        projectId,
+        competitorName,
+        stepReq.source_types as any[]
+      )
+
+      // Count missing documents
+      const missingDocs: string[] = []
+      const inProgressDocs: string[] = []
+
+      docStatuses.forEach((status, sourceType) => {
+        if (status.status === 'missing') {
+          const docReq = getDocumentsForStep(stepId).find(d => d.source_type === sourceType)
+          missingDocs.push(docReq?.name || sourceType)
+        } else if (status.status === 'in_progress') {
+          const docReq = getDocumentsForStep(stepId).find(d => d.source_type === sourceType)
+          inProgressDocs.push(docReq?.name || sourceType)
+        }
+      })
+
+      // Show warning if documents are missing (non-blocking)
+      if (missingDocs.length > 0) {
+        toast.warning(
+          'Documentos faltantes',
+          `Faltan ${missingDocs.length} documentos para este paso: ${missingDocs.slice(0, 3).join(', ')}${missingDocs.length > 3 ? '...' : ''}. La calidad del análisis puede verse afectada.`
+        )
+      }
+
+      if (inProgressDocs.length > 0) {
+        toast.info(
+          'Documentos en progreso',
+          `${inProgressDocs.length} documento(s) aún se están generando.`
+        )
+      }
+    } catch (error) {
+      console.warn('[checkMissingDocuments] Error checking documents:', error)
+      // Don't block execution if check fails
+    }
+  }
+
   const handleRunStep = async (
     campaignId: string,
     stepId: string,
@@ -833,6 +908,13 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     if (!hasOpenRouter) {
       setShowOpenRouterModal(true)
       return
+    }
+
+    // Check for missing documents (non-blocking warning)
+    const campaign = campaigns.find(c => c.id === campaignId)
+    if (campaign) {
+      // Fire and forget - don't await to avoid blocking execution
+      checkMissingDocumentsForStep(campaignId, stepId, campaign)
     }
 
     // Ya no necesitamos confirmación porque viene del dialog de configuración
@@ -1390,16 +1472,22 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             </div>
             <button
               onClick={() => {
-                if (showNewForm) {
+                if (showNewForm || showWizard) {
                   setShowNewForm(false)
+                  setShowWizard(false)
                 } else {
-                  openNewCampaignForm()
+                  // For competitor_analysis, show the wizard with Knowledge Base step
+                  if (project?.playbook_type === 'competitor_analysis') {
+                    setShowWizard(true)
+                  } else {
+                    openNewCampaignForm()
+                  }
                 }
               }}
               className="px-4 py-2.5 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-xl hover:from-orange-700 hover:to-amber-700 inline-flex items-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
             >
-              {showNewForm ? <X size={18} /> : <Plus size={18} />}
-              {showNewForm ? 'Cancelar' : 'Nueva Campaña'}
+              {(showNewForm || showWizard) ? <X size={18} /> : <Plus size={18} />}
+              {(showNewForm || showWizard) ? 'Cancelar' : 'Nueva Campaña'}
             </button>
           </div>
         </div>
@@ -1533,6 +1621,20 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             </div>
           </div>
         </div>
+      )}
+
+      {/* Campaign Wizard for competitor_analysis playbooks */}
+      {showWizard && project?.playbook_type === 'competitor_analysis' && (
+        <CampaignWizard
+          projectId={projectId}
+          playbookConfig={getPlaybookConfig('competitor-analysis')!}
+          onClose={() => setShowWizard(false)}
+          onCreated={(campaignId) => {
+            setShowWizard(false)
+            loadCampaigns()
+            toast.success('Campaña creada', 'La campaña se ha creado exitosamente')
+          }}
+        />
       )}
 
       {/* Filters */}
@@ -1779,6 +1881,13 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                           title="Copiar prompts"
                         >
                           {copiedPromptId === `all-${campaign.id}` ? <Check size={16} /> : <Copy size={16} />}
+                        </button>
+                        <button
+                          onClick={() => setKnowledgeBaseCampaign(campaign)}
+                          className="p-2.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                          title="Base de Conocimiento"
+                        >
+                          <BookOpen size={16} />
                         </button>
                         <button
                           onClick={() => handleDuplicateCampaign(campaign)}
@@ -2337,6 +2446,47 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
           customStatuses={project.custom_statuses}
           onClose={() => setShowReportGenerator(false)}
         />
+      )}
+
+      {/* Knowledge Base Generator Modal */}
+      {knowledgeBaseCampaign && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-purple-50">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <BookOpen size={20} className="text-indigo-600" />
+                  Base de Conocimiento
+                </h2>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {knowledgeBaseCampaign.ecp_name} - Genera documentos para el análisis
+                </p>
+              </div>
+              <button
+                onClick={() => setKnowledgeBaseCampaign(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              <KnowledgeBaseGenerator
+                campaignId={knowledgeBaseCampaign.id}
+                projectId={projectId}
+                competitorName={(knowledgeBaseCampaign.custom_variables as Record<string, string>)?.competitor_name || knowledgeBaseCampaign.ecp_name}
+                scraperInputs={(knowledgeBaseCampaign.custom_variables as Record<string, string>) || {}}
+                onDocumentGenerated={(docId, sourceType) => {
+                  toast.success('Documento generado', `${sourceType} creado exitosamente`)
+                }}
+                onComplete={() => {
+                  toast.success('Completado', 'Base de conocimiento lista')
+                  setKnowledgeBaseCampaign(null)
+                }}
+                onSkip={() => setKnowledgeBaseCampaign(null)}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Documentation Guide Modal */}

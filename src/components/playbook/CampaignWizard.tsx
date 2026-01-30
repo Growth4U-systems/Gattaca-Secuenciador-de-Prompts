@@ -1,15 +1,32 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { X, ChevronRight, ChevronLeft, Check, Loader2 } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { X, ChevronRight, ChevronLeft, Check, Loader2, FileText, AlertTriangle } from 'lucide-react'
 import { PlaybookConfig } from './types'
 import { getDefaultPromptForStep } from './utils/getDefaultPrompts'
+import DocumentChecklist, { useDocumentStatus } from './DocumentChecklist'
+import {
+  COMPETITOR_ANALYSIS_STEP_REQUIREMENTS,
+  getAllDocumentRequirements,
+  KnowledgeBaseGenerator,
+  type CampaignVariables,
+} from './configs/competitor-analysis.config'
+import type { StepRequirements, DocumentRequirement, DocumentStatus } from './DocumentRequirementsMap'
 
 interface CampaignWizardProps {
   projectId: string
   playbookConfig: PlaybookConfig
   onClose: () => void
   onCreated: (campaignId: string) => void
+  /** Project documents for document checklist matching */
+  projectDocuments?: Array<{
+    id: string
+    name: string
+    category?: string
+    folder?: string
+  }>
+  /** Callback when user wants to import a document */
+  onImportDocument?: (requirement: DocumentRequirement, stepId: string) => void
 }
 
 interface PromptVariable {
@@ -62,6 +79,8 @@ export default function CampaignWizard({
   playbookConfig,
   onClose,
   onCreated,
+  projectDocuments = [],
+  onImportDocument,
 }: CampaignWizardProps) {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -76,6 +95,30 @@ export default function CampaignWizard({
 
   // Step 3: System config (from playbook variables)
   const [systemConfig, setSystemConfig] = useState<Record<string, any>>({})
+
+  // Campaign created early for Knowledge Base step
+  const [createdCampaignId, setCreatedCampaignId] = useState<string | null>(null)
+  const [campaignCreating, setCampaignCreating] = useState(false)
+
+  // Determine if this playbook has document requirements
+  const documentRequirements = useMemo<StepRequirements[]>(() => {
+    // Check if this is a competitor analysis playbook
+    if (
+      playbookConfig.type === 'competitor_analysis' ||
+      playbookConfig.type === 'competitor-analysis' ||
+      playbookConfig.id?.includes('competitor')
+    ) {
+      return COMPETITOR_ANALYSIS_STEP_REQUIREMENTS
+    }
+    // Future: Add other playbook document requirements here
+    return []
+  }, [playbookConfig])
+
+  const hasDocumentRequirements = documentRequirements.some(s => s.documents.length > 0)
+
+  // Get document status for checklist
+  const allRequiredDocs = useMemo(() => getAllDocumentRequirements(), [])
+  const documentStatuses = useDocumentStatus(allRequiredDocs, projectDocuments)
 
   // Initialize variables from playbook config
   useEffect(() => {
@@ -129,6 +172,70 @@ export default function CampaignWizard({
     setSystemConfig(prev => ({ ...prev, [key]: value }))
   }
 
+  // Create campaign early (for Knowledge Base step)
+  const createCampaignEarly = useCallback(async () => {
+    if (createdCampaignId) return createdCampaignId // Already created
+
+    setCampaignCreating(true)
+    setError(null)
+
+    try {
+      // Build custom variables from prompt variables
+      const customVariables: Record<string, string> = {}
+      promptVariables.forEach(v => {
+        customVariables[v.key] = v.value
+      })
+
+      // Merge with system config
+      const allVariables = { ...customVariables, ...systemConfig }
+
+      // Create campaign via API
+      const response = await fetch('/api/campaign/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          ecp_name: campaignName,
+          problem_core: campaignDescription || null,
+          custom_variables: allVariables,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Error creating campaign')
+      }
+
+      setCreatedCampaignId(data.campaign.id)
+      return data.campaign.id
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido')
+      return null
+    } finally {
+      setCampaignCreating(false)
+    }
+  }, [createdCampaignId, promptVariables, systemConfig, projectId, campaignName, campaignDescription])
+
+  // Handle step navigation with early campaign creation for Knowledge Base
+  const handleNextStep = async () => {
+    if (!canProceed()) return
+
+    // If moving to Knowledge Base step (step 3 when hasDocumentRequirements)
+    if (hasDocumentRequirements && step === 2) {
+      const campaignId = await createCampaignEarly()
+      if (!campaignId) {
+        // Error occurred, stay on current step
+        return
+      }
+    }
+
+    setStep(step + 1)
+  }
+
+  // Calculate total steps dynamically based on whether we have document requirements
+  const totalSteps = hasDocumentRequirements ? 4 : 3
+
   const canProceed = (): boolean => {
     switch (step) {
       case 1:
@@ -136,13 +243,44 @@ export default function CampaignWizard({
       case 2:
         return promptVariables.filter(v => v.required).every(v => v.value.trim().length > 0)
       case 3:
+        // Document checklist step (if present) - always can proceed, just informational
+        return true
+      case 4:
+        // System config (moved to step 4 when docs present)
         return true
       default:
         return false
     }
   }
 
+  // Determine which content to show based on whether we have document requirements
+  const getStepContent = () => {
+    if (hasDocumentRequirements) {
+      // With documents: 1=Basic, 2=Variables, 3=Documents, 4=Config
+      return {
+        basic: 1,
+        variables: 2,
+        documents: 3,
+        config: 4,
+      }
+    }
+    // Without documents: 1=Basic, 2=Variables, 3=Config
+    return {
+      basic: 1,
+      variables: 2,
+      documents: -1, // Never shown
+      config: 3,
+    }
+  }
+  const stepMapping = getStepContent()
+
   const handleCreate = async () => {
+    // If campaign was already created in Knowledge Base step, just redirect
+    if (createdCampaignId) {
+      onCreated(createdCampaignId)
+      return
+    }
+
     setLoading(true)
     setError(null)
 
@@ -183,7 +321,22 @@ export default function CampaignWizard({
     }
   }
 
-  const totalSteps = 3
+  // Get competitor name from prompt variables for Knowledge Base
+  const competitorName = useMemo(() => {
+    const competitorVar = promptVariables.find(v => v.key === 'competitor_name')
+    return competitorVar?.value || ''
+  }, [promptVariables])
+
+  // Get scraper inputs from prompt variables
+  const scraperInputs = useMemo((): Partial<CampaignVariables> => {
+    const inputs: Partial<CampaignVariables> = {}
+    promptVariables.forEach(v => {
+      if (v.value) {
+        inputs[v.key as keyof CampaignVariables] = v.value
+      }
+    })
+    return inputs
+  }, [promptVariables])
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -212,8 +365,8 @@ export default function CampaignWizard({
 
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[60vh]">
-          {/* Step 1: Basic Info */}
-          {step === 1 && (
+          {/* Step: Basic Info */}
+          {step === stepMapping.basic && (
             <div className="space-y-4">
               <div className="text-center mb-6">
                 <span className="text-3xl">📝</span>
@@ -249,8 +402,8 @@ export default function CampaignWizard({
             </div>
           )}
 
-          {/* Step 2: Prompt Variables */}
-          {step === 2 && (
+          {/* Step: Prompt Variables */}
+          {step === stepMapping.variables && (
             <div className="space-y-4">
               <div className="text-center mb-6">
                 <span className="text-3xl">🎯</span>
@@ -292,8 +445,47 @@ export default function CampaignWizard({
             </div>
           )}
 
-          {/* Step 3: System Config */}
-          {step === 3 && (
+          {/* Step: Knowledge Base Generator (only for playbooks with document requirements) */}
+          {step === stepMapping.documents && hasDocumentRequirements && (
+            <div className="space-y-4">
+              {campaignCreating ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-4" />
+                  <p className="text-sm text-gray-600">Creando campaña...</p>
+                </div>
+              ) : createdCampaignId ? (
+                <KnowledgeBaseGenerator
+                  campaignId={createdCampaignId}
+                  projectId={projectId}
+                  competitorName={competitorName}
+                  scraperInputs={scraperInputs}
+                  existingDocuments={[]}
+                  onDocumentGenerated={(docId, sourceType) => {
+                    console.log('Document generated:', docId, sourceType)
+                  }}
+                  onComplete={() => setStep(step + 1)}
+                  onSkip={() => setStep(step + 1)}
+                />
+              ) : (
+                <div className="text-center py-12">
+                  <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+                  <p className="text-gray-600">Error al crear la campaña</p>
+                  {error && (
+                    <p className="text-sm text-red-600 mt-2">{error}</p>
+                  )}
+                  <button
+                    onClick={() => createCampaignEarly()}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Reintentar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step: System Config */}
+          {step === stepMapping.config && (
             <div className="space-y-4">
               <div className="text-center mb-6">
                 <span className="text-3xl">⚙️</span>
@@ -386,12 +578,21 @@ export default function CampaignWizard({
 
           {step < totalSteps ? (
             <button
-              onClick={() => setStep(step + 1)}
-              disabled={!canProceed()}
+              onClick={handleNextStep}
+              disabled={!canProceed() || campaignCreating}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Siguiente
-              <ChevronRight size={16} />
+              {campaignCreating ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Creando...
+                </>
+              ) : (
+                <>
+                  Siguiente
+                  <ChevronRight size={16} />
+                </>
+              )}
             </button>
           ) : (
             <button
