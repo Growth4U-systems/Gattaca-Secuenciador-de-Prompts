@@ -10,7 +10,6 @@ import {
   FileText,
   ChevronRight,
   ChevronLeft,
-  ChevronUp,
   Plus,
   Settings,
   Database,
@@ -20,7 +19,6 @@ import {
   Rocket,
   LayoutDashboard,
   Sparkles,
-  Eye,
 } from 'lucide-react'
 import { useClient } from '@/hooks/useClients'
 import {
@@ -48,15 +46,6 @@ interface Project {
   created_at: string
 }
 
-interface Playbook {
-  id: string
-  name: string
-  description: string | null
-  playbook_type: string
-  is_public: boolean
-  version: string
-  config?: { steps?: string[] }
-}
 
 export default function ClientPage({
   params,
@@ -85,8 +74,6 @@ export default function ClientPage({
 
   const [projects, setProjects] = useState<Project[]>([])
   const [loadingProjects, setLoadingProjects] = useState(true)
-  const [playbooks, setPlaybooks] = useState<Playbook[]>([])
-  const [loadingPlaybooks, setLoadingPlaybooks] = useState(true)
 
   // Load projects for this client
   useEffect(() => {
@@ -111,27 +98,6 @@ export default function ClientPage({
 
     loadProjects()
   }, [params.clientId])
-
-  // Load all playbooks
-  useEffect(() => {
-    const loadPlaybooks = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('playbooks')
-          .select('id, name, description, playbook_type, is_public, version, config')
-          .order('name')
-
-        if (error) throw error
-        setPlaybooks(data || [])
-      } catch (err) {
-        console.error('Error loading playbooks:', err)
-      } finally {
-        setLoadingPlaybooks(false)
-      }
-    }
-
-    loadPlaybooks()
-  }, [])
 
   const tabs = [
     { id: 'overview' as const, label: 'Resumen', icon: LayoutDashboard },
@@ -206,8 +172,6 @@ export default function ClientPage({
           {activeTab === 'playbooks' && (
             <PlaybooksTab
               clientId={params.clientId}
-              playbooks={playbooks}
-              loading={loadingPlaybooks}
               playbookTypesInUse={playbookTypesInUse}
             />
           )}
@@ -566,34 +530,39 @@ function ContextLakeTab({
 
 import { playbookMetadata, getPlaybookName, formatStepName } from '@/lib/playbook-metadata'
 import ApiKeysConfig from '@/components/settings/ApiKeysConfig'
+import { useClientPlaybooks } from '@/hooks/useClientPlaybooks'
+import { Pencil, Library } from 'lucide-react'
 
-// Playbooks Tab
+// Playbooks Tab - Now shows client's custom playbooks and link to library
 function PlaybooksTab({
   clientId,
-  playbooks,
-  loading,
   playbookTypesInUse,
 }: {
   clientId: string
-  playbooks: Playbook[]
-  loading: boolean
   playbookTypesInUse: Set<string>
 }) {
-  const [expandedPlaybookId, setExpandedPlaybookId] = useState<string | null>(null)
-  const playbooksInUse = playbooks.filter(p => playbookTypesInUse.has(p.playbook_type)).length
+  const {
+    customPlaybooks,
+    basePlaybooks,
+    loading,
+    error,
+  } = useClientPlaybooks(clientId)
 
   // Map playbook_type to icon
   const getPlaybookIcon = (type: string) => {
-    switch (type) {
-      case 'niche_finder':
-        return '🔍'
-      case 'competitor_analysis':
-        return '📊'
-      case 'ecp':
-        return '🎯'
-      default:
-        return '📖'
+    const icons: Record<string, string> = {
+      niche_finder: '🔍',
+      'niche-finder': '🔍',
+      competitor_analysis: '📊',
+      'competitor-analysis': '📊',
+      ecp: '🎯',
+      'signal-outreach': '📡',
+      'seo-seed-keywords': '🔑',
+      'linkedin-post-generator': '💼',
+      'github-fork-to-crm': '🐙',
+      'video-viral-ia': '🎬',
     }
+    return icons[type] || '📖'
   }
 
   if (loading) {
@@ -610,196 +579,159 @@ function PlaybooksTab({
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Playbooks</h1>
           <p className="text-gray-500 mt-1">
-            {playbooks.length} disponibles • {playbooksInUse} en uso
+            {customPlaybooks.length} personalizados • {basePlaybooks.length} disponibles
           </p>
         </div>
-        <Link
-          href={`/projects/new?clientId=${clientId}`}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm font-medium"
-        >
-          <Sparkles size={18} />
-          Nuevo Proyecto
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href={`/clients/${clientId}/playbooks`}
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-all font-medium"
+          >
+            <Library size={18} />
+            Biblioteca
+          </Link>
+          <Link
+            href={`/projects/new?clientId=${clientId}`}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm font-medium"
+          >
+            <Sparkles size={18} />
+            Nuevo Proyecto
+          </Link>
+        </div>
       </div>
 
-      {playbooks.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-          <Book className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="font-medium text-gray-900 mb-2">No hay playbooks</h3>
-          <p className="text-gray-500 text-sm">
-            Crea tu primer playbook para empezar
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {playbooks.map((playbook) => {
-            const isInUse = playbookTypesInUse.has(playbook.playbook_type)
-            const isExpanded = expandedPlaybookId === playbook.id
-            const steps = (playbook.config as { steps?: string[] })?.steps || []
+      {/* Custom Playbooks Section */}
+      {customPlaybooks.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Pencil size={18} className="text-indigo-600" />
+            Playbooks Personalizados
+          </h2>
+          <div className="space-y-3">
+            {customPlaybooks.map((playbook) => {
+              const isInUse = playbookTypesInUse.has(playbook.playbook_type)
 
-            return (
-              <div
-                key={playbook.id}
-                className={`bg-white rounded-xl border p-5 transition-all ${
-                  isExpanded
-                    ? 'border-indigo-300 shadow-md'
-                    : 'border-gray-200 hover:border-indigo-200 hover:shadow-md'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl text-2xl">
-                      {getPlaybookIcon(playbook.playbook_type)}
+              return (
+                <div
+                  key={playbook.id}
+                  className="bg-white rounded-xl border border-indigo-100 p-4 hover:shadow-md transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2.5 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl text-xl">
+                        {getPlaybookIcon(playbook.playbook_type)}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-gray-900">{playbook.name}</h3>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-full">
+                            <Pencil size={10} />
+                            Personalizado
+                          </span>
+                          {isInUse && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                              ✓ En uso
+                            </span>
+                          )}
+                        </div>
+                        {playbook.description && (
+                          <p className="text-sm text-gray-500 mt-0.5">{playbook.description}</p>
+                        )}
+                        <span className="text-xs text-gray-400">{playbook.playbook_type}</span>
+                      </div>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900">{playbook.name}</h3>
-                        {isInUse && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                            ✓ En uso
-                          </span>
-                        )}
-                      </div>
-                      {playbook.description && (
-                        <p className="text-sm text-gray-500 mt-1">{playbook.description}</p>
-                      )}
-                      <div className="flex items-center gap-3 mt-2">
-                        <span className="text-xs text-gray-400">
-                          {playbook.playbook_type} v{playbook.version}
-                        </span>
-                        {playbook.is_public && (
-                          <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
-                            Público
-                          </span>
-                        )}
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/clients/${clientId}/playbooks/${playbook.id}/edit`}
+                        className="inline-flex items-center gap-2 px-3 py-2 text-indigo-600 text-sm font-medium rounded-lg border border-indigo-200 hover:bg-indigo-50 transition-colors"
+                      >
+                        <Pencil size={14} />
+                        Editar
+                      </Link>
+                      <Link
+                        href={`/projects/new?clientId=${clientId}&playbookType=${playbook.playbook_type}`}
+                        className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                      >
+                        <Rocket size={14} />
+                        Usar
+                      </Link>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setExpandedPlaybookId(isExpanded ? null : playbook.id)}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-gray-600 text-sm font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                    >
-                      {isExpanded ? (
-                        <>
-                          <ChevronUp size={16} />
-                          Ocultar
-                        </>
-                      ) : (
-                        <>
-                          <Eye size={16} />
-                          Ver
-                        </>
-                      )}
-                    </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Base Templates Section */}
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Book size={18} className="text-gray-400" />
+          Templates Disponibles
+        </h2>
+
+        {basePlaybooks.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+            <Book className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="font-medium text-gray-900 mb-2">No hay templates</h3>
+            <p className="text-gray-500 text-sm">
+              No se encontraron playbooks disponibles
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {basePlaybooks.map((template) => {
+              const isInUse = playbookTypesInUse.has(template.type)
+
+              return (
+                <div
+                  key={template.type}
+                  className={`bg-white rounded-xl border p-4 hover:shadow-md transition-all ${
+                    template.isCustomized ? 'border-green-200' : 'border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg text-lg">
+                      {getPlaybookIcon(template.type)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-medium text-gray-900 text-sm">{template.name}</h3>
+                        {template.isCustomized && (
+                          <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                            ✓ Personalizado
+                          </span>
+                        )}
+                        {isInUse && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                            En uso
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">{template.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3">
                     <Link
-                      href={`/projects/new?clientId=${clientId}&playbookType=${playbook.playbook_type}`}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                      href={`/clients/${clientId}/playbooks`}
+                      className="flex-1 text-center px-3 py-1.5 text-xs text-gray-600 font-medium rounded-lg border border-gray-200 hover:bg-gray-50"
                     >
-                      <Rocket size={16} />
+                      {template.isCustomized ? 'Ver' : 'Personalizar'}
+                    </Link>
+                    <Link
+                      href={`/projects/new?clientId=${clientId}&playbookType=${template.type}`}
+                      className="flex-1 text-center px-3 py-1.5 text-xs bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700"
+                    >
                       Usar
                     </Link>
                   </div>
                 </div>
-
-                {/* Expanded section with metadata */}
-                {isExpanded && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    {(() => {
-                      const meta = playbookMetadata[playbook.playbook_type]
-                      if (!meta) return null
-
-                      return (
-                        <div className="space-y-4">
-                          {/* Purpose */}
-                          <div>
-                            <h4 className="text-sm font-semibold text-gray-700 mb-1">¿Para qué sirve?</h4>
-                            <p className="text-sm text-gray-600">{meta.purpose}</p>
-                          </div>
-
-                          {/* When to use */}
-                          <div>
-                            <h4 className="text-sm font-semibold text-gray-700 mb-1">¿Cuándo usarlo?</h4>
-                            <ul className="text-sm text-gray-600 space-y-1">
-                              {meta.whenToUse.map((item, i) => (
-                                <li key={i} className="flex items-start gap-2">
-                                  <span className="text-indigo-500 mt-0.5">•</span>
-                                  {item}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          {/* Outcome */}
-                          <div>
-                            <h4 className="text-sm font-semibold text-gray-700 mb-1">¿Qué consigues?</h4>
-                            <p className="text-sm text-gray-600">{meta.outcome}</p>
-                          </div>
-
-                          {/* Related playbooks */}
-                          {meta.relatedPlaybooks.length > 0 && (
-                            <div>
-                              <h4 className="text-sm font-semibold text-gray-700 mb-1">Relacionado con</h4>
-                              <div className="flex flex-wrap gap-2">
-                                {meta.relatedPlaybooks.map((related) => (
-                                  <span
-                                    key={related}
-                                    className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full"
-                                  >
-                                    {getPlaybookName(related)}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Steps */}
-                          {steps.length > 0 && (
-                            <div className="pt-3 border-t border-gray-100">
-                              <h4 className="text-sm font-semibold text-gray-700 mb-3">
-                                Flujo de Trabajo ({steps.length} pasos)
-                              </h4>
-                              <div className="space-y-2">
-                                {steps.map((step: string, i: number) => (
-                                  <div key={i} className="flex gap-3">
-                                    <div className="flex-shrink-0 w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-semibold">
-                                      {i + 1}
-                                    </div>
-                                    <div>
-                                      <p className="font-medium text-gray-800 text-sm">
-                                        {formatStepName(step)}
-                                      </p>
-                                      <p className="text-xs text-gray-500">
-                                        {meta.steps[step] || 'Paso del flujo'}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Link to full documentation */}
-                          <div className="pt-3 border-t border-gray-100">
-                            <Link
-                              href={`/playbooks/${playbook.playbook_type}`}
-                              className="inline-flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-                            >
-                              <Book size={16} />
-                              Ver documentación completa
-                              <ChevronRight size={16} />
-                            </Link>
-                          </div>
-                        </div>
-                      )
-                    })()}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
