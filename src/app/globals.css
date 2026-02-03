@@ -22,6 +22,16 @@ select {
   color: #111827 !important; /* gray-900 */
 }
 
+/* Exception: textareas with dark backgrounds need white text */
+textarea.bg-slate-800,
+textarea.bg-gray-800,
+textarea.bg-gray-900,
+div.bg-slate-800,
+div.bg-gray-800,
+div.bg-gray-900 {
+  color: #ffffff !important;
+}
+
 /* Global placeholder styling - ensure readable contrast on all inputs */
 input::placeholder,
 textarea::placeholder {
