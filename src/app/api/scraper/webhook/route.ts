@@ -9,6 +9,55 @@ export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes to process large datasets
 
 // ============================================
+// RETRY HELPER WITH EXPONENTIAL BACKOFF
+// ============================================
+
+/**
+ * Retries an async function with exponential backoff
+ * @param fn - The async function to retry
+ * @param maxAttempts - Maximum number of attempts (default: 3)
+ * @param baseDelay - Base delay in milliseconds (default: 1000)
+ * @returns Object with success status, result, error, and attempt count
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+  baseDelay = 1000
+): Promise<{ success: boolean; result?: T; error?: Error; attempts: number }> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const result = await fn();
+      return { success: true, result, attempts: attempt };
+    } catch (error) {
+      lastError = error as Error;
+
+      // Don't retry on validation errors or constraint violations
+      const errorMessage = lastError.message?.toLowerCase() || '';
+      if (
+        errorMessage.includes('violates') ||
+        errorMessage.includes('invalid') ||
+        errorMessage.includes('required') ||
+        errorMessage.includes('constraint')
+      ) {
+        console.error(`[webhook] Non-retryable error on attempt ${attempt}:`, errorMessage);
+        return { success: false, error: lastError, attempts: attempt };
+      }
+
+      // If not the last attempt, wait before retrying
+      if (attempt < maxAttempts) {
+        const delay = baseDelay * Math.pow(2, attempt - 1); // 1s, 2s, 4s, 8s, etc.
+        console.log(`[webhook] Attempt ${attempt} failed. Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  return { success: false, error: lastError!, attempts: maxAttempts };
+}
+
+// ============================================
 // MAIN HANDLER - WEBHOOK RECEIVER
 // ============================================
 
@@ -266,47 +315,97 @@ async function fetchAndSaveResults(
   // Generate description/brief
   const description = `${allItems.length} ${sourceName.toLowerCase()} de ${targetName}, extraídos el ${new Date().toLocaleDateString('es-ES')}. Incluye información como ratings, fechas, y contenido textual.`;
 
-  // Insert ONE consolidated document
-  console.log(`[webhook] Inserting document "${documentName}" into knowledge_base_docs...`);
-  const { data: insertedDoc, error: docError } = await supabase
-    .from('knowledge_base_docs')
-    .insert({
-      project_id: job.project_id,
-      filename: documentName,
-      extracted_content: consolidatedContent,
-      description: description,
-      category: job.target_category || 'research',
-      tags: tags,
-      source_type: 'scraper',
-      source_job_id: job.id,
-      source_url: extractUrl(allItems[0]),
-      source_metadata: {
-        scraper_type: job.scraper_type,
-        scraped_at: new Date().toISOString(),
-        total_items: allItems.length,
-        target_name: targetName,
-        output_format: outputConfig.format,
-        raw_preview: allItems.slice(0, 10),
-      },
-    })
-    .select('id')
-    .single();
+  // Extract custom metadata from job (competitor, source_type, campaign_id)
+  // This is critical for document matching in the KnowledgeBaseGenerator
+  const customMeta = (providerMeta?.custom_metadata as Record<string, unknown>) || {};
+  console.log('[webhook] custom_metadata from job:', JSON.stringify(customMeta, null, 2));
 
-  if (docError) {
-    console.error('[webhook] ERROR inserting document:', docError);
-    // Mark job as failed if document couldn't be saved
+  // Validate required fields before insert
+  console.log(`[webhook] Validating data for job ${job.id}...`);
+  if (!job.project_id) {
+    console.error('[webhook] ERROR: Missing project_id');
     await supabase
       .from('scraper_jobs')
       .update({
         status: 'failed',
-        error_message: `Error al guardar documento: ${docError.message}`,
+        error_message: 'Validation failed: Missing project_id',
         completed_at: new Date().toISOString(),
       })
       .eq('id', job.id);
     return;
   }
 
-  console.log(`[webhook] SUCCESS! Created document "${documentName}" (id: ${insertedDoc?.id}) with ${allItems.length} items for job ${job.id}`);
+  if (!consolidatedContent || consolidatedContent.trim().length === 0) {
+    console.error('[webhook] ERROR: Empty extracted_content');
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'failed',
+        error_message: 'Validation failed: No content extracted',
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', job.id);
+    return;
+  }
+
+  // Insert ONE consolidated document with retry logic
+  console.log(`[webhook] Starting document insert for job ${job.id}: "${documentName}" (${consolidatedContent.length} chars, ${allItems.length} items)`);
+
+  const insertResult = await retryWithBackoff(async () => {
+    const { data, error } = await supabase
+      .from('knowledge_base_docs')
+      .insert({
+        project_id: job.project_id,
+        filename: documentName,
+        extracted_content: consolidatedContent,
+        description: description,
+        category: job.target_category || 'research',
+        tags: tags,
+        source_type: 'scraper',
+        source_job_id: job.id,
+        source_url: extractUrl(allItems[0]),
+        source_metadata: {
+          scraper_type: job.scraper_type,
+          scraped_at: new Date().toISOString(),
+          total_items: allItems.length,
+          target_name: targetName,
+          output_format: outputConfig.format,
+          // Include custom metadata for document matching
+          competitor: customMeta.competitor || null,
+          source_type: customMeta.source_type || job.scraper_type,
+          campaign_id: customMeta.campaign_id || null,
+          raw_preview: allItems.slice(0, 10),
+        },
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error(`[webhook] Insert error:`, error);
+      throw error;
+    }
+
+    return data;
+  }, 3, 1000);
+
+  if (!insertResult.success) {
+    console.error(`[webhook] FAILED to insert document after ${insertResult.attempts} attempts. Error:`, insertResult.error);
+    console.error(`[webhook] Error details: ${JSON.stringify(insertResult.error, null, 2)}`);
+
+    // Mark job as failed with detailed error
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'failed',
+        error_message: `Error al guardar documento (${insertResult.attempts} intentos): ${insertResult.error?.message || 'Unknown error'}`,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', job.id);
+    return;
+  }
+
+  const insertedDoc = insertResult.result;
+  console.log(`[webhook] SUCCESS! Created document "${documentName}" (id: ${insertedDoc?.id}) with ${allItems.length} items for job ${job.id} (${insertResult.attempts} attempt${insertResult.attempts > 1 ? 's' : ''})`);
 
   // Trigger embedding generation asynchronously
   if (insertedDoc?.id) {

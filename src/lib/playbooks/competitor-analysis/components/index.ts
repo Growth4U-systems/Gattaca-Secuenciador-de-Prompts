@@ -7,6 +7,7 @@
 export { default as KnowledgeBaseGenerator } from './KnowledgeBaseGenerator'
 export { default as DocumentGeneratorCard } from './DocumentGeneratorCard'
 export { default as DeepResearchLauncher } from './DeepResearchLauncher'
+export { default as ScraperInputsForm } from './ScraperInputsForm'
 
 // Re-export props types from types.ts
 export type {

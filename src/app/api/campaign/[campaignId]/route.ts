@@ -96,6 +96,10 @@ export async function PATCH(
     if (body.status !== undefined) updateData.status = body.status
     if (body.current_step_id !== undefined) updateData.current_step_id = body.current_step_id
     if (body.playbook_state !== undefined) updateData.playbook_state = body.playbook_state
+    // Wizard state fields for Knowledge Base Generator
+    if (body.current_phase !== undefined) updateData.current_phase = body.current_phase
+    if (body.current_step !== undefined) updateData.current_step = body.current_step
+    if (body.documents_progress !== undefined) updateData.documents_progress = body.documents_progress
 
     const { data, error } = await supabase
       .from('ecp_campaigns')

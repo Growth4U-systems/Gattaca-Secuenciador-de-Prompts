@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { X, ChevronRight, ChevronLeft, Check, Loader2, FileText, AlertTriangle } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { X, ChevronRight, ChevronLeft, Check, Loader2 } from 'lucide-react'
 import { PlaybookConfig } from './types'
 import { getDefaultPromptForStep } from './utils/getDefaultPrompts'
 import DocumentChecklist, { useDocumentStatus } from './DocumentChecklist'
 import {
   COMPETITOR_ANALYSIS_STEP_REQUIREMENTS,
   getAllDocumentRequirements,
-  KnowledgeBaseGenerator,
+  ScraperInputsForm,
   type CampaignVariables,
 } from './configs/competitor-analysis.config'
 import type { StepRequirements, DocumentRequirement, DocumentStatus } from './DocumentRequirementsMap'
@@ -96,9 +96,8 @@ export default function CampaignWizard({
   // Step 3: System config (from playbook variables)
   const [systemConfig, setSystemConfig] = useState<Record<string, any>>({})
 
-  // Campaign created early for Knowledge Base step
-  const [createdCampaignId, setCreatedCampaignId] = useState<string | null>(null)
-  const [campaignCreating, setCampaignCreating] = useState(false)
+  // Step 3: Scraper inputs (URLs, usernames)
+  const [scraperInputValues, setScraperInputValues] = useState<Record<string, string>>({})
 
   // Determine if this playbook has document requirements
   const documentRequirements = useMemo<StepRequirements[]>(() => {
@@ -123,19 +122,19 @@ export default function CampaignWizard({
   // Initialize variables from playbook config
   useEffect(() => {
     const initializeVariables = () => {
-      console.log('[CampaignWizard] playbookConfig.variables:', playbookConfig.variables)
+      // Get all text/textarea variables (both required and optional)
+      const allVariables = playbookConfig.variables || []
 
-      // Step 2: Text variables that need user input (type='text' or undefined type, and required)
-      // These are the main campaign variables like content_theme, target, product, etc.
-      const textVariables = (playbookConfig.variables || [])
-        .filter(v => (!v.type || v.type === 'text' || v.type === 'textarea') && v.required !== false)
+      // Filter to text-input variables and map to our format
+      const textVariables = allVariables
+        .filter(v => !v.type || v.type === 'text' || v.type === 'textarea')
         .map(v => ({
           key: v.key,
           label: v.label || formatLabel(v.key),
           value: v.defaultValue?.toString() || '',
           description: v.description || VARIABLE_DESCRIPTIONS[v.key]?.description,
           placeholder: v.placeholder || VARIABLE_DESCRIPTIONS[v.key]?.placeholder,
-          required: v.required !== false,
+          required: v.required === true,
         }))
 
       console.log('[CampaignWizard] textVariables:', textVariables)
@@ -172,64 +171,9 @@ export default function CampaignWizard({
     setSystemConfig(prev => ({ ...prev, [key]: value }))
   }
 
-  // Create campaign early (for Knowledge Base step)
-  const createCampaignEarly = useCallback(async () => {
-    if (createdCampaignId) return createdCampaignId // Already created
-
-    setCampaignCreating(true)
-    setError(null)
-
-    try {
-      // Build custom variables from prompt variables
-      const customVariables: Record<string, string> = {}
-      promptVariables.forEach(v => {
-        customVariables[v.key] = v.value
-      })
-
-      // Merge with system config
-      const allVariables = { ...customVariables, ...systemConfig }
-
-      // Create campaign via API
-      const response = await fetch('/api/campaign/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId,
-          ecp_name: campaignName,
-          problem_core: campaignDescription || null,
-          custom_variables: allVariables,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Error creating campaign')
-      }
-
-      setCreatedCampaignId(data.campaign.id)
-      return data.campaign.id
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido')
-      return null
-    } finally {
-      setCampaignCreating(false)
-    }
-  }, [createdCampaignId, promptVariables, systemConfig, projectId, campaignName, campaignDescription])
-
-  // Handle step navigation with early campaign creation for Knowledge Base
+  // Handle step navigation
   const handleNextStep = async () => {
     if (!canProceed()) return
-
-    // If moving to Knowledge Base step (step 3 when hasDocumentRequirements)
-    if (hasDocumentRequirements && step === 2) {
-      const campaignId = await createCampaignEarly()
-      if (!campaignId) {
-        // Error occurred, stay on current step
-        return
-      }
-    }
-
     setStep(step + 1)
   }
 
@@ -275,12 +219,6 @@ export default function CampaignWizard({
   const stepMapping = getStepContent()
 
   const handleCreate = async () => {
-    // If campaign was already created in Knowledge Base step, just redirect
-    if (createdCampaignId) {
-      onCreated(createdCampaignId)
-      return
-    }
-
     setLoading(true)
     setError(null)
 
@@ -291,8 +229,8 @@ export default function CampaignWizard({
         customVariables[v.key] = v.value
       })
 
-      // Merge with system config
-      const allVariables = { ...customVariables, ...systemConfig }
+      // Merge with system config and scraper inputs
+      const allVariables = { ...customVariables, ...systemConfig, ...scraperInputValues }
 
       // Create campaign via API
       // Note: API expects 'ecp_name' not 'name'
@@ -304,6 +242,8 @@ export default function CampaignWizard({
           ecp_name: campaignName,
           problem_core: campaignDescription || null,
           custom_variables: allVariables,
+          flow_config: playbookConfig.flow_config || null,
+          playbook_type: playbookConfig.type, // Campaign-specific playbook type
         }),
       })
 
@@ -339,33 +279,46 @@ export default function CampaignWizard({
   }, [promptVariables])
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Nueva Campaña</h2>
-            <p className="text-sm text-gray-500">Paso {step} de {totalSteps}</p>
-          </div>
+    <div className="flex flex-col h-full min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+      {/* Full-screen wizard header */}
+      <div className="flex items-center justify-between px-8 py-4 border-b border-gray-200 bg-white shadow-sm">
+        <div className="flex items-center gap-4">
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg text-gray-500"
           >
             <X size={20} />
           </button>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Nueva Campaña</h2>
+            <p className="text-sm text-gray-500">Paso {step} de {totalSteps}</p>
+          </div>
         </div>
-
-        {/* Progress bar */}
-        <div className="h-1 bg-gray-100">
-          <div
-            className="h-full bg-blue-600 transition-all duration-300"
-            style={{ width: `${(step / totalSteps) * 100}%` }}
-          />
+        {/* Progress indicator */}
+        <div className="flex items-center gap-2">
+          {Array.from({ length: totalSteps }, (_, i) => (
+            <div
+              key={i}
+              className={`h-2 w-8 rounded-full transition-colors ${
+                i + 1 <= step ? 'bg-blue-600' : 'bg-gray-200'
+              }`}
+            />
+          ))}
         </div>
+      </div>
 
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[60vh]">
-          {/* Step: Basic Info */}
+      {/* Progress bar */}
+      <div className="h-1 bg-gray-100">
+        <div
+          className="h-full bg-blue-600 transition-all duration-300"
+          style={{ width: `${(step / totalSteps) * 100}%` }}
+        />
+      </div>
+
+      {/* Content - full height */}
+      <div className="flex-1 overflow-y-auto p-8">
+          <div className="max-w-4xl mx-auto">
+            {/* Step: Basic Info */}
           {step === stepMapping.basic && (
             <div className="space-y-4">
               <div className="text-center mb-6">
@@ -445,42 +398,22 @@ export default function CampaignWizard({
             </div>
           )}
 
-          {/* Step: Knowledge Base Generator (only for playbooks with document requirements) */}
+          {/* Step: Scraper Inputs (URLs, usernames) */}
           {step === stepMapping.documents && hasDocumentRequirements && (
             <div className="space-y-4">
-              {campaignCreating ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-4" />
-                  <p className="text-sm text-gray-600">Creando campaña...</p>
-                </div>
-              ) : createdCampaignId ? (
-                <KnowledgeBaseGenerator
-                  campaignId={createdCampaignId}
-                  projectId={projectId}
-                  competitorName={competitorName}
-                  scraperInputs={scraperInputs}
-                  existingDocuments={[]}
-                  onDocumentGenerated={(docId, sourceType) => {
-                    console.log('Document generated:', docId, sourceType)
-                  }}
-                  onComplete={() => setStep(step + 1)}
-                  onSkip={() => setStep(step + 1)}
-                />
-              ) : (
-                <div className="text-center py-12">
-                  <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
-                  <p className="text-gray-600">Error al crear la campaña</p>
-                  {error && (
-                    <p className="text-sm text-red-600 mt-2">{error}</p>
-                  )}
-                  <button
-                    onClick={() => createCampaignEarly()}
-                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    Reintentar
-                  </button>
-                </div>
-              )}
+              <div className="text-center mb-6">
+                <span className="text-3xl">🔗</span>
+                <h3 className="text-lg font-medium text-gray-900 mt-2">Fuentes de Datos</h3>
+                <p className="text-sm text-gray-500">
+                  Configura las URLs y perfiles del competidor para extraer informacion
+                </p>
+              </div>
+
+              <ScraperInputsForm
+                competitorName={competitorName}
+                initialValues={scraperInputValues}
+                onChange={setScraperInputValues}
+              />
             </div>
           )}
 
@@ -564,57 +497,48 @@ export default function CampaignWizard({
               )}
             </div>
           )}
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
-          <button
-            onClick={() => step > 1 ? setStep(step - 1) : onClose()}
-            className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-          >
-            <ChevronLeft size={16} />
-            {step > 1 ? 'Atrás' : 'Cancelar'}
-          </button>
+      {/* Footer - sticky at bottom */}
+      <div className="flex items-center justify-between px-8 py-4 border-t border-gray-200 bg-white shadow-lg">
+            <button
+              onClick={() => step > 1 ? setStep(step - 1) : onClose()}
+              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+            >
+              <ChevronLeft size={16} />
+              {step > 1 ? 'Atrás' : 'Cancelar'}
+            </button>
 
-          {step < totalSteps ? (
-            <button
-              onClick={handleNextStep}
-              disabled={!canProceed() || campaignCreating}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {campaignCreating ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  Creando...
-                </>
-              ) : (
-                <>
-                  Siguiente
-                  <ChevronRight size={16} />
-                </>
-              )}
-            </button>
-          ) : (
-            <button
-              onClick={handleCreate}
-              disabled={loading || !canProceed()}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  Creando...
-                </>
-              ) : (
-                <>
-                  <Check size={16} />
-                  Crear Campaña
-                </>
-              )}
-            </button>
-          )}
+            {step < totalSteps ? (
+              <button
+                onClick={handleNextStep}
+                disabled={!canProceed()}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Siguiente
+                <ChevronRight size={16} />
+              </button>
+            ) : (
+              <button
+                onClick={handleCreate}
+                disabled={loading || !canProceed()}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Creando...
+                  </>
+                ) : (
+                  <>
+                    <Check size={16} />
+                    Crear Campaña
+                  </>
+                )}
+              </button>
+            )}
         </div>
-      </div>
     </div>
   )
 }

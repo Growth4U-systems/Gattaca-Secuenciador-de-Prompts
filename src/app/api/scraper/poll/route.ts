@@ -98,6 +98,11 @@ async function pollApifyRun(
   }
 
   const statusData = (await statusResponse.json()) as ApifyRunStatus;
+
+  if (!statusData?.data?.status) {
+    throw new Error('Invalid response from Apify: missing status data');
+  }
+
   const runStatus = statusData.data.status;
 
   // Map Apify status to our status
@@ -268,6 +273,11 @@ async function fetchAndSaveApifyResults(
   // Generate description/brief
   const description = `${items.length} ${sourceName.toLowerCase()} de ${targetName}, extraídos el ${new Date().toLocaleDateString('es-ES')}. Incluye información como ratings, fechas, y contenido textual.`;
 
+  // Extract custom metadata from job (competitor, source_type, campaign_id for playbooks)
+  // This is critical for document matching in the KnowledgeBaseGenerator
+  const customMeta = (providerMeta?.custom_metadata as Record<string, unknown>) || {};
+  console.log('[scraper/poll] custom_metadata from job:', JSON.stringify(customMeta, null, 2));
+
   // Insert ONE consolidated document using admin client
   console.log(`[scraper/poll] Inserting document "${documentName}" into knowledge_base_docs...`);
   const { data: insertedDoc, error: docError } = await supabase
@@ -288,6 +298,10 @@ async function fetchAndSaveApifyResults(
         total_items: items.length,
         target_name: targetName,
         output_format: outputConfig.format,
+        // Include custom metadata for document matching (competitor, source_type, campaign_id)
+        competitor: customMeta.competitor || null,
+        source_type: customMeta.source_type || job.scraper_type,
+        campaign_id: customMeta.campaign_id || null,
         raw_preview: items.slice(0, 10),
       },
     })

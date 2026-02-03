@@ -253,7 +253,7 @@ export default function DocumentGeneratorCard({
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   placeholder={scraperMapping.placeholder}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                   rows={3}
                 />
               ) : (
@@ -262,8 +262,14 @@ export default function DocumentGeneratorCard({
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   placeholder={scraperMapping.placeholder}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+              )}
+              {/* Show scraper/actor info */}
+              {requirement.apifyActor && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Scraper: {requirement.apifyActor}
+                </p>
               )}
             </div>
           )}

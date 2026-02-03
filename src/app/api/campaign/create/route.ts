@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
+import { getPlaybookConfig } from '@/components/playbook/configs'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -11,7 +12,7 @@ export const maxDuration = 30
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { projectId, ecp_name, problem_core, country, industry, custom_variables, flow_config } = body
+    const { projectId, ecp_name, problem_core, country, industry, custom_variables, flow_config, playbook_type } = body
 
     // Only require projectId and ecp_name
     // Other fields are optional now (variables-only system)
@@ -45,8 +46,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create campaign with flow_config if provided (for duplicates)
-    const campaignFlowConfig = flow_config || null
+    // Get flow_config: use provided one, or fetch from project_playbooks, or from template
+    let campaignFlowConfig = flow_config || null
+
+    // If no flow_config provided and we have a playbook_type, try to get it
+    if (!campaignFlowConfig && playbook_type) {
+      // First try to get from project_playbooks (stored when playbook was added to project)
+      const { data: projectPlaybook } = await supabase
+        .from('project_playbooks')
+        .select('config')
+        .eq('project_id', projectId)
+        .eq('playbook_type', playbook_type)
+        .single()
+
+      if (projectPlaybook?.config?.flow_config) {
+        // Use flow_config stored when playbook was added to project
+        campaignFlowConfig = projectPlaybook.config.flow_config
+      } else {
+        // Fallback: get from playbook template directly
+        const playbookConfig = getPlaybookConfig(playbook_type)
+          || getPlaybookConfig(playbook_type.replace('_', '-'))
+          || getPlaybookConfig(playbook_type.replace('-', '_'))
+
+        if (playbookConfig?.flow_config) {
+          // Use the actual flow_config with steps/prompts
+          campaignFlowConfig = playbookConfig.flow_config
+        }
+      }
+    }
 
     let insertData: any = {
       project_id: projectId,
@@ -58,6 +85,7 @@ export async function POST(request: NextRequest) {
       custom_variables: custom_variables || {},
       step_outputs: {},
       flow_config: campaignFlowConfig,
+      playbook_type: playbook_type || null, // Campaign-specific playbook type
     }
 
     const { data, error } = await supabase
@@ -96,7 +124,6 @@ export async function POST(request: NextRequest) {
       {
         error: 'Internal server error',
         details: errorMessage,
-        stack: error instanceof Error ? error.stack : undefined
       },
       { status: 500 }
     )

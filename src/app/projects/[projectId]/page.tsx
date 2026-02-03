@@ -1,36 +1,77 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { FileText, Rocket, Sliders, Edit2, Check, X, Trash2, ChevronRight, Home, FolderOpen, Folder, Calendar, MoreVertical, Share2, Building2, Table2, Globe, Search, List, Plus, Users } from 'lucide-react'
+import {
+  FileText, Rocket, Edit2, Check, X, Trash2, Home, FolderOpen, Calendar,
+  MoreVertical, Share2, Building2, Plus, ChevronRight, Search, Users, Video,
+  Linkedin, GitFork, KeyRound, Zap
+} from 'lucide-react'
 import { useToast, useModal } from '@/components/ui'
 import { useProject } from '@/hooks/useProjects'
-import { useDocuments, deleteDocument, canDeleteDocument, updateDocumentFolder, groupByFolder, getFolders } from '@/hooks/useDocuments'
-import DocumentUpload from '@/components/documents/DocumentUpload'
-import DocumentBulkUpload from '@/components/documents/DocumentBulkUpload'
-import DocumentList from '@/components/documents/DocumentList'
-import DocumentFolderView from '@/components/documents/DocumentFolderView'
-import CSVTableViewer from '@/components/documents/CSVTableViewer'
-import JSONViewer from '@/components/documents/JSONViewer'
-import ScraperLauncher from '@/components/scraper/ScraperLauncher'
-import TokenMonitor from '@/components/TokenMonitor'
-import CampaignRunner from '@/components/campaign/CampaignRunner'
-import SetupTab from '@/components/project/SetupTab'
-import ResearchPromptsEditor from '@/components/project/ResearchPromptsEditor'
-import ShareProjectModal from '@/components/project/ShareProjectModal'
-import ExportDataTab from '@/components/project/ExportDataTab'
-import ApiKeysConfig from '@/components/settings/ApiKeysConfig'
-import NicheFinderPlaybook from '@/components/niche-finder/NicheFinderPlaybook'
-import NicheFinderPlaybookV2 from '@/components/niche-finder/NicheFinderPlaybookV2'
-import SignalBasedOutreachPlaybook from '@/components/signal-outreach/SignalBasedOutreachPlaybook'
-import { VideoViralIAPlaybook } from '@/components/video-viral-ia'
-import { Video, Linkedin, GitFork, KeyRound } from 'lucide-react'
+import { useProjectPlaybooks } from '@/hooks/useProjectPlaybooks'
+import { useDocuments } from '@/hooks/useDocuments'
 import ClientSidebar from '@/components/layout/ClientSidebar'
-import { PlaybookShell } from '@/components/playbook'
-import { getPlaybookConfig } from '@/components/playbook/configs'
+import ShareProjectModal from '@/components/project/ShareProjectModal'
 
-type TabType = 'documents' | 'setup' | 'campaigns' | 'export' | 'niche-finder' | 'signal-outreach' | 'video-viral-ia' | 'seo-seed-keywords' | 'linkedin-post-generator' | 'github-fork-to-crm'
+// Playbook metadata for display
+const PLAYBOOK_INFO: Record<string, { name: string; description: string; icon: any; color: string }> = {
+  'ecp': {
+    name: 'ECP Positioning',
+    description: 'Estrategia de posicionamiento basada en el framework ECP',
+    icon: Zap,
+    color: 'blue',
+  },
+  'competitor_analysis': {
+    name: 'Competitor Analysis',
+    description: 'Análisis profundo de competidores y oportunidades de mercado',
+    icon: Search,
+    color: 'purple',
+  },
+  'competitor-analysis': {
+    name: 'Competitor Analysis',
+    description: 'Análisis profundo de competidores y oportunidades de mercado',
+    icon: Search,
+    color: 'purple',
+  },
+  'niche_finder': {
+    name: 'Buscador de Nichos',
+    description: 'Descubre nichos de mercado rentables',
+    icon: Search,
+    color: 'green',
+  },
+  'signal_based_outreach': {
+    name: 'Signal Outreach',
+    description: 'Outreach basado en señales de compra',
+    icon: Users,
+    color: 'orange',
+  },
+  'video_viral_ia': {
+    name: 'Video Viral IA',
+    description: 'Crear videos virales con IA',
+    icon: Video,
+    color: 'red',
+  },
+  'seo-seed-keywords': {
+    name: 'SEO Keywords',
+    description: 'Generar keywords SEO desde ICP',
+    icon: KeyRound,
+    color: 'teal',
+  },
+  'linkedin-post-generator': {
+    name: 'LinkedIn Posts',
+    description: 'Generar posts virales para LinkedIn',
+    icon: Linkedin,
+    color: 'sky',
+  },
+  'github-fork-to-crm': {
+    name: 'Fork → CRM',
+    description: 'Convertir forks de GitHub en leads',
+    icon: GitFork,
+    color: 'gray',
+  },
+}
 
 // Loading Skeleton
 function LoadingSkeleton() {
@@ -46,28 +87,17 @@ function LoadingSkeleton() {
           <div className="h-8 w-64 bg-gray-200 rounded animate-pulse mb-2" />
           <div className="h-4 w-96 bg-gray-100 rounded animate-pulse" />
         </div>
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="border-b border-gray-100 p-4">
-            <div className="flex gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-10 w-28 bg-gray-100 rounded animate-pulse" />
-              ))}
-            </div>
-          </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-24 bg-gray-50 rounded-xl animate-pulse" />
-              ))}
-            </div>
-          </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-48 bg-gray-50 rounded-xl animate-pulse" />
+          ))}
         </div>
       </div>
     </main>
   )
 }
 
-export default function ProjectPage({
+function ProjectPageContent({
   params,
 }: {
   params: { projectId: string }
@@ -77,9 +107,57 @@ export default function ProjectPage({
   const toast = useToast()
   const modal = useModal()
 
-  const [activeTab, setActiveTab] = useState<TabType | null>(null)
-  const { project, userRole, loading: projectLoading, error: projectError } = useProject(params.projectId)
-  const { documents, loading: docsLoading, reload: reloadDocs } = useDocuments(params.projectId)
+  const { project, loading: projectLoading, error: projectError } = useProject(params.projectId)
+  const { documents } = useDocuments(params.projectId)
+  const {
+    playbooks: projectPlaybooks,
+    loading: playbooksLoading,
+    addPlaybook,
+    removePlaybook,
+    hasPlaybook,
+    reload: reloadPlaybooks
+  } = useProjectPlaybooks(params.projectId)
+
+  const [showAddPlaybookModal, setShowAddPlaybookModal] = useState(false)
+  const [autoAddingPlaybook, setAutoAddingPlaybook] = useState(false)
+  const [selectedPlaybookType, setSelectedPlaybookType] = useState<string | null>(null)
+  const [playbookName, setPlaybookName] = useState('')
+  const [addingPlaybook, setAddingPlaybook] = useState(false)
+
+  // Handle addPlaybook query parameter - auto-add playbook and navigate
+  const addPlaybookParam = searchParams.get('addPlaybook')
+
+  useEffect(() => {
+    if (addPlaybookParam && !projectLoading && !playbooksLoading && !autoAddingPlaybook && project) {
+      const handleAutoAddPlaybook = async () => {
+        setAutoAddingPlaybook(true)
+        try {
+          // Check if playbook already exists
+          if (!hasPlaybook(addPlaybookParam)) {
+            const info = PLAYBOOK_INFO[addPlaybookParam]
+            const defaultName = info?.name || addPlaybookParam
+            const newPlaybook = await addPlaybook(addPlaybookParam, defaultName)
+            toast.success('Playbook agregado', 'El playbook se ha agregado al proyecto')
+            // Navigate to the new playbook using its ID
+            if (newPlaybook?.id) {
+              router.replace(`/projects/${params.projectId}/playbooks/${newPlaybook.id}`)
+              return
+            }
+          }
+          // Navigate to the playbook page (which has the campaign runner/wizard)
+          router.replace(`/projects/${params.projectId}/playbooks/${addPlaybookParam}`)
+        } catch (error) {
+          console.error('Error adding playbook:', error)
+          toast.error('Error', 'No se pudo agregar el playbook')
+          // Clear the query param on error
+          router.replace(`/projects/${params.projectId}`)
+        }
+      }
+      handleAutoAddPlaybook()
+    }
+  }, [addPlaybookParam, projectLoading, playbooksLoading, autoAddingPlaybook, project, hasPlaybook, addPlaybook, toast, router, params.projectId])
+  const [availablePlaybooks, setAvailablePlaybooks] = useState<Array<{ id: string; name: string; playbook_type: string; description: string }>>([])
+  const [loadingAvailable, setLoadingAvailable] = useState(false)
   const [editingProject, setEditingProject] = useState(false)
   const [projectName, setProjectName] = useState('')
   const [projectDescription, setProjectDescription] = useState('')
@@ -87,89 +165,23 @@ export default function ProjectPage({
   const [showMenu, setShowMenu] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
 
-  // Set initial tab based on URL param or project type
+  // Load available playbooks when modal opens
   useEffect(() => {
-    if (project && activeTab === null) {
-      // Check for tab query parameter first
-      const tabParam = searchParams.get('tab') as TabType | null
-      const validTabs = ['documents', 'setup', 'campaigns', 'export', 'niche-finder', 'signal-outreach', 'video-viral-ia', 'seo-seed-keywords', 'linkedin-post-generator', 'github-fork-to-crm']
-      if (tabParam && validTabs.includes(tabParam)) {
-        setActiveTab(tabParam)
-      } else {
-        // Map playbook_type to default tab
-        const playbookTabMap: Record<string, TabType> = {
-          'niche_finder': 'niche-finder',
-          'signal_based_outreach': 'signal-outreach',
-          'video_viral_ia': 'video-viral-ia',
-          'seo-seed-keywords': 'seo-seed-keywords',
-          'linkedin-post-generator': 'linkedin-post-generator',
-          'github-fork-to-crm': 'github-fork-to-crm',
-        }
-        setActiveTab(playbookTabMap[project.playbook_type] || 'documents')
-      }
+    if (showAddPlaybookModal && availablePlaybooks.length === 0) {
+      setLoadingAvailable(true)
+      fetch('/api/v2/playbooks')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setAvailablePlaybooks(data.playbooks || [])
+          }
+        })
+        .catch(console.error)
+        .finally(() => setLoadingAvailable(false))
     }
-  }, [project, activeTab, searchParams])
+  }, [showAddPlaybookModal, availablePlaybooks.length])
 
-  // Base tabs available for all projects (Setup unifies Variables + Flow)
-  const baseTabs = [
-    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
-    { id: 'setup' as TabType, label: 'Setup', icon: Sliders, description: 'Variables y flujo' },
-    { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Ejecutar' },
-  ]
-
-  // Niche Finder: Uses unified view with config and campaigns integrated
-  const nicheFinderTabs = [
-    { id: 'niche-finder' as TabType, label: 'Buscador de Nichos', icon: Search, description: 'Configurar y ejecutar' },
-    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
-  ]
-
-  // Signal-Based Outreach: Uses unified view with config and campaigns integrated
-  const signalOutreachTabs = [
-    { id: 'signal-outreach' as TabType, label: 'Signal Outreach', icon: Users, description: 'Configurar y ejecutar' },
-    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
-  ]
-
-  // Video Viral IA: Uses unified view with config and campaigns integrated
-  const videoViralIATabs = [
-    { id: 'video-viral-ia' as TabType, label: 'Video Viral IA', icon: Video, description: 'Crear videos virales' },
-    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
-    { id: 'setup' as TabType, label: 'API Keys', icon: Sliders, description: 'Configurar APIs' },
-  ]
-
-  // SEO Seed Keywords: Generate keywords from ICP
-  const seoSeedKeywordsTabs = [
-    { id: 'seo-seed-keywords' as TabType, label: 'SEO Keywords', icon: KeyRound, description: 'Generar keywords SEO' },
-    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
-  ]
-
-  // LinkedIn Post Generator: Create viral posts
-  const linkedinPostGeneratorTabs = [
-    { id: 'linkedin-post-generator' as TabType, label: 'LinkedIn Posts', icon: Linkedin, description: 'Generar posts virales' },
-    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
-  ]
-
-  // GitHub Fork to CRM: Convert forks to leads
-  const githubForkToCrmTabs = [
-    { id: 'github-fork-to-crm' as TabType, label: 'Fork → CRM', icon: GitFork, description: 'Convertir forks en leads' },
-    { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
-  ]
-
-  // Select tabs based on playbook type
-  const getTabsForPlaybook = (playbookType: string | undefined) => {
-    switch (playbookType) {
-      case 'niche_finder': return nicheFinderTabs
-      case 'signal_based_outreach': return signalOutreachTabs
-      case 'video_viral_ia': return videoViralIATabs
-      case 'seo-seed-keywords': return seoSeedKeywordsTabs
-      case 'linkedin-post-generator': return linkedinPostGeneratorTabs
-      case 'github-fork-to-crm': return githubForkToCrmTabs
-      case 'ecp': return [...baseTabs, { id: 'export' as TabType, label: 'Export', icon: Table2, description: 'Datos consolidados' }]
-      default: return baseTabs
-    }
-  }
-  const tabs = getTabsForPlaybook(project?.playbook_type)
-
-  if (projectLoading || activeTab === null) {
+  if (projectLoading || playbooksLoading) {
     return <LoadingSkeleton />
   }
 
@@ -196,8 +208,6 @@ export default function ProjectPage({
     )
   }
 
-  const totalTokens = documents.reduce((sum, doc) => sum + (doc.token_count || 0), 0)
-
   const handleEditProject = () => {
     setProjectName(project?.name || '')
     setProjectDescription(project?.description || '')
@@ -214,9 +224,7 @@ export default function ProjectPage({
     try {
       const response = await fetch(`/api/projects/${params.projectId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: projectName,
           description: projectDescription || null,
@@ -275,8 +283,48 @@ export default function ProjectPage({
     }
   }
 
-  // Get current tab info
-  const currentTab = tabs.find(t => t.id === activeTab)
+  const handleAddPlaybookWithName = async () => {
+    if (!selectedPlaybookType || !playbookName.trim()) return
+
+    setAddingPlaybook(true)
+    try {
+      const newPlaybook = await addPlaybook(selectedPlaybookType, playbookName.trim())
+      toast.success('Playbook agregado', `${playbookName} agregado al proyecto`)
+      setShowAddPlaybookModal(false)
+      setSelectedPlaybookType(null)
+      setPlaybookName('')
+      // Navigate to the new playbook
+      if (newPlaybook?.id) {
+        router.push(`/projects/${params.projectId}/playbooks/${newPlaybook.id}`)
+      }
+    } catch (err: any) {
+      if (err?.message?.includes('already exists')) {
+        toast.error('Nombre duplicado', 'Ya existe un playbook con ese nombre en este proyecto')
+      } else {
+        toast.error('Error', 'No se pudo agregar el playbook')
+      }
+    } finally {
+      setAddingPlaybook(false)
+    }
+  }
+
+  const handleRemovePlaybook = async (playbookId: string, playbookName: string) => {
+    const confirmed = await modal.confirm({
+      title: 'Quitar playbook',
+      message: `¿Estás seguro de que quieres quitar "${playbookName}" del proyecto? Las campañas asociadas no se eliminarán.`,
+      confirmText: 'Quitar',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    })
+    if (!confirmed) return
+
+    try {
+      await removePlaybook(playbookId)
+      toast.success('Playbook eliminado', `Playbook eliminado del proyecto`)
+    } catch (err) {
+      toast.error('Error', 'No se pudo eliminar el playbook')
+    }
+  }
 
   // Create client object for sidebar
   const clientForSidebar = project.client ? {
@@ -285,6 +333,21 @@ export default function ProjectPage({
     industry: project.client.industry || null,
     status: 'active' as const,
   } : null
+
+  // Get color classes for playbook cards
+  const getColorClasses = (color: string) => {
+    const colors: Record<string, { bg: string; icon: string; hover: string }> = {
+      blue: { bg: 'from-blue-500 to-blue-600', icon: 'text-blue-100', hover: 'hover:from-blue-600 hover:to-blue-700' },
+      purple: { bg: 'from-purple-500 to-purple-600', icon: 'text-purple-100', hover: 'hover:from-purple-600 hover:to-purple-700' },
+      green: { bg: 'from-green-500 to-green-600', icon: 'text-green-100', hover: 'hover:from-green-600 hover:to-green-700' },
+      orange: { bg: 'from-orange-500 to-orange-600', icon: 'text-orange-100', hover: 'hover:from-orange-600 hover:to-orange-700' },
+      red: { bg: 'from-red-500 to-red-600', icon: 'text-red-100', hover: 'hover:from-red-600 hover:to-red-700' },
+      teal: { bg: 'from-teal-500 to-teal-600', icon: 'text-teal-100', hover: 'hover:from-teal-600 hover:to-teal-700' },
+      sky: { bg: 'from-sky-500 to-sky-600', icon: 'text-sky-100', hover: 'hover:from-sky-600 hover:to-sky-700' },
+      gray: { bg: 'from-gray-600 to-gray-700', icon: 'text-gray-200', hover: 'hover:from-gray-700 hover:to-gray-800' },
+    }
+    return colors[color] || colors.blue
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex">
@@ -296,254 +359,225 @@ export default function ProjectPage({
       {/* Main Content */}
       <div className="flex-1 min-w-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Project Header Card */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
-          <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 px-6 py-5">
-            <div className="flex items-start justify-between">
-              {editingProject ? (
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="text"
-                      value={projectName}
-                      onChange={(e) => setProjectName(e.target.value)}
-                      placeholder="Nombre del proyecto"
-                      className="flex-1 text-xl font-bold text-gray-900 bg-white border-2 border-blue-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') handleCancelEditProject()
-                      }}
+          {/* Project Header Card */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
+            <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 px-6 py-5">
+              <div className="flex items-start justify-between">
+                {editingProject ? (
+                  <div className="flex-1 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        value={projectName}
+                        onChange={(e) => setProjectName(e.target.value)}
+                        placeholder="Nombre del proyecto"
+                        className="flex-1 text-xl font-bold text-gray-900 bg-white border-2 border-blue-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') handleCancelEditProject()
+                        }}
+                      />
+                      <button
+                        onClick={handleSaveProject}
+                        disabled={savingProject}
+                        className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300"
+                        title="Guardar"
+                      >
+                        <Check size={20} />
+                      </button>
+                      <button
+                        onClick={handleCancelEditProject}
+                        disabled={savingProject}
+                        className="p-2 bg-white/20 text-white rounded-lg hover:bg-white/30"
+                        title="Cancelar"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                    <textarea
+                      value={projectDescription}
+                      onChange={(e) => setProjectDescription(e.target.value)}
+                      placeholder="Descripción del proyecto (opcional)"
+                      rows={2}
+                      className="w-full text-sm text-gray-700 bg-white border-2 border-blue-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     />
-                    <button
-                      onClick={handleSaveProject}
-                      disabled={savingProject}
-                      className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300"
-                      title="Guardar"
-                    >
-                      <Check size={20} />
-                    </button>
-                    <button
-                      onClick={handleCancelEditProject}
-                      disabled={savingProject}
-                      className="p-2 bg-white/20 text-white rounded-lg hover:bg-white/30"
-                      title="Cancelar"
-                    >
-                      <X size={20} />
-                    </button>
                   </div>
-                  <textarea
-                    value={projectDescription}
-                    onChange={(e) => setProjectDescription(e.target.value)}
-                    placeholder="Descripción del proyecto (opcional)"
-                    rows={2}
-                    className="w-full text-sm text-gray-700 bg-white border-2 border-blue-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  />
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-white/10 backdrop-blur rounded-xl">
-                      <FolderOpen className="w-6 h-6 text-white" />
+                ) : (
+                  <>
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-white/10 backdrop-blur rounded-xl">
+                        <FolderOpen className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h1 className="text-2xl font-bold text-white">{project.name}</h1>
+                        {project.client?.name && (
+                          <p className="text-blue-200 text-sm font-medium mt-0.5">{project.client.name}</p>
+                        )}
+                        {project.description && (
+                          <p className="text-blue-100 mt-1 text-sm max-w-2xl">{project.description}</p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <h1 className="text-2xl font-bold text-white">{project.name}</h1>
-                      {project.client?.name && (
-                        <p className="text-blue-200 text-sm font-medium mt-0.5">{project.client.name}</p>
-                      )}
-                      {project.description && (
-                        <p className="text-blue-100 mt-1 text-sm max-w-2xl">{project.description}</p>
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowMenu(!showMenu)}
+                        className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors"
+                      >
+                        <MoreVertical size={20} />
+                      </button>
+                      {showMenu && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                          <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50">
+                            <button
+                              onClick={() => {
+                                setShowMenu(false)
+                                setShowShareModal(true)
+                              }}
+                              className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+                            >
+                              <Share2 size={16} />
+                              Compartir proyecto
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowMenu(false)
+                                handleEditProject()
+                              }}
+                              className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+                            >
+                              <Edit2 size={16} />
+                              Editar proyecto
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowMenu(false)
+                                handleDeleteProject()
+                              }}
+                              className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
+                            >
+                              <Trash2 size={16} />
+                              Eliminar proyecto
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
-                  </div>
-                  <div className="relative" ref={(el) => {
-                    if (el && showMenu) {
-                      const rect = el.getBoundingClientRect()
-                      const menu = el.querySelector('.dropdown-menu') as HTMLElement
-                      if (menu) {
-                        menu.style.top = `${rect.bottom + 8}px`
-                        menu.style.right = `${window.innerWidth - rect.right}px`
-                      }
-                    }
-                  }}>
-                    <button
-                      onClick={() => setShowMenu(!showMenu)}
-                      className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors"
-                    >
-                      <MoreVertical size={20} />
-                    </button>
-                    {showMenu && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-                        <div className="dropdown-menu fixed w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-visible z-50">
-                          <button
-                            onClick={() => {
-                              setShowMenu(false)
-                              setShowShareModal(true)
-                            }}
-                            className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
-                          >
-                            <Share2 size={16} />
-                            Compartir proyecto
-                          </button>
-                          <button
-                            onClick={() => {
-                              setShowMenu(false)
-                              handleEditProject()
-                            }}
-                            className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
-                          >
-                            <Edit2 size={16} />
-                            Editar proyecto
-                          </button>
-                          <button
-                            onClick={() => {
-                              setShowMenu(false)
-                              handleDeleteProject()
-                            }}
-                            className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
-                          >
-                            <Trash2 size={16} />
-                            Eliminar proyecto
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
+                  </>
+                )}
+              </div>
 
-            {/* Quick Stats */}
-            <div className="flex flex-wrap gap-3 mt-4">
-              {project.client?.name && (
+              {/* Quick Stats */}
+              <div className="flex flex-wrap gap-3 mt-4">
+                {project.client?.name && (
+                  <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
+                    <Building2 className="w-4 h-4 text-blue-200" />
+                    <span className="text-sm text-white">{project.client.name}</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
-                  <Building2 className="w-4 h-4 text-blue-200" />
-                  <span className="text-sm text-white">{project.client.name}</span>
+                  <FileText className="w-4 h-4 text-blue-200" />
+                  <span className="text-sm text-white">{documents.length} documentos</span>
                 </div>
-              )}
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
-                <FileText className="w-4 h-4 text-blue-200" />
-                <span className="text-sm text-white">{documents.length} documentos</span>
-              </div>
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
-                <Calendar className="w-4 h-4 text-blue-200" />
-                <span className="text-sm text-white">
-                  Creado {new Date(project.created_at).toLocaleDateString('es-ES', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
-                </span>
+                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
+                  <Rocket className="w-4 h-4 text-blue-200" />
+                  <span className="text-sm text-white">{projectPlaybooks.length} playbooks</span>
+                </div>
+                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
+                  <Calendar className="w-4 h-4 text-blue-200" />
+                  <span className="text-sm text-white">
+                    Creado {new Date(project.created_at).toLocaleDateString('es-ES', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Tabs Card */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          {/* Tab Navigation */}
-          <div className="border-b border-gray-100">
-            <nav className="flex -mb-px overflow-x-auto">
-              {tabs.map((tab) => {
-                const Icon = tab.icon
-                const isActive = activeTab === tab.id
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`
-                      relative flex-shrink-0 flex items-center gap-2.5 px-6 py-4 text-sm font-medium transition-all
-                      ${isActive
-                        ? 'text-blue-600'
-                        : 'text-gray-500 hover:text-gray-700'
-                      }
-                    `}
-                  >
-                    <div className={`p-1.5 rounded-lg ${isActive ? 'bg-blue-100' : 'bg-gray-100'}`}>
-                      <Icon size={16} className={isActive ? 'text-blue-600' : 'text-gray-500'} />
+          {/* Playbooks Section */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Playbooks</h2>
+              <button
+                onClick={() => setShowAddPlaybookModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
+              >
+                <Plus size={18} />
+                Agregar playbook
+              </button>
+            </div>
+
+            {projectPlaybooks.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Rocket className="w-8 h-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Sin playbooks</h3>
+                <p className="text-gray-500 mb-6 max-w-md mx-auto">
+                  Los playbooks definen flujos de trabajo para generar contenido y análisis.
+                  Agrega un playbook para comenzar.
+                </p>
+                <button
+                  onClick={() => setShowAddPlaybookModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
+                >
+                  <Plus size={18} />
+                  Agregar primer playbook
+                </button>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {projectPlaybooks.map((pb) => {
+                  const info = PLAYBOOK_INFO[pb.playbook_type] || {
+                    name: pb.playbook_type,
+                    description: 'Playbook personalizado',
+                    icon: Rocket,
+                    color: 'blue',
+                  }
+                  const Icon = info.icon
+                  const colors = getColorClasses(info.color)
+                  const displayName = pb.name || info.name
+
+                  return (
+                    <div
+                      key={pb.id}
+                      className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden group"
+                    >
+                      <Link
+                        href={`/projects/${params.projectId}/playbooks/${pb.id}`}
+                        className={`block p-6 bg-gradient-to-r ${colors.bg} ${colors.hover} transition-all`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="p-2 bg-white/20 backdrop-blur rounded-xl">
+                            <Icon className={`w-6 h-6 ${colors.icon}`} />
+                          </div>
+                          <ChevronRight className="w-5 h-5 text-white/60 group-hover:text-white group-hover:translate-x-1 transition-all" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-white mt-4">{displayName}</h3>
+                        <p className="text-white/80 text-sm mt-1 line-clamp-2">{info.description}</p>
+                      </Link>
+                      <div className="px-6 py-3 bg-gray-50 flex items-center justify-between">
+                        <span className="text-xs text-gray-500">
+                          Agregado el {new Date(pb.created_at).toLocaleDateString('es-ES')}
+                        </span>
+                        <button
+                          onClick={() => handleRemovePlaybook(pb.id, displayName)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Quitar playbook"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
-                    <span>{tab.label}</span>
-                    {isActive && (
-                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-                    )}
-                  </button>
-                )
-              })}
-            </nav>
-          </div>
-
-          {/* Tab Content */}
-          <div className="p-6">
-            {activeTab === 'documents' && (
-              <DocumentsTab
-                projectId={params.projectId}
-                documents={documents}
-                loading={docsLoading}
-                onReload={reloadDocs}
-                totalTokens={totalTokens}
-              />
-            )}
-            {activeTab === 'setup' && (
-              <div className="space-y-8">
-                <SetupTab
-                  projectId={params.projectId}
-                  clientId={project.client?.id || ''}
-                  initialVariables={project.variable_definitions || []}
-                  documents={documents}
-                  onVariablesUpdate={() => {
-                    window.location.reload()
-                  }}
-                />
-                <div className="border-t border-gray-200 pt-6">
-                  <ResearchPromptsEditor
-                    projectId={params.projectId}
-                    initialPrompts={project.deep_research_prompts || []}
-                    onUpdate={() => {
-                      window.location.reload()
-                    }}
-                  />
-                </div>
-                <div className="border-t border-gray-200 pt-6">
-                  <ApiKeysConfig />
-                </div>
+                  )
+                })}
               </div>
             )}
-            {activeTab === 'campaigns' && (
-              <CampaignRunner projectId={params.projectId} project={project} />
-            )}
-            {activeTab === 'export' && (
-              <ExportDataTab projectId={params.projectId} />
-            )}
-            {activeTab === 'niche-finder' && (
-              <NicheFinderPlaybookV2 projectId={params.projectId} />
-            )}
-            {activeTab === 'signal-outreach' && (
-              <SignalBasedOutreachPlaybook projectId={params.projectId} />
-            )}
-            {activeTab === 'video-viral-ia' && (
-              <VideoViralIAPlaybook projectId={params.projectId} />
-            )}
-            {activeTab === 'seo-seed-keywords' && getPlaybookConfig('seo-seed-keywords') && (
-              <PlaybookShell
-                projectId={params.projectId}
-                playbookConfig={getPlaybookConfig('seo-seed-keywords')!}
-              />
-            )}
-            {activeTab === 'linkedin-post-generator' && getPlaybookConfig('linkedin-post-generator') && (
-              <PlaybookShell
-                projectId={params.projectId}
-                playbookConfig={getPlaybookConfig('linkedin-post-generator')!}
-              />
-            )}
-            {activeTab === 'github-fork-to-crm' && getPlaybookConfig('github-fork-to-crm') && (
-              <PlaybookShell
-                projectId={params.projectId}
-                playbookConfig={getPlaybookConfig('github-fork-to-crm')!}
-              />
-            )}
           </div>
         </div>
-      </div>
       </div>
 
       {/* Share Modal */}
@@ -554,446 +588,140 @@ export default function ProjectPage({
           onClose={() => setShowShareModal(false)}
         />
       )}
+
+      {/* Add Playbook Modal */}
+      {showAddPlaybookModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">
+                {selectedPlaybookType ? 'Nombrar Playbook' : 'Agregar Playbook'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowAddPlaybookModal(false)
+                  setSelectedPlaybookType(null)
+                  setPlaybookName('')
+                }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6">
+              {loadingAvailable ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-8 h-8 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                </div>
+              ) : selectedPlaybookType ? (
+                // Step 2: Enter name for the playbook
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600">
+                    Dale un nombre a este playbook. Puedes tener múltiples playbooks del mismo tipo
+                    (por ejemplo, "Análisis de Competidor A" y "Análisis de Competidor B").
+                  </p>
+                  <div>
+                    <label htmlFor="playbook-name" className="block text-sm font-medium text-gray-700 mb-1">
+                      Nombre del playbook
+                    </label>
+                    <input
+                      id="playbook-name"
+                      type="text"
+                      value={playbookName}
+                      onChange={(e) => setPlaybookName(e.target.value)}
+                      placeholder={PLAYBOOK_INFO[selectedPlaybookType]?.name || selectedPlaybookType}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && playbookName.trim()) {
+                          e.preventDefault()
+                          handleAddPlaybookWithName()
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => {
+                        setSelectedPlaybookType(null)
+                        setPlaybookName('')
+                      }}
+                      className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      Volver
+                    </button>
+                    <button
+                      onClick={handleAddPlaybookWithName}
+                      disabled={!playbookName.trim() || addingPlaybook}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                    >
+                      {addingPlaybook ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Agregando...
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={18} />
+                          Agregar
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // Step 1: Select playbook type
+                <div className="space-y-2">
+                  {availablePlaybooks.map(pb => {
+                    const info = PLAYBOOK_INFO[pb.playbook_type] || {
+                      icon: Rocket,
+                      color: 'blue',
+                    }
+                    const Icon = info.icon
+                    return (
+                      <button
+                        key={pb.id}
+                        onClick={() => {
+                          setSelectedPlaybookType(pb.playbook_type)
+                          setPlaybookName(info.name || pb.name)
+                        }}
+                        className="w-full flex items-start gap-3 p-4 border border-gray-200 rounded-xl hover:border-indigo-300 hover:bg-indigo-50 transition-colors text-left"
+                      >
+                        <div className="p-2 bg-indigo-100 rounded-lg">
+                          <Icon className="w-5 h-5 text-indigo-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium text-gray-900">{pb.name}</h3>
+                          <p className="text-sm text-gray-500 mt-0.5">{pb.description}</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                      </button>
+                    )
+                  })}
+                  {availablePlaybooks.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      No hay playbooks disponibles
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
 
-// Tab Components
-function DocumentsTab({
-  projectId,
-  documents,
-  loading,
-  onReload,
-  totalTokens,
+// Wrap in Suspense for useSearchParams
+export default function ProjectPage({
+  params,
 }: {
-  projectId: string
-  documents: any[]
-  loading: boolean
-  onReload: () => void
-  totalTokens: number
+  params: { projectId: string }
 }) {
-  const toast = useToast()
-  const [viewingDoc, setViewingDoc] = useState<any | null>(null)
-  const [campaigns, setCampaigns] = useState<Array<{ id: string; ecp_name: string }>>([])
-  const [showScraperLauncher, setShowScraperLauncher] = useState(false)
-  const [viewMode, setViewMode] = useState<'list' | 'folders'>('list')
-  const [showNewFolderInput, setShowNewFolderInput] = useState(false)
-  const [newFolderName, setNewFolderName] = useState('')
-  const [manualFolders, setManualFolders] = useState<string[]>([])
-
-  // Get existing folders from documents + manually created empty folders
-  const existingFolders = [...new Set([...getFolders(documents), ...manualFolders])].sort()
-
-  // Load campaigns for assignment
-  useEffect(() => {
-    const loadCampaigns = async () => {
-      try {
-        const response = await fetch(`/api/campaign/create?projectId=${projectId}`)
-        const data = await response.json()
-        if (data.success) {
-          setCampaigns(data.campaigns || [])
-        }
-      } catch (error) {
-        console.error('Error loading campaigns:', error)
-      }
-    }
-    loadCampaigns()
-  }, [projectId])
-
-  const handleDelete = async (docId: string) => {
-    try {
-      // Check for references first
-      const { canDelete, referenceCount, referencingProjects } = await canDeleteDocument(docId)
-      if (!canDelete) {
-        toast.error(
-          'No se puede eliminar',
-          `Este documento tiene ${referenceCount} referencia(s) en: ${referencingProjects.join(', ')}`
-        )
-        return
-      }
-
-      await deleteDocument(docId)
-      toast.success('Eliminado', 'Documento eliminado exitosamente')
-      onReload()
-    } catch (error) {
-      toast.error('Error al eliminar', error instanceof Error ? error.message : 'Error desconocido')
-    }
-  }
-
-  const handleMoveToFolder = async (docId: string, folder: string | null) => {
-    try {
-      await updateDocumentFolder(docId, folder)
-      toast.success('Movido', folder ? `Documento movido a "${folder}"` : 'Documento movido a Sin carpeta')
-      onReload()
-    } catch (error) {
-      toast.error('Error', 'No se pudo mover el documento')
-    }
-  }
-
-  const handleCreateFolder = () => {
-    if (!newFolderName.trim()) return
-    const folderName = newFolderName.trim()
-    // Add to manual folders list so it appears in the UI
-    setManualFolders(prev => [...new Set([...prev, folderName])])
-    setShowNewFolderInput(false)
-    toast.success('Carpeta creada', `La carpeta "${folderName}" está lista.`)
-    setNewFolderName('')
-  }
-
-  const handleCampaignChange = async (docId: string, campaignId: string | null) => {
-    try {
-      const response = await fetch('/api/documents', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ documentId: docId, campaignId }),
-      })
-      const data = await response.json()
-      if (data.success) {
-        toast.success('Asignado', 'Documento asignado correctamente')
-        onReload()
-      } else {
-        let errorMsg = data.error || 'Failed to update'
-        if (data.details) errorMsg += ` - ${data.details}`
-        throw new Error(errorMsg)
-      }
-    } catch (error) {
-      toast.error('Error al asignar', error instanceof Error ? error.message : 'Error desconocido')
-    }
-  }
-
-  const handleRename = async (docId: string, newName: string) => {
-    try {
-      const response = await fetch('/api/documents', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ documentId: docId, filename: newName }),
-      })
-      const data = await response.json()
-      if (data.success) {
-        toast.success('Renombrado', 'Nombre del documento actualizado')
-        onReload()
-      } else {
-        let errorMsg = data.error || 'Failed to rename'
-        if (data.details) errorMsg += ` - ${data.details}`
-        throw new Error(errorMsg)
-      }
-    } catch (error) {
-      toast.error('Error al renombrar', error instanceof Error ? error.message : 'Error desconocido')
-      throw error // Re-throw to let DocumentList handle the state
-    }
-  }
-
-  const tokenBreakdown = documents.map(doc => ({
-    label: doc.filename,
-    tokens: doc.token_count || 0,
-  }))
-
   return (
-    <div>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Base de Conocimiento</h2>
-          <p className="text-sm text-gray-500 mt-1">Gestiona los documentos que alimentan tus prompts</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* View Mode Toggle */}
-          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              title="Vista lista"
-            >
-              <List size={16} />
-            </button>
-            <button
-              onClick={() => setViewMode('folders')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'folders'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              title="Vista carpetas"
-            >
-              <Folder size={16} />
-            </button>
-          </div>
-
-          <button
-            onClick={() => setShowScraperLauncher(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all shadow-sm"
-          >
-            <Globe size={18} />
-            <span>Importar datos</span>
-          </button>
-          <DocumentUpload projectId={projectId} onUploadComplete={onReload} />
-          <DocumentBulkUpload projectId={projectId} onUploadComplete={onReload} />
-        </div>
-      </div>
-
-      {/* Create Folder (only in folder view) */}
-      {viewMode === 'folders' && (
-        <div className="mb-4">
-          {showNewFolderInput ? (
-            <div className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-xl">
-              <Folder size={18} className="text-gray-400" />
-              <input
-                type="text"
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleCreateFolder()
-                  if (e.key === 'Escape') {
-                    setShowNewFolderInput(false)
-                    setNewFolderName('')
-                  }
-                }}
-                placeholder="Nombre de la carpeta..."
-                className="flex-1 px-2 py-1 text-sm text-gray-900 placeholder-gray-400 border-0 focus:ring-0 focus:outline-none"
-                autoFocus
-              />
-              <button
-                onClick={handleCreateFolder}
-                disabled={!newFolderName.trim()}
-                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                Crear
-              </button>
-              <button
-                onClick={() => {
-                  setShowNewFolderInput(false)
-                  setNewFolderName('')
-                }}
-                className="p-1.5 text-gray-400 hover:text-gray-600"
-              >
-                <X size={18} />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowNewFolderInput(true)}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-            >
-              <Plus size={16} />
-              Nueva carpeta
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Token Monitor */}
-      {documents.length > 0 && (
-        <div className="mb-6">
-          <TokenMonitor totalTokens={totalTokens} breakdown={tokenBreakdown} />
-        </div>
-      )}
-
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 bg-gray-50 rounded-xl animate-pulse" />
-          ))}
-        </div>
-      ) : viewMode === 'folders' ? (
-        <DocumentFolderView
-          documents={documents}
-          onDocumentClick={setViewingDoc}
-          onMoveToFolder={handleMoveToFolder}
-          showCreateFolder={false}
-          emptyMessage="No hay documentos en este proyecto"
-          emptyFolders={manualFolders}
-        />
-      ) : (
-        <DocumentList
-          documents={documents}
-          campaigns={campaigns}
-          onDelete={handleDelete}
-          onView={setViewingDoc}
-          onCampaignChange={handleCampaignChange}
-          onRename={handleRename}
-          onMoveToFolder={handleMoveToFolder}
-          availableFolders={existingFolders}
-        />
-      )}
-
-      {/* Document Viewer Modal */}
-      {viewingDoc && (() => {
-        // Detect content type
-        const content = viewingDoc.extracted_content || ''
-        const trimmedContent = content.trim()
-        const firstLine = content.split('\n')[0] || ''
-
-        // Check if JSON - try to parse it to be sure
-        let isJSON = false
-        if ((trimmedContent.startsWith('[') || trimmedContent.startsWith('{'))) {
-          try {
-            JSON.parse(trimmedContent)
-            isJSON = true
-          } catch {
-            // Not valid JSON, check if it looks like JSON array/object anyway
-            isJSON = (trimmedContent.startsWith('[') && trimmedContent.includes(']')) ||
-                     (trimmedContent.startsWith('{') && trimmedContent.includes('}'))
-          }
-        }
-
-        // Check if CSV (has commas in first line and multiple columns)
-        const isCSV = !isJSON && firstLine.includes(',') && firstLine.split(',').length >= 3
-
-        // Determine format label and icon color
-        const formatInfo = isJSON
-          ? { label: 'JSON', color: 'blue' }
-          : isCSV
-            ? { label: 'CSV', color: 'green' }
-            : null
-
-        return (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-                <div className="flex items-center gap-3">
-                  {formatInfo && (
-                    <div className={`p-2 bg-${formatInfo.color}-100 rounded-lg`}>
-                      <Table2 size={20} className={`text-${formatInfo.color}-600`} />
-                    </div>
-                  )}
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">{viewingDoc.filename}</h2>
-                    <p className="text-sm text-gray-500">
-                      {viewingDoc.token_count?.toLocaleString()} tokens
-                      {formatInfo && <span className={`ml-2 text-${formatInfo.color}-600 font-medium`}>• {formatInfo.label}</span>}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setViewingDoc(null)}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="p-6 min-h-0 flex-1 bg-gray-50 flex flex-col overflow-hidden">
-                {isJSON ? (
-                  <JSONViewer content={content} filename={viewingDoc.filename} />
-                ) : isCSV ? (
-                  <CSVTableViewer content={content} filename={viewingDoc.filename} />
-                ) : (
-                  <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono bg-white p-4 rounded-xl border border-gray-200 overflow-auto flex-1">
-                    {content}
-                  </pre>
-                )}
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* Scraper Launcher Modal */}
-      {showScraperLauncher && (
-        <ScraperLauncher
-          projectId={projectId}
-          onComplete={() => {
-            setShowScraperLauncher(false)
-            onReload()
-          }}
-          onClose={() => setShowScraperLauncher(false)}
-        />
-      )}
-    </div>
-  )
-}
-
-function ContextConfigTab({ projectId, project, documents }: { projectId: string; project: any; documents: any[] }) {
-  return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">
-        Configuración de Contexto por Paso
-      </h2>
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-        <p className="text-sm text-yellow-800">
-          Aquí defines qué documentos se usarán en cada paso del proceso.
-          Esto te da control granular sobre qué información ve el modelo en cada etapa.
-        </p>
-      </div>
-
-      <div className="space-y-6">
-        {[
-          { key: 'step_1', title: 'Step 1: Find Place', guidance: project.step_1_guidance },
-          { key: 'step_2', title: 'Step 2: Select Assets', guidance: project.step_2_guidance },
-          { key: 'step_3', title: 'Step 3: Proof Points', guidance: project.step_3_guidance },
-          { key: 'step_4', title: 'Step 4: Final Output', guidance: project.step_4_guidance },
-        ].map((step) => (
-          <div key={step.key} className="border border-gray-200 rounded-lg p-4">
-            <h3 className="font-medium mb-2">{step.title}</h3>
-            {step.guidance && (
-              <p className="text-sm text-gray-600 mb-3 bg-blue-50 border border-blue-100 rounded p-2">
-                {step.guidance}
-              </p>
-            )}
-            <div className="text-sm text-gray-700">
-              <p className="mb-2 font-medium">Documentos disponibles:</p>
-              {documents.length === 0 ? (
-                <p className="text-gray-500 italic">No hay documentos todavía. Sube algunos en la pestaña &quot;Documentos&quot;.</p>
-              ) : (
-                <ul className="space-y-1">
-                  {documents.map(doc => (
-                    <li key={doc.id} className="flex items-center gap-2">
-                      <input type="checkbox" className="rounded" id={`${step.key}-${doc.id}`} />
-                      <label htmlFor={`${step.key}-${doc.id}`} className="text-sm">
-                        {doc.filename} <span className="text-gray-400">({doc.category})</span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <button className="mt-3 px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
-                Guardar Selección
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function PromptsConfigTab({ projectId, project }: { projectId: string; project: any }) {
-  return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">Prompts Maestros</h2>
-      <p className="text-gray-600 mb-6">
-        Edita los prompts que se usarán en cada paso del proceso
-      </p>
-      <div className="space-y-4">
-        {[
-          { label: 'Deep Research', value: project.prompt_deep_research },
-          { label: 'Step 1: Find Place', value: project.prompt_1_find_place },
-          { label: 'Step 2: Select Assets', value: project.prompt_2_select_assets },
-          { label: 'Step 3: Proof Points', value: project.prompt_3_proof_legit },
-          { label: 'Step 4: Final Output', value: project.prompt_4_final_output },
-        ].map((prompt) => (
-          <div key={prompt.label} className="border border-gray-200 rounded-lg p-4">
-            <label className="block font-medium mb-2">{prompt.label}</label>
-            <textarea
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm"
-              rows={6}
-              defaultValue={prompt.value}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="mt-6">
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-          Guardar Cambios
-        </button>
-      </div>
-    </div>
+    <Suspense fallback={<LoadingSkeleton />}>
+      <ProjectPageContent params={params} />
+    </Suspense>
   )
 }

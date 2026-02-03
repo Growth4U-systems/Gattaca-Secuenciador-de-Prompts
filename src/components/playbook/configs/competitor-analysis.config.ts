@@ -72,6 +72,7 @@ import {
   type PlaybookTemplate,
   type KnowledgeBaseGeneratorProps,
   type DeepResearchLauncherProps,
+  ScraperInputsForm,
 } from '@/lib/playbooks/competitor-analysis'
 
 // Re-export everything from the package
@@ -110,6 +111,7 @@ export {
   KnowledgeBaseGenerator,
   DocumentGeneratorCard,
   DeepResearchLauncher,
+  ScraperInputsForm,
 
   // Types
   type SourceType,
@@ -318,16 +320,45 @@ export const competitorAnalysisConfig: PlaybookConfig = {
   icon: '🔍',
   presentation,
 
-  // Variables needed for this playbook (converted from COMPETITOR_VARIABLE_DEFINITIONS)
-  variables: COMPETITOR_VARIABLE_DEFINITIONS.map(v => ({
-    key: v.name,
-    label: v.name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-    type: v.type === 'textarea' ? 'textarea' as const : 'text' as const,
-    required: v.required,
-    defaultValue: v.default_value,
-    description: v.description,
-    placeholder: v.placeholder,
-  })),
+  // Variables hardcoded directly to ensure they're always available
+  variables: [
+    {
+      key: 'competitor_name',
+      label: 'Nombre del Competidor',
+      type: 'text' as const,
+      required: true,
+      description: 'Nombre del competidor a analizar',
+      placeholder: 'Ej: Revolut, Stripe, HubSpot',
+    },
+    {
+      key: 'company_name',
+      label: 'Tu Empresa',
+      type: 'text' as const,
+      required: true,
+      description: 'Nombre de tu empresa (para el battle card final)',
+      placeholder: 'Ej: Mi Empresa',
+    },
+    {
+      key: 'industry',
+      label: 'Industria',
+      type: 'text' as const,
+      required: true,
+      description: 'Industria o sector del mercado',
+      placeholder: 'Ej: Fintech, SaaS, E-commerce',
+    },
+    {
+      key: 'country',
+      label: 'País/Región',
+      type: 'text' as const,
+      required: false,
+      defaultValue: 'España',
+      description: 'País o región objetivo del análisis',
+      placeholder: 'España',
+    },
+  ],
+
+  // Flow configuration for campaign creation
+  flow_config: getCompetitorAnalysisTemplate().flow_config as any,
 
   // Phases - simplified for wizard (actual execution uses flow_config)
   phases: [

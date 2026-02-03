@@ -36,7 +36,13 @@
       "Skill(ralph-tui-create-beads)",
       "Skill(ralph-tui-create-beads:*)",
       "Skill(ralph-tui-create-json)",
-      "Skill(ralph-tui-create-json:*)"
+      "Skill(ralph-tui-create-json:*)",
+      "Skill(agent-browser)",
+      "Skill(agent-browser:*)",
+      "Skill(plan)",
+      "Skill(plan:*)",
+      "Skill(ralph-tui-prd)",
+      "Skill(ralph-tui-prd:*)"
     ]
   }
 }

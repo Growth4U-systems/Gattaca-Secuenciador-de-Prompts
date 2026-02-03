@@ -7,6 +7,7 @@ import { formatTokenCount } from '@/lib/supabase'
 import { useModal } from '@/components/ui'
 import CSVTableViewer from './CSVTableViewer'
 import JSONViewer from './JSONViewer'
+import { DocumentNameValidationBadge } from './DocumentNameInput'
 
 type DocumentTier = 'T1' | 'T2' | 'T3'
 type DocumentSourceType = 'import' | 'scraper' | 'playbook' | 'api'
@@ -757,6 +758,7 @@ export default function DocumentList({
                         <h3 className="font-medium text-sm text-gray-900 truncate group-hover:text-blue-600 transition-colors">
                           {doc.filename}
                         </h3>
+                        <DocumentNameValidationBadge filename={doc.filename} size="xs" />
                         {onRename && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleStartEdit(doc) }}

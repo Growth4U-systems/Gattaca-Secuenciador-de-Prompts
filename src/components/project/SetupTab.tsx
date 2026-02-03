@@ -14,6 +14,8 @@ interface SetupTabProps {
   documents: any[]
   onVariablesUpdate?: () => void
   userRole?: string | null
+  /** If provided, use this as the flow config for the playbook */
+  playbookFlowConfig?: any
 }
 
 export default function SetupTab({
@@ -22,6 +24,7 @@ export default function SetupTab({
   initialVariables,
   documents,
   onVariablesUpdate,
+  playbookFlowConfig,
 }: SetupTabProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('variables')
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
@@ -76,11 +79,17 @@ export default function SetupTab({
           projectId={projectId}
           initialVariables={initialVariables}
           onUpdate={onVariablesUpdate}
+          playbookFlowConfig={playbookFlowConfig}
         />
       )}
 
       {activeSubTab === 'flow' && (
-        <FlowSetup projectId={projectId} clientId={clientId} documents={documents} />
+        <FlowSetup
+          projectId={projectId}
+          clientId={clientId}
+          documents={documents}
+          playbookFlowConfig={playbookFlowConfig}
+        />
       )}
     </div>
   )

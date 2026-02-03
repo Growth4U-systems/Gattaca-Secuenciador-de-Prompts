@@ -240,6 +240,8 @@ export interface StartScraperRequest {
   tags?: string[];
   // Output configuration
   output_config?: ScraperOutputConfig;
+  // Custom metadata to store with the document (e.g., campaign_id, source_type for playbooks)
+  metadata?: Record<string, unknown>;
   // Batch of scrapers
   batch?: {
     name?: string;

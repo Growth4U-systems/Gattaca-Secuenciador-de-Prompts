@@ -26,9 +26,12 @@ export interface PlaybookTemplate {
   variable_definitions: VariableDefinition[]
 
   required_documents: {
-    product: string[]
-    competitor: string[]
-    research: string[]
+    /** Standard document categories (for backward compatibility) */
+    product?: string[]
+    competitor?: string[]
+    research?: string[]
+    /** Custom document categories for specialized playbooks */
+    [key: string]: string[] | undefined
   }
 
   campaign_docs_guide: string

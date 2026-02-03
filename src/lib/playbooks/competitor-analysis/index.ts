@@ -153,6 +153,7 @@ export {
   KnowledgeBaseGenerator,
   DocumentGeneratorCard,
   DeepResearchLauncher,
+  ScraperInputsForm,
 
   // Component props
   type DocumentGeneratorCardProps,

@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Plus, X, Save, Settings, Download, Upload, Variable, Check, AlertCircle, Sparkles } from 'lucide-react'
+import { Plus, X, Save, Settings, Download, Upload, Variable, Check, AlertCircle, Sparkles, RefreshCw } from 'lucide-react'
 import { useToast } from '@/components/ui'
+import { extractVariablesFromFlowConfig } from '@/lib/utils/variableExtractor'
 
 interface VariableDefinition {
   name: string
@@ -15,19 +16,80 @@ interface ProjectVariablesProps {
   projectId: string
   initialVariables: VariableDefinition[]
   onUpdate?: () => void
+  /** Optional: flow_config from playbook to extract variables from */
+  playbookFlowConfig?: { steps?: Array<{ prompt?: string }> }
 }
 
 export default function ProjectVariables({
   projectId,
   initialVariables,
   onUpdate,
+  playbookFlowConfig,
 }: ProjectVariablesProps) {
   const toast = useToast()
 
   const [variables, setVariables] = useState<VariableDefinition[]>(initialVariables || [])
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Sync variables from playbook prompts
+  const handleSyncFromPrompts = async () => {
+    if (!playbookFlowConfig) {
+      toast.warning('Sin prompts', 'No hay configuración de playbook disponible')
+      return
+    }
+
+    setSyncing(true)
+    try {
+      // Extract variables from prompts
+      const extracted = extractVariablesFromFlowConfig(playbookFlowConfig)
+
+      if (extracted.length === 0) {
+        toast.info('Sin variables', 'No se encontraron variables en los prompts')
+        setSyncing(false)
+        return
+      }
+
+      // Merge with existing variables (keep existing values/descriptions)
+      const existingMap = new Map(variables.map(v => [v.name, v]))
+      const merged: VariableDefinition[] = []
+      let added = 0
+
+      for (const ext of extracted) {
+        const existing = existingMap.get(ext.name)
+        if (existing) {
+          merged.push(existing)
+          existingMap.delete(ext.name)
+        } else {
+          merged.push({
+            name: ext.name,
+            default_value: ext.default_value || '',
+            required: ext.required ?? true,
+            description: ext.description || '',
+          })
+          added++
+        }
+      }
+
+      // Keep any variables that weren't in prompts (user-defined)
+      existingMap.forEach(v => merged.push(v))
+
+      if (added === 0) {
+        toast.info('Variables sincronizadas', 'Todas las variables de los prompts ya están definidas')
+      } else {
+        setVariables(merged)
+        setIsEditing(true)
+        toast.success('Variables extraídas', `Se encontraron ${added} variable(s) nueva(s). Revisa y guarda los cambios.`)
+      }
+    } catch (error) {
+      console.error('Error syncing variables:', error)
+      toast.error('Error', 'No se pudieron extraer las variables')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   // Export variables to JSON
   const handleExport = () => {
@@ -170,13 +232,29 @@ export default function ProjectVariables({
             Las variables se usan en prompts con formato <code className="bg-gray-100 px-1.5 py-0.5 rounded text-blue-600 text-xs font-mono">{'{{ variable }}'}</code>.
             Cada campaña completará los valores de estas variables.
           </p>
-          <button
-            onClick={() => setIsEditing(true)}
-            className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg inline-flex items-center gap-2 font-medium"
-          >
-            <Plus size={18} />
-            Definir Variables
-          </button>
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            {playbookFlowConfig && (
+              <button
+                onClick={handleSyncFromPrompts}
+                disabled={syncing}
+                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg inline-flex items-center gap-2 font-medium disabled:opacity-50"
+              >
+                {syncing ? (
+                  <RefreshCw size={18} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={18} />
+                )}
+                Extraer de Prompts
+              </button>
+            )}
+            <button
+              onClick={() => setIsEditing(true)}
+              className="px-5 py-2.5 bg-white text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-50 transition-all inline-flex items-center gap-2 font-medium"
+            >
+              <Plus size={18} />
+              Definir Manualmente
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -220,6 +298,21 @@ export default function ProjectVariables({
                   className="hidden"
                 />
               </label>
+              {playbookFlowConfig && (
+                <button
+                  onClick={handleSyncFromPrompts}
+                  disabled={syncing}
+                  className="px-3 py-2 text-sm text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  title="Sincronizar variables desde prompts"
+                >
+                  {syncing ? (
+                    <RefreshCw size={16} className="animate-spin" />
+                  ) : (
+                    <RefreshCw size={16} />
+                  )}
+                  Sincronizar
+                </button>
+              )}
               <button
                 onClick={() => setIsEditing(true)}
                 className="px-4 py-2 text-sm bg-white text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 font-medium transition-colors"

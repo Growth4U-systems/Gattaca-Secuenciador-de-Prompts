@@ -44,6 +44,11 @@ export function OpenRouterProvider({ children }: { children: React.ReactNode }) 
     }
 
     setIsLoading(true)
+
+    // Create AbortController with timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+
     try {
       // If fetchLatest is true, first refresh info from OpenRouter
       if (fetchLatest) {
@@ -51,6 +56,7 @@ export function OpenRouterProvider({ children }: { children: React.ReactNode }) 
         try {
           const refreshResponse = await fetch('/api/openrouter/refresh-info', {
             method: 'POST',
+            signal: controller.signal,
           })
           if (refreshResponse.ok) {
             console.log('[OpenRouter] Successfully refreshed token info from OpenRouter')
@@ -58,13 +64,18 @@ export function OpenRouterProvider({ children }: { children: React.ReactNode }) 
             console.warn('[OpenRouter] Failed to refresh from OpenRouter, using cached data')
           }
         } catch (refreshError) {
-          console.warn('[OpenRouter] Error refreshing from OpenRouter:', refreshError)
+          if ((refreshError as Error).name === 'AbortError') {
+            console.warn('[OpenRouter] Refresh request timed out')
+          } else {
+            console.warn('[OpenRouter] Error refreshing from OpenRouter:', refreshError)
+          }
         }
       }
 
       // Now fetch the status (which may have been updated by refresh-info)
       const response = await fetch('/api/openrouter/status', {
         cache: 'no-store',
+        signal: controller.signal,
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -82,10 +93,15 @@ export function OpenRouterProvider({ children }: { children: React.ReactNode }) 
         setTokenInfo(null)
       }
     } catch (error) {
-      console.error('[OpenRouter] Error fetching status:', error)
+      if ((error as Error).name === 'AbortError') {
+        console.error('[OpenRouter] Request timed out')
+      } else {
+        console.error('[OpenRouter] Error fetching status:', error)
+      }
       setIsConnected(false)
       setTokenInfo(null)
     } finally {
+      clearTimeout(timeoutId)
       setIsLoading(false)
     }
   }, [user])
