@@ -3,13 +3,9 @@
 /**
  * CompetitorAnalysisView Component
  *
- * Main view for Competitor Analysis playbook.
- * Replaces the tab-based navigation with a competitor-centric guided UX.
- *
- * Shows all competitors with their:
- * - Scraper progress
- * - Analysis steps
- * - Pending actions
+ * Main view for Competitor Analysis playbook with two levels:
+ * 1. Summary view - List of competitors with progress overview
+ * 2. Detail view - Full scraper + flow management for one competitor
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -21,9 +17,9 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { useToast } from '@/components/ui'
-import CompetitorCard from './CompetitorCard'
+import CompetitorSummaryCard from './CompetitorSummaryCard'
+import CompetitorDetailView from './CompetitorDetailView'
 import AddCompetitorModal from './AddCompetitorModal'
-import ScraperConfigModal from './ScraperConfigModal'
 
 // ============================================
 // TYPES
@@ -35,7 +31,7 @@ interface CompetitorCampaign {
   custom_variables: Record<string, string>
   created_at: string
   status: string
-  step_outputs?: Record<string, any>
+  step_outputs?: Record<string, unknown>
 }
 
 interface Document {
@@ -69,7 +65,7 @@ export default function CompetitorAnalysisView({
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [configModalCampaign, setConfigModalCampaign] = useState<CompetitorCampaign | null>(null)
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
   // Load competitor campaigns
@@ -115,79 +111,29 @@ export default function CompetitorAnalysisView({
     load()
   }, [loadCampaigns, loadDocuments])
 
+  // Refresh data
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([loadCampaigns(), loadDocuments()])
+  }, [loadCampaigns, loadDocuments])
+
   // Handle competitor added
   const handleCompetitorAdded = async (name: string, website: string) => {
     setShowAddModal(false)
     await loadCampaigns()
-    toast.success('Competidor agregado', `${name} agregado exitosamente. Configura los scrapers para comenzar.`)
+    toast.success('Competidor agregado', `${name} agregado exitosamente.`)
   }
 
-  // Handle configure inputs
-  const handleConfigureInputs = (campaign: CompetitorCampaign) => {
-    setConfigModalCampaign(campaign)
-  }
-
-  // Handle discover socials (scrape website for social links)
-  const handleDiscoverSocials = async (campaign: CompetitorCampaign) => {
-    const website = campaign.custom_variables?.competitor_website
-    if (!website) {
-      toast.error('Error', 'No hay sitio web configurado')
-      return
-    }
-
-    toast.info('Descubriendo...', 'Escaneando sitio web para encontrar redes sociales')
-
-    // TODO: Implement website scraping for social links
-    // This should:
-    // 1. Scrape the website (footer, header, contact page)
-    // 2. Find social media links
-    // 3. Update campaign.custom_variables with found links
-    console.log('TODO: Discover socials from', website)
-
-    toast.warning('En desarrollo', 'Esta función está en desarrollo')
-  }
-
-  // Handle run scrapers for a step
-  const handleRunScrapers = async (campaign: CompetitorCampaign, stepId: string) => {
-    // TODO: Implement batch scraper execution
-    console.log('Run scrapers for', campaign.ecp_name, 'step:', stepId)
-    toast.info('Ejecutando...', `Iniciando scrapers para ${stepId}`)
-  }
-
-  // Handle run analysis step
-  const handleRunAnalysis = async (campaign: CompetitorCampaign, stepId: string) => {
-    // TODO: Navigate to campaign runner or execute step
-    console.log('Run analysis step', stepId, 'for', campaign.ecp_name)
-    toast.info('Ejecutando...', `Iniciando análisis: ${stepId}`)
-  }
-
-  // Handle view results
-  const handleViewResults = (campaign: CompetitorCampaign, stepId: string) => {
-    // TODO: Navigate to results or show modal
-    console.log('View results for', stepId)
-  }
-
-  // Handle inputs saved
-  const handleInputsSaved = async () => {
-    setConfigModalCampaign(null)
-    await loadCampaigns()
-    toast.success('Guardado', 'Configuración actualizada')
-  }
+  // Get selected campaign
+  const selectedCampaign = selectedCampaignId
+    ? campaigns.find(c => c.id === selectedCampaignId)
+    : null
 
   // Filter campaigns by search query
   const filteredCampaigns = campaigns.filter(campaign =>
     campaign.ecp_name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  // Calculate overall stats
-  const stats = {
-    total: campaigns.length,
-    withScrapers: campaigns.filter(c => {
-      const name = c.ecp_name
-      return documents.some(d => d.source_metadata?.competitor?.toLowerCase() === name?.toLowerCase())
-    }).length,
-  }
-
+  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -199,6 +145,20 @@ export default function CompetitorAnalysisView({
     )
   }
 
+  // Detail view
+  if (selectedCampaign) {
+    return (
+      <CompetitorDetailView
+        campaign={selectedCampaign}
+        documents={documents}
+        projectId={projectId}
+        onBack={() => setSelectedCampaignId(null)}
+        onRefresh={handleRefresh}
+      />
+    )
+  }
+
+  // Summary view
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -206,15 +166,12 @@ export default function CompetitorAnalysisView({
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Competitor Analysis</h2>
           <p className="text-sm text-gray-500 mt-1">
-            {stats.total} competidor{stats.total !== 1 ? 'es' : ''} · Analiza y compara
+            {campaigns.length} competidor{campaigns.length !== 1 ? 'es' : ''} · Selecciona uno para ver detalles
           </p>
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => {
-              loadCampaigns()
-              loadDocuments()
-            }}
+            onClick={handleRefresh}
             className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             title="Actualizar"
           >
@@ -269,18 +226,13 @@ export default function CompetitorAnalysisView({
 
       {/* Competitor list */}
       {filteredCampaigns.length > 0 && (
-        <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredCampaigns.map(campaign => (
-            <CompetitorCard
+            <CompetitorSummaryCard
               key={campaign.id}
               campaign={campaign}
               documents={documents}
-              projectId={projectId}
-              onConfigureInputs={() => handleConfigureInputs(campaign)}
-              onDiscoverSocials={() => handleDiscoverSocials(campaign)}
-              onRunScrapers={(stepId) => handleRunScrapers(campaign, stepId)}
-              onRunAnalysis={(stepId) => handleRunAnalysis(campaign, stepId)}
-              onViewResults={(stepId) => handleViewResults(campaign, stepId)}
+              onClick={() => setSelectedCampaignId(campaign.id)}
             />
           ))}
         </div>
@@ -290,7 +242,7 @@ export default function CompetitorAnalysisView({
       {campaigns.length > 0 && filteredCampaigns.length === 0 && (
         <div className="text-center py-12 bg-gray-50 rounded-xl">
           <Search className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">No se encontraron competidores con "{searchQuery}"</p>
+          <p className="text-gray-500">No se encontraron competidores con &quot;{searchQuery}&quot;</p>
         </div>
       )}
 
@@ -300,16 +252,6 @@ export default function CompetitorAnalysisView({
           projectId={projectId}
           onClose={() => setShowAddModal(false)}
           onAdded={handleCompetitorAdded}
-        />
-      )}
-
-      {/* Configure Inputs Modal */}
-      {configModalCampaign && (
-        <ScraperConfigModal
-          campaign={configModalCampaign}
-          projectId={projectId}
-          onClose={() => setConfigModalCampaign(null)}
-          onSaved={handleInputsSaved}
         />
       )}
     </div>
