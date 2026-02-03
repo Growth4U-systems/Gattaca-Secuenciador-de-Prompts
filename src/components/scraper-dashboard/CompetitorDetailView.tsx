@@ -10,7 +10,7 @@
  * Both sections are integrated in one view.
  */
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
@@ -29,13 +29,40 @@ import {
   FileText,
   ExternalLink,
   RefreshCw,
+  X,
+  Clock,
+  AlertCircle,
+  Trash2,
+  Activity,
+  XCircle,
+  ChevronDown,
+  ChevronRight,
+  Code,
+  Variable,
+  Database,
+  Save,
+  Edit3,
+  Eye,
 } from 'lucide-react'
 import { useToast } from '@/components/ui'
 import {
   STEP_DOCUMENT_REQUIREMENTS,
   ALL_DOCUMENT_REQUIREMENTS,
   SCRAPER_INPUT_MAPPINGS,
+  getScraperTypeForSource,
+  COMPETITOR_VARIABLE_DEFINITIONS,
 } from '@/lib/playbooks/competitor-analysis/constants'
+import { ALL_PROMPTS } from '@/lib/playbooks/competitor-analysis/prompts'
+import {
+  SCRAPER_FIELD_SCHEMAS,
+  getAllFieldsForScraper,
+  validateAllFields,
+  FieldSchema,
+} from '@/lib/scraperFieldSchemas'
+import type { ScraperType, ScraperOutputFormat, ScraperOutputConfig } from '@/types/scraper.types'
+import { createDocumentMetadata } from '@/lib/playbooks/competitor-analysis/documentMatcher'
+import { useScraperJobPersistence, PersistedJob } from '@/hooks/useScraperJobPersistence'
+import type { SourceType } from '@/lib/playbooks/competitor-analysis/types'
 import ScraperConfigModal from './ScraperConfigModal'
 
 // ============================================
@@ -54,6 +81,9 @@ interface CompetitorCampaign {
 interface Document {
   id: string
   name?: string
+  filename?: string
+  extracted_content?: string
+  created_at?: string
   source_metadata?: {
     source_type?: string
     competitor?: string
@@ -68,13 +98,33 @@ interface CompetitorDetailViewProps {
   onRefresh: () => void
 }
 
-// Analysis steps configuration
-const ANALYSIS_STEPS = [
+// Helper function for time ago
+function formatTimeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (seconds < 60) return 'hace un momento'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `hace ${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `hace ${hours}h`
+  return `hace ${Math.floor(hours / 24)}d`
+}
+
+// Analysis steps configuration with prompt keys
+const ANALYSIS_STEPS: Array<{
+  id: string
+  name: string
+  description: string
+  icon: typeof Sparkles
+  promptKey: keyof typeof ALL_PROMPTS
+  requiredSources: string[]
+  dependsOn?: string[]
+}> = [
   {
     id: 'autopercepcion',
     name: 'Autopercepción',
     description: 'Cómo se presenta la marca a sí misma',
     icon: Sparkles,
+    promptKey: 'autopercepcion' as const,
     requiredSources: ['deep_research', 'website', 'instagram_posts', 'facebook_posts', 'youtube_videos', 'tiktok_posts', 'linkedin_posts', 'linkedin_insights'],
   },
   {
@@ -82,6 +132,7 @@ const ANALYSIS_STEPS = [
     name: 'Percepción Terceros',
     description: 'Qué dicen los medios y buscadores',
     icon: Search,
+    promptKey: 'percepcionTerceros' as const,
     requiredSources: ['seo_serp', 'news_corpus'],
   },
   {
@@ -89,6 +140,7 @@ const ANALYSIS_STEPS = [
     name: 'Percepción RRSS',
     description: 'Comentarios y engagement en redes sociales',
     icon: MessageSquare,
+    promptKey: 'percepcionRRSS' as const,
     requiredSources: ['instagram_comments', 'facebook_comments', 'youtube_comments', 'tiktok_comments', 'linkedin_comments'],
   },
   {
@@ -96,6 +148,7 @@ const ANALYSIS_STEPS = [
     name: 'Percepción Reviews',
     description: 'Opiniones en plataformas de reviews',
     icon: Star,
+    promptKey: 'percepcionReviews' as const,
     requiredSources: ['trustpilot_reviews', 'g2_reviews', 'capterra_reviews', 'playstore_reviews', 'appstore_reviews'],
   },
   {
@@ -103,10 +156,50 @@ const ANALYSIS_STEPS = [
     name: 'Síntesis Final',
     description: 'Battle card y resumen ejecutivo',
     icon: FileText,
+    promptKey: 'sintesis' as const,
     requiredSources: [],
     dependsOn: ['autopercepcion', 'percepcion-terceros', 'percepcion-rrss', 'percepcion-reviews'],
   },
 ]
+
+// Helper to extract variables from prompt text
+function extractPromptVariables(promptText: string): string[] {
+  const regex = /\{\{([^}]+)\}\}/g
+  const matches = promptText.matchAll(regex)
+  const variables = new Set<string>()
+  for (const match of matches) {
+    const varName = match[1].trim()
+    // Skip conditional syntax and step references
+    if (!varName.startsWith('#') && !varName.startsWith('/') && !varName.startsWith('step:')) {
+      variables.add(varName)
+    }
+  }
+  return Array.from(variables)
+}
+
+// Source type labels for display
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  deep_research: 'Deep Research',
+  website: 'Website Content',
+  instagram_posts: 'Instagram Posts',
+  facebook_posts: 'Facebook Posts',
+  youtube_videos: 'YouTube Videos',
+  tiktok_posts: 'TikTok Posts',
+  linkedin_posts: 'LinkedIn Posts',
+  linkedin_insights: 'LinkedIn Insights',
+  seo_serp: 'SEO/SERP Data',
+  news_corpus: 'News Corpus',
+  instagram_comments: 'Instagram Comments',
+  facebook_comments: 'Facebook Comments',
+  youtube_comments: 'YouTube Comments',
+  tiktok_comments: 'TikTok Comments',
+  linkedin_comments: 'LinkedIn Comments',
+  trustpilot_reviews: 'Trustpilot Reviews',
+  g2_reviews: 'G2 Reviews',
+  capterra_reviews: 'Capterra Reviews',
+  playstore_reviews: 'Play Store Reviews',
+  appstore_reviews: 'App Store Reviews',
+}
 
 // ============================================
 // MAIN COMPONENT
@@ -123,12 +216,76 @@ export default function CompetitorDetailView({
   const router = useRouter()
 
   const [showConfigModal, setShowConfigModal] = useState(false)
-  const [runningScrapers, setRunningScrapers] = useState<Set<string>>(new Set())
   const [runningSteps, setRunningSteps] = useState<Set<string>>(new Set())
+  // State to force re-render for elapsed time display
+  const [, setTick] = useState(0)
+  // State for expanded analysis steps
+  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
+  // State for step configuration editing
+  const [editingStepId, setEditingStepId] = useState<string | null>(null)
+  const [stepVariables, setStepVariables] = useState<Record<string, string>>({})
+  const [selectedDocs, setSelectedDocs] = useState<Record<string, Set<string>>>({})
+  const [stepPrompts, setStepPrompts] = useState<Record<string, string>>({})
+  const [isSavingStep, setIsSavingStep] = useState(false)
+  // Document viewer modal state
+  const [viewingDoc, setViewingDoc] = useState<Document | null>(null)
+
+  // Confirmation modal state - full configuration like ScraperLauncher
+  const [confirmModal, setConfirmModal] = useState<{
+    sourceType: string
+    scraperType: ScraperType
+    scraperName: string
+    inputConfig: Record<string, unknown>
+    fieldErrors: Record<string, string>
+    outputFormat: ScraperOutputFormat
+    isSuggestingAI?: boolean
+  } | null>(null)
 
   const competitorName = campaign.ecp_name || ''
   const normalizedName = competitorName.toLowerCase()
   const website = campaign.custom_variables?.competitor_website || ''
+
+  // Handle job completion
+  const handleJobCompleted = useCallback((job: PersistedJob) => {
+    toast.success('Scraper completado', `${job.scraperName} finalizado`)
+    onRefresh()
+  }, [toast, onRefresh])
+
+  // Handle job failure
+  const handleJobFailed = useCallback((job: PersistedJob) => {
+    toast.error('Scraper falló', job.error || 'Error desconocido')
+  }, [toast])
+
+  // Use scraper job persistence for tracking running jobs
+  const {
+    activeJobs,
+    jobHistory,
+    trackJob,
+  } = useScraperJobPersistence({
+    projectId,
+    onJobCompleted: handleJobCompleted,
+    onJobFailed: handleJobFailed,
+  })
+
+  // Update timer display every second when there are active jobs
+  useEffect(() => {
+    if (activeJobs.size === 0) return
+
+    const intervalId = setInterval(() => {
+      setTick(t => t + 1)
+    }, 1000)
+
+    return () => clearInterval(intervalId)
+  }, [activeJobs.size])
+
+  // Get running scrapers from active jobs
+  const runningScrapers = useMemo(() => {
+    const running = new Set<string>()
+    for (const job of activeJobs.values()) {
+      running.add(job.sourceType)
+    }
+    return running
+  }, [activeJobs])
 
   // Calculate which inputs are configured
   const inputStatus = useMemo(() => {
@@ -213,6 +370,7 @@ export default function CompetitorDetailView({
       isRunning: boolean
       blockedReason?: string
       missingScrapers: number
+      scraperWarning?: string
     }> = {}
 
     ANALYSIS_STEPS.forEach(step => {
@@ -227,63 +385,433 @@ export default function CompetitorDetailView({
       const isCompleted = !!campaign.step_outputs?.[step.id]
       const isRunning = runningSteps.has(step.id)
 
+      // Only block if dependencies (previous steps) aren't complete
+      // Missing scrapers is a warning, not a blocker - user decides when to run
       let blockedReason: string | undefined
-      if (!scrapersReady) {
-        blockedReason = `Faltan ${missingScrapers} scraper(s)`
-      } else if (!dependenciesReady && step.dependsOn) {
+      if (!dependenciesReady && step.dependsOn) {
         const missingDeps = step.dependsOn.filter(depId => !campaign.step_outputs?.[depId])
         blockedReason = `Requiere: ${missingDeps.map(d => ANALYSIS_STEPS.find(s => s.id === d)?.name || d).join(', ')}`
       }
 
+      // Warning text for missing scrapers (shown but doesn't block)
+      const scraperWarning = !scrapersReady ? `${missingScrapers} scraper(s) pendiente(s)` : undefined
+
       status[step.id] = {
-        canRun: scrapersReady && dependenciesReady && !isCompleted && !isRunning,
+        // Can run if dependencies are ready (scrapers don't block anymore)
+        canRun: dependenciesReady && !isCompleted && !isRunning,
         isCompleted,
         isRunning,
         blockedReason,
         missingScrapers,
+        scraperWarning,
       }
     })
 
     return status
   }, [scrapersByStep, campaign.step_outputs, runningSteps])
 
-  // Handle run scraper
-  const handleRunScraper = useCallback(async (sourceType: string) => {
+  // Track running deep research (separate from scraper jobs since it's synchronous)
+  const [runningDeepResearch, setRunningDeepResearch] = useState(false)
+
+  // Show confirmation modal before running scraper - with full configuration
+  const handleRunScraper = useCallback((sourceType: string) => {
     if (runningScrapers.has(sourceType)) return
+    if (sourceType === 'deep_research' && runningDeepResearch) return
 
     const req = ALL_DOCUMENT_REQUIREMENTS.find(r => r.source_type === sourceType)
     if (!req) return
 
-    const inputMapping = SCRAPER_INPUT_MAPPINGS[req.id]
-
-    // Check if input is configured
-    if (inputMapping?.inputKey && !campaign.custom_variables?.[inputMapping.inputKey]) {
-      toast.error('Input faltante', `Configura ${inputMapping.label || inputMapping.inputKey} antes de ejecutar`)
-      setShowConfigModal(true)
+    // Get the scraper type for this source
+    const scraperType = getScraperTypeForSource(sourceType as SourceType)
+    if (!scraperType) {
+      toast.error('Error', `No hay scraper configurado para: ${sourceType}`)
       return
     }
 
-    setRunningScrapers(prev => new Set(prev).add(sourceType))
-    toast.info('Ejecutando...', `Iniciando ${req.name}`)
+    // Get field schema for this scraper type
+    const fieldSchema = SCRAPER_FIELD_SCHEMAS[scraperType as ScraperType]
+    const inputMapping = SCRAPER_INPUT_MAPPINGS[req.id]
+
+    // Build initial input config with defaults from schema
+    const initialConfig: Record<string, unknown> = {}
+
+    if (fieldSchema) {
+      // Pre-fill with defaults from field schema
+      for (const [key, field] of Object.entries(fieldSchema.fields)) {
+        if (field.defaultValue !== undefined) {
+          initialConfig[key] = field.defaultValue
+        }
+      }
+    }
+
+    // Pre-fill the main input from custom_variables using explicit mapping
+    const vars = campaign.custom_variables || {}
+
+    // Explicit mapping: source_type -> { varKey: campaign variable key, apifyKey: Apify field name, isArray: boolean }
+    const sourceToApifyMapping: Record<string, { varKey: string; apifyKey: string; isArray: boolean }> = {
+      // Social posts
+      instagram_posts: { varKey: 'instagram_username', apifyKey: 'username', isArray: false },
+      instagram_comments: { varKey: 'instagram_username', apifyKey: 'username', isArray: false },
+      facebook_posts: { varKey: 'facebook_url', apifyKey: 'startUrls', isArray: true },
+      facebook_comments: { varKey: 'facebook_url', apifyKey: 'startUrls', isArray: true },
+      linkedin_posts: { varKey: 'linkedin_url', apifyKey: 'companyUrls', isArray: true },
+      linkedin_comments: { varKey: 'linkedin_url', apifyKey: 'companyUrls', isArray: true },
+      linkedin_insights: { varKey: 'linkedin_url', apifyKey: 'companyUrls', isArray: true },
+      youtube_videos: { varKey: 'youtube_url', apifyKey: 'startUrls', isArray: true },
+      youtube_comments: { varKey: 'youtube_url', apifyKey: 'startUrls', isArray: true },
+      tiktok_posts: { varKey: 'tiktok_username', apifyKey: 'profiles', isArray: true },
+      tiktok_comments: { varKey: 'tiktok_username', apifyKey: 'profiles', isArray: true },
+      // Reviews
+      trustpilot_reviews: { varKey: 'trustpilot_url', apifyKey: 'startUrls', isArray: true },
+      g2_reviews: { varKey: 'g2_url', apifyKey: 'startUrls', isArray: true },
+      capterra_reviews: { varKey: 'capterra_url', apifyKey: 'startUrls', isArray: true },
+      playstore_reviews: { varKey: 'play_store_app_id', apifyKey: 'appId', isArray: false },
+      appstore_reviews: { varKey: 'app_store_app_id', apifyKey: 'appId', isArray: false },
+      // Website & SEO
+      website: { varKey: 'competitor_website', apifyKey: 'url', isArray: false },
+      seo_serp: { varKey: 'competitor_website', apifyKey: 'queries', isArray: true },
+      news_corpus: { varKey: 'competitor_name', apifyKey: 'searchQuery', isArray: false },
+      // Deep Research
+      deep_research: { varKey: 'competitor_name', apifyKey: 'query', isArray: false },
+    }
+
+    const mapping = sourceToApifyMapping[sourceType]
+    if (mapping) {
+      const storedValue = vars[mapping.varKey]
+      if (storedValue) {
+        // Clean up the value (remove @ for usernames)
+        const cleanValue = mapping.varKey.includes('username')
+          ? storedValue.replace('@', '')
+          : storedValue
+
+        // Set as array or single value based on mapping
+        if (mapping.isArray) {
+          initialConfig[mapping.apifyKey] = [cleanValue]
+        } else {
+          initialConfig[mapping.apifyKey] = cleanValue
+        }
+      }
+    }
+
+    // Fallback: also try the generic inputMapping if no explicit mapping found
+    if (!mapping && inputMapping?.inputKey) {
+      const storedValue = vars[inputMapping.inputKey]
+      if (storedValue) {
+        initialConfig[inputMapping.inputKey] = storedValue
+      }
+    }
+
+    // Show configuration modal
+    setConfirmModal({
+      sourceType,
+      scraperType: scraperType as ScraperType,
+      scraperName: req.name,
+      inputConfig: initialConfig,
+      fieldErrors: {},
+      outputFormat: 'json',
+    })
+  }, [runningScrapers, runningDeepResearch, campaign.custom_variables, toast])
+
+  // Update field in confirmation modal
+  const handleModalFieldChange = useCallback((key: string, value: unknown) => {
+    if (!confirmModal) return
+    setConfirmModal(prev => prev ? {
+      ...prev,
+      inputConfig: { ...prev.inputConfig, [key]: value },
+      fieldErrors: { ...prev.fieldErrors, [key]: '' }, // Clear error on change
+    } : null)
+  }, [confirmModal])
+
+  // Update output format in confirmation modal
+  const handleOutputFormatChange = useCallback((format: ScraperOutputFormat) => {
+    if (!confirmModal) return
+    setConfirmModal(prev => prev ? { ...prev, outputFormat: format } : null)
+  }, [confirmModal])
+
+  // AI suggestion for scraper fields - uses Deep Research/Perplexity discovery
+  const handleSuggestAI = useCallback(async () => {
+    if (!confirmModal) return
+
+    setConfirmModal(prev => prev ? { ...prev, isSuggestingAI: true } : null)
 
     try {
-      // TODO: Call actual scraper API
-      // For now, simulate with a delay
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      const { sourceType } = confirmModal
+      const vars = campaign.custom_variables || {}
+      const suggestedInput: Record<string, unknown> = { ...confirmModal.inputConfig }
 
-      toast.success('Completado', `${req.name} ejecutado`)
-      onRefresh()
+      // For website and deep_research, use existing values (no discovery needed)
+      if (sourceType === 'website') {
+        if (vars.competitor_website) {
+          suggestedInput.url = vars.competitor_website
+        }
+        setConfirmModal(prev => prev ? { ...prev, inputConfig: suggestedInput, isSuggestingAI: false } : null)
+        toast.success('Sugerencia aplicada', 'URL del sitio web configurada')
+        return
+      }
+
+      if (sourceType === 'deep_research') {
+        suggestedInput.query = competitorName
+        setConfirmModal(prev => prev ? { ...prev, inputConfig: suggestedInput, isSuggestingAI: false } : null)
+        toast.success('Sugerencia aplicada', 'Query configurado')
+        return
+      }
+
+      // Map source types to discovery platforms
+      const sourceToplatform: Record<string, string> = {
+        instagram_posts: 'instagram',
+        instagram_comments: 'instagram',
+        facebook_posts: 'facebook',
+        facebook_comments: 'facebook',
+        linkedin_posts: 'linkedin',
+        linkedin_comments: 'linkedin',
+        linkedin_insights: 'linkedin',
+        youtube_videos: 'youtube',
+        youtube_comments: 'youtube',
+        tiktok_posts: 'tiktok',
+        tiktok_comments: 'tiktok',
+        trustpilot_reviews: 'trustpilot',
+        g2_reviews: 'g2',
+        capterra_reviews: 'capterra',
+        playstore_reviews: 'playstore',
+        appstore_reviews: 'appstore',
+      }
+
+      const targetPlatform = sourceToplatform[sourceType]
+      if (!targetPlatform) {
+        toast.error('Error', 'Plataforma no soportada para auto-descubrimiento')
+        setConfirmModal(prev => prev ? { ...prev, isSuggestingAI: false } : null)
+        return
+      }
+
+      // Check if we have a website URL (required for discovery)
+      const websiteUrl = vars.competitor_website
+      if (!websiteUrl) {
+        toast.error('Falta URL', 'Configura primero el sitio web del competidor para usar auto-descubrimiento')
+        setConfirmModal(prev => prev ? { ...prev, isSuggestingAI: false } : null)
+        return
+      }
+
+      toast.info('Buscando...', `Descubriendo perfil de ${targetPlatform} con IA`)
+
+      // All platforms except the target one (to only search for what we need)
+      const allPlatforms = ['instagram', 'facebook', 'linkedin', 'youtube', 'tiktok', 'twitter', 'trustpilot', 'g2', 'capterra', 'playstore', 'appstore']
+      const skipPlatforms = allPlatforms.filter(p => p !== targetPlatform)
+
+      // Call the discovery API
+      const response = await fetch('/api/discovery/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          competitor_name: competitorName,
+          website_url: websiteUrl,
+          project_id: projectId,
+          skip_platforms: skipPlatforms,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Error en la búsqueda')
+      }
+
+      const result = await response.json()
+
+      if (!result.success || !result.results?.profiles) {
+        throw new Error('No se encontraron resultados')
+      }
+
+      // Get the discovered profile for our target platform
+      const discoveredProfile = result.results.profiles[targetPlatform]
+
+      if (!discoveredProfile || discoveredProfile.confidence === 'not_found') {
+        toast.warning('No encontrado', `No se encontró perfil de ${targetPlatform} para ${competitorName}`)
+        setConfirmModal(prev => prev ? { ...prev, isSuggestingAI: false } : null)
+        return
+      }
+
+      // Map discovered profile to scraper input based on source type
+      const applyDiscoveredProfile = () => {
+        switch (sourceType) {
+          case 'instagram_posts':
+          case 'instagram_comments':
+            if (discoveredProfile.handle) {
+              suggestedInput.username = discoveredProfile.handle.replace('@', '')
+            }
+            break
+          case 'facebook_posts':
+          case 'facebook_comments':
+            if (discoveredProfile.url) {
+              suggestedInput.startUrls = [discoveredProfile.url]
+            }
+            break
+          case 'linkedin_posts':
+          case 'linkedin_comments':
+          case 'linkedin_insights':
+            if (discoveredProfile.url) {
+              suggestedInput.companyUrls = [discoveredProfile.url]
+            }
+            break
+          case 'youtube_videos':
+          case 'youtube_comments':
+            if (discoveredProfile.url) {
+              suggestedInput.startUrls = [discoveredProfile.url]
+            }
+            break
+          case 'tiktok_posts':
+          case 'tiktok_comments':
+            if (discoveredProfile.handle) {
+              suggestedInput.profiles = [discoveredProfile.handle.replace('@', '')]
+            }
+            break
+          case 'trustpilot_reviews':
+          case 'g2_reviews':
+          case 'capterra_reviews':
+            if (discoveredProfile.url) {
+              suggestedInput.startUrls = [discoveredProfile.url]
+            }
+            break
+          case 'playstore_reviews':
+            if (discoveredProfile.handle) {
+              suggestedInput.appId = discoveredProfile.handle
+            }
+            break
+          case 'appstore_reviews':
+            if (discoveredProfile.handle) {
+              suggestedInput.appId = discoveredProfile.handle
+            }
+            break
+        }
+      }
+
+      applyDiscoveredProfile()
+
+      // Update modal with discovered values
+      setConfirmModal(prev => prev ? {
+        ...prev,
+        inputConfig: suggestedInput,
+        isSuggestingAI: false,
+      } : null)
+
+      const confidenceText = discoveredProfile.confidence === 'verified' ? 'verificado' :
+        discoveredProfile.confidence === 'likely' ? 'probable' : 'posible'
+      toast.success('Perfil descubierto', `${targetPlatform} (${confidenceText}): ${discoveredProfile.handle || discoveredProfile.url}`)
+
+    } catch (error) {
+      console.error('Error suggesting AI:', error)
+      toast.error('Error', error instanceof Error ? error.message : 'No se pudo generar la sugerencia')
+      setConfirmModal(prev => prev ? { ...prev, isSuggestingAI: false } : null)
+    }
+  }, [confirmModal, campaign.custom_variables, competitorName, projectId, toast])
+
+  // Execute scraper after confirmation - with validation
+  const executeScraperConfirmed = useCallback(async () => {
+    if (!confirmModal) return
+
+    const { sourceType, scraperType, scraperName, inputConfig, outputFormat } = confirmModal
+
+    // Build output configuration
+    const outputConfig: ScraperOutputConfig = {
+      format: outputFormat,
+      flatten: outputFormat === 'csv',
+    }
+
+    // Validate all fields before execution
+    const validation = validateAllFields(scraperType, inputConfig)
+    if (!validation.valid) {
+      setConfirmModal(prev => prev ? { ...prev, fieldErrors: validation.errors } : null)
+      toast.error('Campos inválidos', 'Corrige los errores antes de ejecutar')
+      return
+    }
+
+    setConfirmModal(null)
+
+    const req = ALL_DOCUMENT_REQUIREMENTS.find(r => r.source_type === sourceType)
+    if (!req) return
+
+    toast.info('Iniciando...', `Ejecutando ${scraperName}`)
+
+    try {
+      // Handle Deep Research separately - it's synchronous, not a scraper job
+      if (sourceType === 'deep_research') {
+        setRunningDeepResearch(true)
+        try {
+          const response = await fetch('/api/deep-research/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              project_id: projectId,
+              campaign_id: campaign.id,
+              competitor_name: competitorName,
+              industry: campaign.custom_variables?.industry || 'tecnología',
+              country: campaign.custom_variables?.country || 'España',
+              metadata: createDocumentMetadata(competitorName, sourceType, campaign.id),
+            }),
+          })
+
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to generate deep research')
+          }
+
+          const result = await response.json()
+          if (result.success) {
+            toast.success('Deep Research completado', `Documento creado: ${result.document_name}`)
+            onRefresh()
+          }
+        } finally {
+          setRunningDeepResearch(false)
+        }
+        return
+      }
+
+      console.log('[CompetitorDetailView] Executing scraper:', {
+        sourceType,
+        scraperType,
+        inputConfig,
+        outputFormat,
+      })
+
+      const response = await fetch('/api/scraper/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          scraper_type: scraperType,
+          input_config: inputConfig,
+          output_config: outputConfig,
+          target_name: competitorName,
+          target_category: 'competitor',
+          metadata: {
+            campaign_id: campaign.id,
+            source_type: sourceType,
+            competitor: competitorName,
+          },
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to start scraper')
+      }
+
+      const result = await response.json()
+
+      // Track job for polling (API returns job_id with underscore)
+      if (result.job_id) {
+        trackJob({
+          jobId: result.job_id,
+          scraperId: scraperType,
+          scraperName: req.name,
+          sourceType,
+          projectId,
+        })
+        toast.success('Scraper iniciado', `${scraperName} se está ejecutando`)
+      }
     } catch (error) {
       console.error('Error running scraper:', error)
-      toast.error('Error', 'No se pudo ejecutar el scraper')
-    } finally {
-      setRunningScrapers(prev => {
-        const next = new Set(prev)
-        next.delete(sourceType)
-        return next
-      })
+      toast.error('Error', error instanceof Error ? error.message : 'No se pudo ejecutar el scraper')
     }
-  }, [runningScrapers, campaign.custom_variables, toast, onRefresh])
+  }, [confirmModal, campaign.custom_variables, campaign.id, competitorName, projectId, toast, trackJob, onRefresh])
 
   // Handle run all scrapers for a step
   const handleRunStepScrapers = useCallback(async (stepId: string) => {
@@ -300,7 +828,7 @@ export default function CompetitorDetailView({
     }
   }, [scrapersByStep, handleRunScraper, toast])
 
-  // Handle run analysis step
+  // Handle run analysis step - calls actual API
   const handleRunAnalysisStep = useCallback(async (stepId: string) => {
     if (runningSteps.has(stepId)) return
 
@@ -311,15 +839,35 @@ export default function CompetitorDetailView({
     toast.info('Ejecutando...', `Iniciando ${stepInfo.name}`)
 
     try {
-      // TODO: Navigate to campaign runner or execute step via API
-      // For now, simulate
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      const response = await fetch('/api/campaign/run-step', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          stepId: stepId,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `Error al ejecutar ${stepInfo.name}`)
+      }
+
+      const result = await response.json()
+
+      // Check if async polling is required (for Deep Research steps)
+      if (result.async_polling_required) {
+        toast.info('Procesando...', `${stepInfo.name} está procesando en segundo plano`)
+        // Don't remove from running steps - it's still processing
+        // The user can refresh to check status
+        return
+      }
 
       toast.success('Completado', `${stepInfo.name} ejecutado`)
       onRefresh()
     } catch (error) {
       console.error('Error running analysis:', error)
-      toast.error('Error', 'No se pudo ejecutar el análisis')
+      toast.error('Error', error instanceof Error ? error.message : 'No se pudo ejecutar el análisis')
     } finally {
       setRunningSteps(prev => {
         const next = new Set(prev)
@@ -327,7 +875,7 @@ export default function CompetitorDetailView({
         return next
       })
     }
-  }, [runningSteps, toast, onRefresh])
+  }, [runningSteps, toast, onRefresh, campaign.id])
 
   // Handle config saved
   const handleConfigSaved = () => {
@@ -335,6 +883,73 @@ export default function CompetitorDetailView({
     onRefresh()
     toast.success('Guardado', 'Configuración actualizada')
   }
+
+  // Start editing a step's configuration
+  const startEditingStep = useCallback((stepId: string) => {
+    setEditingStepId(stepId)
+    // Initialize variables from campaign
+    setStepVariables(campaign.custom_variables || {})
+    // Initialize prompt from campaign or default
+    const step = ANALYSIS_STEPS.find(s => s.id === stepId)
+    if (step) {
+      const savedPrompt = campaign.custom_variables?.[`prompt_${stepId}`]
+      const defaultPrompt = ALL_PROMPTS[step.promptKey]
+      setStepPrompts(prev => ({ ...prev, [stepId]: savedPrompt || defaultPrompt }))
+
+      // Initialize selected documents for this step
+      const docsForStep = new Set<string>()
+      documents.forEach(doc => {
+        if (step.requiredSources.includes(doc.source_metadata?.source_type || '')) {
+          docsForStep.add(doc.id)
+        }
+      })
+      setSelectedDocs(prev => ({ ...prev, [stepId]: docsForStep }))
+    }
+  }, [campaign.custom_variables, documents])
+
+  // Save step configuration
+  const saveStepConfig = useCallback(async () => {
+    if (!editingStepId) return
+
+    setIsSavingStep(true)
+    try {
+      // Merge variables with custom prompt (if edited)
+      const updatedVariables = { ...stepVariables }
+      if (stepPrompts[editingStepId]) {
+        updatedVariables[`prompt_${editingStepId}`] = stepPrompts[editingStepId]
+      }
+
+      // Update campaign custom_variables
+      const response = await fetch('/api/campaigns/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: campaign.id,
+          custom_variables: updatedVariables,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save configuration')
+      }
+
+      toast.success('Guardado', 'Configuración actualizada')
+      setEditingStepId(null)
+      onRefresh()
+    } catch (error) {
+      console.error('Error saving step config:', error)
+      toast.error('Error', 'No se pudo guardar la configuración')
+    } finally {
+      setIsSavingStep(false)
+    }
+  }, [editingStepId, stepVariables, stepPrompts, campaign.id, toast, onRefresh])
+
+  // Cancel editing
+  const cancelEditingStep = useCallback(() => {
+    setEditingStepId(null)
+    setStepVariables({})
+    setStepPrompts({})
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -384,26 +999,114 @@ export default function CompetitorDetailView({
         </div>
       </div>
 
-      {/* Input warning */}
-      {inputStatus.configured < inputStatus.total && (
-        <div className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-xl">
-          <div className="flex items-center gap-3">
-            <AlertTriangle size={20} className="text-amber-600" />
-            <div>
-              <p className="font-medium text-amber-800">
-                Configuración incompleta
-              </p>
-              <p className="text-sm text-amber-600">
-                {inputStatus.configured}/{inputStatus.total} campos configurados. Algunos scrapers no podrán ejecutarse.
-              </p>
+      {/* Configuration status - compact info, no blocking banner */}
+
+      {/* Scraper Status Panel - Always visible */}
+      {(activeJobs.size > 0 || jobHistory.length > 0) && (
+        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity size={18} className="text-indigo-600" />
+              <h3 className="font-semibold text-gray-900">Estado de Scrapers</h3>
             </div>
+            {activeJobs.size > 0 && (
+              <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                {activeJobs.size} activo{activeJobs.size > 1 ? 's' : ''}
+              </span>
+            )}
           </div>
-          <button
-            onClick={() => setShowConfigModal(true)}
-            className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium"
-          >
-            Configurar
-          </button>
+
+          <div className="p-4 space-y-3">
+            {/* Active Jobs */}
+            {Array.from(activeJobs.values()).map((job) => {
+              const elapsedSeconds = Math.round((Date.now() - new Date(job.startedAt).getTime()) / 1000)
+              const elapsedFormatted = elapsedSeconds > 60
+                ? `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s`
+                : `${elapsedSeconds}s`
+
+              return (
+                <div key={job.jobId} className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Loader2 size={16} className="text-blue-600 animate-spin" />
+                      <span className="font-medium text-gray-900">{job.scraperName}</span>
+                    </div>
+                    <span className="text-xs text-blue-600 flex items-center gap-1">
+                      <Clock size={12} />
+                      {elapsedFormatted}
+                    </span>
+                  </div>
+                  {/* Indeterminate progress bar - moving stripe */}
+                  <div className="w-full h-2 bg-blue-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full w-1/3 bg-blue-600 rounded-full"
+                      style={{
+                        animation: 'indeterminate 1.2s ease-in-out infinite',
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-blue-600 mt-1">
+                    {job.status === 'processing' ? 'Procesando resultados...' : 'Extrayendo datos...'}
+                  </p>
+                </div>
+              )
+            })}
+
+            {/* Recent completed/failed jobs (last 5) */}
+            {jobHistory.slice(0, 5).map((job) => {
+              const isSuccess = job.status === 'completed'
+              const timeAgo = job.completedAt
+                ? formatTimeAgo(new Date(job.completedAt))
+                : formatTimeAgo(new Date(job.startedAt))
+
+              return (
+                <div
+                  key={job.jobId}
+                  className={`p-3 rounded-xl flex items-center justify-between ${
+                    isSuccess ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {isSuccess ? (
+                      <CheckCircle size={16} className="text-green-600" />
+                    ) : (
+                      <XCircle size={16} className="text-red-600" />
+                    )}
+                    <span className={`font-medium ${isSuccess ? 'text-green-900' : 'text-red-900'}`}>
+                      {job.scraperName}
+                    </span>
+                    <span className={`text-xs ${isSuccess ? 'text-green-600' : 'text-red-600'}`}>
+                      {timeAgo}
+                    </span>
+                  </div>
+                  {isSuccess && job.documentId && (
+                    <button
+                      onClick={() => {
+                        // Find document by ID and open viewer
+                        const doc = documents.find(d => d.id === job.documentId)
+                        if (doc) {
+                          setViewingDoc(doc)
+                        } else {
+                          // Document not loaded yet, refresh and try again
+                          toast.info('Actualizando...', 'Cargando documentos')
+                          onRefresh()
+                        }
+                      }}
+                      className="text-xs px-2 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
+                    >
+                      <FileText size={12} />
+                      Ver documento
+                    </button>
+                  )}
+                  {!isSuccess && job.error && (
+                    <span className="text-xs text-red-600 max-w-[200px] truncate" title={job.error}>
+                      {job.error}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -454,7 +1157,10 @@ export default function CompetitorDetailView({
 
                   <div className="space-y-1 pl-6">
                     {stepData.scrapers.map(scraper => {
-                      const isRunning = runningScrapers.has(scraper.sourceType)
+                      // Check if this scraper is running (either via job persistence or deep research state)
+                      const isRunning = scraper.sourceType === 'deep_research'
+                        ? runningDeepResearch
+                        : runningScrapers.has(scraper.sourceType)
                       const hasInput = !scraper.inputKey || !!scraper.inputValue
 
                       return (
@@ -470,30 +1176,47 @@ export default function CompetitorDetailView({
                             ) : scraper.isCompleted ? (
                               <CheckCircle size={14} className="text-green-500" />
                             ) : hasInput ? (
-                              <Circle size={14} className="text-gray-300" />
+                              <Circle size={14} className="text-indigo-400" />
                             ) : (
-                              <AlertTriangle size={14} className="text-amber-500" />
+                              <Circle size={14} className="text-gray-300" />
                             )}
                             <span className={`text-sm ${
                               scraper.isCompleted ? 'text-green-700' : 'text-gray-600'
                             }`}>
                               {scraper.name}
                             </span>
+                            {!scraper.isCompleted && !hasInput && (
+                              <span className="text-xs text-gray-400">(sin configurar)</span>
+                            )}
                           </div>
 
                           {!scraper.isCompleted && (
-                            <button
-                              onClick={() => handleRunScraper(scraper.sourceType)}
-                              disabled={isRunning || !hasInput}
-                              className={`p-1 rounded transition-colors ${
-                                isRunning || !hasInput
-                                  ? 'text-gray-300 cursor-not-allowed'
-                                  : 'text-indigo-600 hover:bg-indigo-100'
-                              }`}
-                              title={!hasInput ? 'Configura el input primero' : 'Ejecutar'}
-                            >
-                              <Play size={14} />
-                            </button>
+                            <div className="flex items-center gap-0.5">
+                              <button
+                                onClick={() => handleRunScraper(scraper.sourceType)}
+                                disabled={isRunning}
+                                className={`p-1.5 rounded transition-colors ${
+                                  isRunning
+                                    ? 'text-gray-300 cursor-not-allowed'
+                                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                                }`}
+                                title="Configurar scraper"
+                              >
+                                <Settings size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleRunScraper(scraper.sourceType)}
+                                disabled={isRunning}
+                                className={`p-1.5 rounded transition-colors ${
+                                  isRunning
+                                    ? 'text-gray-300 cursor-not-allowed'
+                                    : 'text-indigo-600 hover:bg-indigo-100'
+                                }`}
+                                title="Ejecutar scraper"
+                              >
+                                <Play size={14} />
+                              </button>
+                            </div>
                           )}
                         </div>
                       )
@@ -521,11 +1244,19 @@ export default function CompetitorDetailView({
             {ANALYSIS_STEPS.map((step, index) => {
               const status = analysisStepStatus[step.id]
               const StepIcon = step.icon
+              const isExpanded = expandedSteps.has(step.id)
+              const promptText = ALL_PROMPTS[step.promptKey]
+              const promptVariables = extractPromptVariables(promptText)
+
+              // Get matching documents for this step's required sources
+              const matchingDocs = documents.filter(doc =>
+                step.requiredSources.includes(doc.source_metadata?.source_type || '')
+              )
 
               return (
                 <div
                   key={step.id}
-                  className={`p-4 rounded-xl border transition-colors ${
+                  className={`rounded-xl border transition-colors overflow-hidden ${
                     status?.isCompleted
                       ? 'bg-green-50 border-green-200'
                       : status?.canRun
@@ -533,79 +1264,603 @@ export default function CompetitorDetailView({
                         : 'bg-gray-50 border-gray-200'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-3">
-                      <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
-                        status?.isCompleted
-                          ? 'bg-green-600 text-white'
-                          : status?.canRun
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-gray-300 text-gray-600'
-                      }`}>
-                        {index + 1}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <StepIcon size={16} className={
-                            status?.isCompleted
-                              ? 'text-green-600'
-                              : status?.canRun
-                                ? 'text-indigo-600'
-                                : 'text-gray-400'
-                          } />
-                          <span className={`font-medium ${
-                            status?.isCompleted
-                              ? 'text-green-700'
-                              : status?.canRun
-                                ? 'text-indigo-700'
-                                : 'text-gray-700'
-                          }`}>
-                            {step.name}
-                          </span>
+                  {/* Header - clickable to expand */}
+                  <div
+                    className="p-4 cursor-pointer hover:bg-black/5 transition-colors"
+                    onClick={() => {
+                      setExpandedSteps(prev => {
+                        const newSet = new Set(prev)
+                        if (newSet.has(step.id)) {
+                          newSet.delete(step.id)
+                        } else {
+                          newSet.add(step.id)
+                        }
+                        return newSet
+                      })
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
+                          status?.isCompleted
+                            ? 'bg-green-600 text-white'
+                            : status?.canRun
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-gray-300 text-gray-600'
+                        }`}>
+                          {index + 1}
                         </div>
-                        <p className="text-sm text-gray-500 mt-0.5">
-                          {step.description}
-                        </p>
-                        {status?.blockedReason && (
-                          <p className="text-xs text-amber-600 mt-1">
-                            {status.blockedReason}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <StepIcon size={16} className={
+                              status?.isCompleted
+                                ? 'text-green-600'
+                                : status?.canRun
+                                  ? 'text-indigo-600'
+                                  : 'text-gray-400'
+                            } />
+                            <span className={`font-medium ${
+                              status?.isCompleted
+                                ? 'text-green-700'
+                                : status?.canRun
+                                  ? 'text-indigo-700'
+                                  : 'text-gray-700'
+                            }`}>
+                              {step.name}
+                            </span>
+                            {isExpanded ? (
+                              <ChevronDown size={16} className="text-gray-400" />
+                            ) : (
+                              <ChevronRight size={16} className="text-gray-400" />
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500 mt-0.5">
+                            {step.description}
                           </p>
+                          {status?.blockedReason && (
+                            <p className="text-xs text-red-600 mt-1">
+                              {status.blockedReason}
+                            </p>
+                          )}
+                          {!status?.blockedReason && status?.scraperWarning && (
+                            <p className="text-xs text-amber-600 mt-1">
+                              {status.scraperWarning}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
+                        {status?.isRunning ? (
+                          <Loader2 size={20} className="text-indigo-500 animate-spin" />
+                        ) : status?.isCompleted ? (
+                          <button
+                            onClick={() => {
+                              toast.info('Ver resultados', 'Funcionalidad en desarrollo')
+                            }}
+                            className="text-sm px-3 py-1.5 text-green-700 hover:bg-green-100 rounded-lg transition-colors"
+                          >
+                            Ver
+                          </button>
+                        ) : status?.canRun ? (
+                          <button
+                            onClick={() => handleRunAnalysisStep(step.id)}
+                            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                          >
+                            <Play size={14} />
+                            Ejecutar
+                          </button>
+                        ) : (
+                          <Lock size={18} className="text-gray-400" />
                         )}
                       </div>
                     </div>
-
-                    <div className="flex-shrink-0">
-                      {status?.isRunning ? (
-                        <Loader2 size={20} className="text-indigo-500 animate-spin" />
-                      ) : status?.isCompleted ? (
-                        <button
-                          onClick={() => {
-                            // TODO: View results
-                            toast.info('Ver resultados', 'Funcionalidad en desarrollo')
-                          }}
-                          className="text-sm px-3 py-1.5 text-green-700 hover:bg-green-100 rounded-lg transition-colors"
-                        >
-                          Ver
-                        </button>
-                      ) : status?.canRun ? (
-                        <button
-                          onClick={() => handleRunAnalysisStep(step.id)}
-                          className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                        >
-                          <Play size={14} />
-                          Ejecutar
-                        </button>
-                      ) : (
-                        <Lock size={18} className="text-gray-400" />
-                      )}
-                    </div>
                   </div>
+
+                  {/* Expanded content */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-200 bg-white/50">
+                      {/* Edit Mode Header */}
+                      <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                        {editingStepId === step.id ? (
+                          <>
+                            <span className="text-sm font-medium text-indigo-600">Modo Edición</span>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); cancelEditingStep() }}
+                                className="text-xs px-2 py-1 text-gray-600 hover:bg-gray-200 rounded transition-colors"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); saveStepConfig() }}
+                                disabled={isSavingStep}
+                                className="text-xs px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors flex items-center gap-1"
+                              >
+                                {isSavingStep ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                Guardar
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-sm text-gray-500">Configuración del paso</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); startEditingStep(step.id) }}
+                              className="text-xs px-2 py-1 text-indigo-600 hover:bg-indigo-100 rounded transition-colors flex items-center gap-1"
+                            >
+                              <Edit3 size={12} />
+                              Editar
+                            </button>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Variables Section */}
+                      <div className="p-4 border-b border-gray-100">
+                        <div className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
+                          <Variable size={14} />
+                          Variables del Prompt
+                        </div>
+                        {editingStepId === step.id ? (
+                          <div className="space-y-3">
+                            {promptVariables.map(varName => {
+                              const varDef = COMPETITOR_VARIABLE_DEFINITIONS.find(v => v.name === varName)
+                              return (
+                                <div key={varName}>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    {varName}
+                                    {varDef?.required && <span className="text-red-500 ml-1">*</span>}
+                                  </label>
+                                  {varDef?.type === 'textarea' ? (
+                                    <textarea
+                                      value={stepVariables[varName] || ''}
+                                      onChange={(e) => setStepVariables(prev => ({ ...prev, [varName]: e.target.value }))}
+                                      placeholder={varDef?.placeholder || ''}
+                                      className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                      rows={2}
+                                      onClick={e => e.stopPropagation()}
+                                    />
+                                  ) : (
+                                    <input
+                                      type="text"
+                                      value={stepVariables[varName] || ''}
+                                      onChange={(e) => setStepVariables(prev => ({ ...prev, [varName]: e.target.value }))}
+                                      placeholder={varDef?.placeholder || ''}
+                                      className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                      onClick={e => e.stopPropagation()}
+                                    />
+                                  )}
+                                  {varDef?.description && (
+                                    <p className="text-xs text-gray-400 mt-0.5">{varDef.description}</p>
+                                  )}
+                                </div>
+                              )
+                            })}
+                            {promptVariables.length === 0 && (
+                              <span className="text-xs text-gray-500">No hay variables específicas</span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {promptVariables.map(varName => {
+                              const varDef = COMPETITOR_VARIABLE_DEFINITIONS.find(v => v.name === varName)
+                              const value = campaign.custom_variables?.[varName]
+                              return (
+                                <div
+                                  key={varName}
+                                  className={`px-2 py-1 rounded text-xs ${
+                                    value
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-amber-100 text-amber-700'
+                                  }`}
+                                  title={varDef?.description || varName}
+                                >
+                                  {varName}: {value || '(sin valor)'}
+                                </div>
+                              )
+                            })}
+                            {promptVariables.length === 0 && (
+                              <span className="text-xs text-gray-500">No hay variables específicas</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Documents Section - With dropdown selector */}
+                      <div className="p-4 border-b border-gray-100">
+                        <div className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
+                          <Database size={14} />
+                          Documentos Requeridos ({matchingDocs.length}/{step.requiredSources.length})
+                        </div>
+                        <div className="space-y-2">
+                          {step.requiredSources.map(source => {
+                            // Find ALL documents matching this source type
+                            const matchingDocsForSource = documents.filter(d =>
+                              d.source_metadata?.source_type === source
+                            )
+                            const hasDoc = matchingDocsForSource.length > 0
+                            const selectedDocId = selectedDocs[step.id]?.has(matchingDocsForSource[0]?.id || '')
+                              ? matchingDocsForSource[0]?.id
+                              : Array.from(selectedDocs[step.id] || []).find(id =>
+                                  matchingDocsForSource.some(d => d.id === id)
+                                )
+                            const selectedDoc = matchingDocsForSource.find(d => d.id === selectedDocId) || matchingDocsForSource[0]
+
+                            return (
+                              <div
+                                key={source}
+                                className={`p-2 rounded-lg border ${
+                                  hasDoc ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    {hasDoc ? (
+                                      <CheckCircle size={14} className="text-green-500 flex-shrink-0" />
+                                    ) : (
+                                      <Circle size={14} className="text-gray-300 flex-shrink-0" />
+                                    )}
+                                    <span className={`text-xs font-medium ${hasDoc ? 'text-green-700' : 'text-gray-500'}`}>
+                                      {SOURCE_TYPE_LABELS[source] || source}
+                                    </span>
+                                    {matchingDocsForSource.length > 1 && (
+                                      <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                                        {matchingDocsForSource.length} docs
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1">
+                                    {/* Document selector dropdown */}
+                                    {(editingStepId === step.id || hasDoc) && (
+                                      <select
+                                        value={selectedDocId || ''}
+                                        onChange={(e) => {
+                                          e.stopPropagation()
+                                          const newDocId = e.target.value
+                                          setSelectedDocs(prev => {
+                                            const stepDocs = new Set(prev[step.id] || [])
+                                            // Remove old selection for this source
+                                            matchingDocsForSource.forEach(d => stepDocs.delete(d.id))
+                                            // Add new selection
+                                            if (newDocId) {
+                                              stepDocs.add(newDocId)
+                                            }
+                                            return { ...prev, [step.id]: stepDocs }
+                                          })
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="text-xs px-2 py-1 border border-gray-200 rounded bg-white text-gray-700 max-w-[180px] truncate"
+                                        disabled={editingStepId !== step.id && matchingDocsForSource.length <= 1}
+                                      >
+                                        {!hasDoc && <option value="">Sin documento</option>}
+                                        {matchingDocsForSource.map(doc => (
+                                          <option key={doc.id} value={doc.id}>
+                                            {doc.name || doc.filename || `Doc ${doc.id.slice(0, 8)}`}
+                                          </option>
+                                        ))}
+                                        {/* Option to assign from all project docs */}
+                                        {editingStepId === step.id && !hasDoc && documents.length > 0 && (
+                                          <optgroup label="─ Otros documentos ─">
+                                            {documents
+                                              .filter(d => !matchingDocsForSource.includes(d))
+                                              .slice(0, 10)
+                                              .map(doc => (
+                                                <option key={doc.id} value={doc.id}>
+                                                  {doc.name || doc.filename || `Doc ${doc.id.slice(0, 8)}`}
+                                                </option>
+                                              ))}
+                                          </optgroup>
+                                        )}
+                                      </select>
+                                    )}
+
+                                    {/* View button */}
+                                    {selectedDoc && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setViewingDoc(selectedDoc)
+                                        }}
+                                        className="p-1 text-indigo-600 hover:bg-indigo-100 rounded transition-colors"
+                                        title="Ver documento"
+                                      >
+                                        <Eye size={14} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Show selected document name if different from source label */}
+                                {selectedDoc && (selectedDoc.name || selectedDoc.filename) && (
+                                  <div className="mt-1 pl-6 text-xs text-gray-500 truncate">
+                                    📄 {selectedDoc.name || selectedDoc.filename}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                          {step.requiredSources.length === 0 && (
+                            <span className="text-xs text-gray-500">
+                              Este paso usa outputs de pasos anteriores
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Prompt Preview/Edit Section */}
+                      <div className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <Code size={14} />
+                            {editingStepId === step.id ? 'Editar Prompt' : 'Preview del Prompt'}
+                          </div>
+                          <span className="text-xs text-gray-400">
+                            {(editingStepId === step.id ? stepPrompts[step.id]?.length : promptText.length) || 0} caracteres
+                          </span>
+                        </div>
+                        {editingStepId === step.id ? (
+                          <textarea
+                            value={stepPrompts[step.id] || promptText}
+                            onChange={(e) => setStepPrompts(prev => ({ ...prev, [step.id]: e.target.value }))}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full h-64 px-3 py-2 bg-slate-800 text-white rounded-lg text-xs font-mono resize-y focus:ring-2 focus:ring-indigo-500 focus:outline-none placeholder:text-slate-400"
+                            placeholder="Escribe el prompt para este paso..."
+                          />
+                        ) : (
+                          <div className="bg-slate-800 text-white p-3 rounded-lg text-xs font-mono max-h-48 overflow-y-auto whitespace-pre-wrap">
+                            {promptText.slice(0, 800)}
+                            {promptText.length > 800 && '...'}
+                          </div>
+                        )}
+                        <p className="text-xs text-gray-500 mt-2">
+                          {editingStepId === step.id
+                            ? 'Puedes personalizar el prompt. Usa {{variable}} para variables.'
+                            : `${promptText.length} caracteres total`
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}
           </div>
         </div>
       </div>
+
+      {/* Configuration Modal - Full fields like ScraperLauncher */}
+      {confirmModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h3 className="font-semibold text-gray-900">{confirmModal.scraperName}</h3>
+                <p className="text-sm text-gray-500">Configura los parámetros antes de ejecutar</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSuggestAI}
+                  disabled={confirmModal.isSuggestingAI}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors text-sm font-medium disabled:opacity-50"
+                >
+                  {confirmModal.isSuggestingAI ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={14} />
+                  )}
+                  Sugerir por IA
+                </button>
+                <button
+                  onClick={() => setConfirmModal(null)}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Render all fields from schema */}
+              {(() => {
+                const fields = getAllFieldsForScraper(confirmModal.scraperType)
+                if (fields.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>No hay campos configurables para este scraper</p>
+                    </div>
+                  )
+                }
+
+                return fields.map((field: FieldSchema) => {
+                  const value = confirmModal.inputConfig[field.key]
+                  const error = confirmModal.fieldErrors[field.key]
+                  const baseInputClasses = `w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 ${
+                    error ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                  }`
+
+                  // Render based on field type
+                  switch (field.type) {
+                    case 'boolean':
+                      return (
+                        <label key={field.key} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
+                          <input
+                            type="checkbox"
+                            checked={(value as boolean) ?? field.defaultValue ?? false}
+                            onChange={(e) => handleModalFieldChange(field.key, e.target.checked)}
+                            className="w-5 h-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                          />
+                          <div>
+                            <span className="text-sm text-gray-700 font-medium">{field.label}</span>
+                            {field.description && <p className="text-xs text-gray-500">{field.description}</p>}
+                          </div>
+                        </label>
+                      )
+
+                    case 'select':
+                      return (
+                        <div key={field.key}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                            {field.label}
+                            {field.required && <span className="text-red-500 ml-1">*</span>}
+                          </label>
+                          {field.description && <p className="text-xs text-gray-500 mb-2">{field.description}</p>}
+                          <select
+                            value={(value as string) ?? field.defaultValue ?? ''}
+                            onChange={(e) => handleModalFieldChange(field.key, e.target.value)}
+                            className={`${baseInputClasses} bg-white`}
+                          >
+                            <option value="">Seleccionar...</option>
+                            {field.options?.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}{opt.description ? ` - ${opt.description}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {field.helpText && <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>}
+                          {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+                        </div>
+                      )
+
+                    case 'number':
+                      return (
+                        <div key={field.key}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                            {field.label}
+                            {field.required && <span className="text-red-500 ml-1">*</span>}
+                          </label>
+                          {field.description && <p className="text-xs text-gray-500 mb-2">{field.description}</p>}
+                          <input
+                            type="number"
+                            value={(value as number) ?? field.defaultValue ?? ''}
+                            onChange={(e) => handleModalFieldChange(field.key, parseInt(e.target.value) || 0)}
+                            min={field.validation?.min}
+                            max={field.validation?.max}
+                            className={baseInputClasses}
+                          />
+                          {field.helpText && <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>}
+                          {field.validation && (field.validation.min !== undefined || field.validation.max !== undefined) && (
+                            <p className="text-xs text-gray-400 mt-1">
+                              Rango: {field.validation.min ?? 0} - {field.validation.max ?? '∞'}
+                            </p>
+                          )}
+                          {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+                        </div>
+                      )
+
+                    case 'url-array':
+                    case 'text-array':
+                      const arrayValue = Array.isArray(value) ? value.join('\n') : (typeof value === 'string' ? value : '')
+                      return (
+                        <div key={field.key}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                            {field.label}
+                            {field.required && <span className="text-red-500 ml-1">*</span>}
+                          </label>
+                          {field.description && <p className="text-xs text-gray-500 mb-2">{field.description}</p>}
+                          <textarea
+                            value={arrayValue}
+                            onChange={(e) => {
+                              const values = e.target.value.split('\n').map(s => s.trim()).filter(Boolean)
+                              handleModalFieldChange(field.key, values.length > 0 ? values : e.target.value)
+                            }}
+                            rows={3}
+                            placeholder={field.placeholder}
+                            className={baseInputClasses}
+                          />
+                          {field.helpText && <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>}
+                          {field.examples && field.examples.length > 0 && (
+                            <p className="text-xs text-gray-400 mt-1">
+                              Ejemplos: {field.examples.slice(0, 3).join(', ')}
+                            </p>
+                          )}
+                          {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+                        </div>
+                      )
+
+                    case 'url':
+                    case 'text':
+                    default:
+                      return (
+                        <div key={field.key}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                            {field.label}
+                            {field.required && <span className="text-red-500 ml-1">*</span>}
+                          </label>
+                          {field.description && <p className="text-xs text-gray-500 mb-2">{field.description}</p>}
+                          <input
+                            type={field.type === 'url' ? 'url' : 'text'}
+                            value={(value as string) || ''}
+                            onChange={(e) => handleModalFieldChange(field.key, e.target.value)}
+                            placeholder={field.placeholder}
+                            className={baseInputClasses}
+                          />
+                          {field.helpText && <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>}
+                          {field.examples && field.examples.length > 0 && (
+                            <p className="text-xs text-gray-400 mt-1">
+                              Ej: {field.examples[0]}
+                            </p>
+                          )}
+                          {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+                        </div>
+                      )
+                  }
+                })
+              })()}
+
+              {/* Output Format Selection */}
+              <div className="pt-4 mt-4 border-t border-gray-200">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Formato de salida
+                </label>
+                <div className="grid grid-cols-5 gap-2">
+                  {[
+                    { value: 'json', label: 'JSON', desc: 'Estructurado' },
+                    { value: 'jsonl', label: 'JSONL', desc: 'Una línea/item' },
+                    { value: 'csv', label: 'CSV', desc: 'Para Excel' },
+                    { value: 'markdown', label: 'Markdown', desc: 'Texto legible' },
+                    { value: 'xml', label: 'XML', desc: 'Formato XML' },
+                  ].map((format) => (
+                    <button
+                      key={format.value}
+                      type="button"
+                      onClick={() => handleOutputFormatChange(format.value as ScraperOutputFormat)}
+                      className={`p-2 rounded-lg border text-center transition-all ${
+                        confirmModal.outputFormat === format.value
+                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="font-medium text-xs">{format.label}</div>
+                      <div className="text-[10px] text-gray-500 mt-0.5">{format.desc}</div>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  El formato determina cómo se guardan los datos en el documento.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0">
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={executeScraperConfirmed}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+              >
+                <Play size={16} />
+                Ejecutar Scraper
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Config Modal */}
       {showConfigModal && (
@@ -615,6 +1870,64 @@ export default function CompetitorDetailView({
           onClose={() => setShowConfigModal(false)}
           onSaved={handleConfigSaved}
         />
+      )}
+
+      {/* Document Viewer Modal */}
+      {viewingDoc && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+              <div className="min-w-0 flex-1">
+                <h3 className="font-semibold text-gray-900 truncate">
+                  {viewingDoc.name || viewingDoc.filename || 'Documento'}
+                </h3>
+                <p className="text-sm text-gray-500">
+                  {viewingDoc.source_metadata?.source_type && (
+                    <span className="inline-flex items-center gap-1">
+                      <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">
+                        {SOURCE_TYPE_LABELS[viewingDoc.source_metadata.source_type] || viewingDoc.source_metadata.source_type}
+                      </span>
+                    </span>
+                  )}
+                  {viewingDoc.created_at && (
+                    <span className="ml-2 text-xs text-gray-400">
+                      {new Date(viewingDoc.created_at).toLocaleDateString('es-ES')}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <button
+                onClick={() => setViewingDoc(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto p-6">
+              {viewingDoc.extracted_content ? (
+                <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono bg-gray-50 p-4 rounded-lg max-h-full overflow-auto">
+                  {viewingDoc.extracted_content}
+                </pre>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <FileText size={48} className="mx-auto mb-4 text-gray-300" />
+                  <p>No hay contenido disponible para este documento</p>
+                  <p className="text-sm mt-2">El contenido se extrae después de ejecutar el scraper</p>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0">
+              <button
+                onClick={() => setViewingDoc(null)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

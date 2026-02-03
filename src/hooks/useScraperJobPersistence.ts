@@ -132,10 +132,24 @@ export function useScraperJobPersistence({
       const history: JobHistoryEntry[] = JSON.parse(stored)
       // Filter out entries older than TTL
       const now = Date.now()
-      return history.filter((entry) => {
+      const filtered = history.filter((entry) => {
         const entryAge = now - new Date(entry.completedAt || entry.startedAt).getTime()
         return entryAge < JOB_TTL_MS
       })
+      // Deduplicate by jobId (keep first occurrence = most recent)
+      const seen = new Set<string>()
+      const deduplicated = filtered.filter((entry) => {
+        if (seen.has(entry.jobId)) {
+          return false
+        }
+        seen.add(entry.jobId)
+        return true
+      })
+      // If we removed duplicates, save the cleaned history
+      if (deduplicated.length < filtered.length) {
+        localStorage.setItem(historyKey, JSON.stringify(deduplicated))
+      }
+      return deduplicated
     } catch {
       return []
     }
@@ -191,6 +205,12 @@ export function useScraperJobPersistence({
               completedAt: new Date().toISOString(),
             }
             setJobHistory((prevHistory) => {
+              // Deduplicate by jobId to prevent duplicates
+              const existingIds = new Set(prevHistory.map(h => h.jobId))
+              if (existingIds.has(jobId)) {
+                // Job already in history, don't add again
+                return prevHistory
+              }
               const newHistory = [historyEntry, ...prevHistory].slice(0, 50) // Keep last 50
               saveHistoryToLocalStorage(newHistory)
               return newHistory
@@ -392,7 +412,7 @@ export function useScraperJobPersistence({
       setActiveJobs(recoveredJobsMap)
       saveToLocalStorage(recoveredJobsMap)
 
-      // Add completed/failed to history
+      // Add completed/failed to history (with deduplication)
       if (completedSinceAway.length > 0 || failedSinceAway.length > 0) {
         const now = new Date().toISOString()
         const newHistoryEntries: JobHistoryEntry[] = [
@@ -401,7 +421,13 @@ export function useScraperJobPersistence({
         ]
 
         setJobHistory((prev) => {
-          const updated = [...newHistoryEntries, ...prev].slice(0, 50)
+          // Deduplicate by jobId
+          const existingIds = new Set(prev.map(h => h.jobId))
+          const uniqueNewEntries = newHistoryEntries.filter(e => !existingIds.has(e.jobId))
+          if (uniqueNewEntries.length === 0) {
+            return prev
+          }
+          const updated = [...uniqueNewEntries, ...prev].slice(0, 50)
           saveHistoryToLocalStorage(updated)
           return updated
         })

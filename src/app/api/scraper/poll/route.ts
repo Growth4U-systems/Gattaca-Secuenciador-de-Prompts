@@ -43,12 +43,17 @@ export async function GET(request: NextRequest) {
 
     // If already completed or failed, return current status
     if (['completed', 'failed', 'cancelled'].includes(job.status)) {
+      // Extract document_id from provider_metadata if available
+      const jobMeta = job.provider_metadata as Record<string, unknown> | null;
+      const documentId = jobMeta?.document_id as string | undefined;
+
       return NextResponse.json<ScraperPollResponse>({
         status: job.status,
         progress_percent: job.progress_percent,
         result_count: job.result_count,
         completed: true,
         error: job.error_message || undefined,
+        document_id: documentId,
       });
     }
 
@@ -137,13 +142,14 @@ async function pollApifyRun(
     // Fetch and save results using admin client to bypass RLS
     const adminSupabase = createAdminClient();
     try {
-      const resultCount = await fetchAndSaveApifyResults(adminSupabase, job, statusData.data.defaultDatasetId, apifyToken);
+      const { resultCount, documentId } = await fetchAndSaveApifyResults(adminSupabase, job, statusData.data.defaultDatasetId, apifyToken);
 
       return NextResponse.json<ScraperPollResponse>({
         status: 'completed',
         progress_percent: 100,
         result_count: resultCount,
         completed: true,
+        document_id: documentId,
       });
     } catch (saveError) {
       console.error('[scraper/poll] Error saving results:', saveError);
@@ -209,7 +215,7 @@ async function fetchAndSaveApifyResults(
   job: ScraperJob,
   datasetId: string,
   apifyToken: string
-): Promise<number> {
+): Promise<{ resultCount: number; documentId?: string }> {
   // Update status to processing
   await supabase.from('scraper_jobs').update({ status: 'processing' }).eq('id', job.id);
 
@@ -227,16 +233,18 @@ async function fetchAndSaveApifyResults(
   console.log(`[scraper/poll] Fetched ${items?.length || 0} items`);
 
   if (!items || items.length === 0) {
-    // No results, mark as completed with 0 results
+    // No results - mark as failed with clear message
+    const noResultsMessage = 'El scraper no encontró resultados. Verifica que la URL sea correcta y que la página tenga contenido público.';
     await supabase
       .from('scraper_jobs')
       .update({
-        status: 'completed',
+        status: 'failed',
         result_count: 0,
+        error_message: noResultsMessage,
         completed_at: new Date().toISOString(),
       })
       .eq('id', job.id);
-    return 0;
+    return { resultCount: 0 };
   }
 
   // ============================================
@@ -322,7 +330,12 @@ async function fetchAndSaveApifyResults(
     });
   }
 
-  // Update job as completed
+  // Update job as completed, storing document_id in provider_metadata
+  const updatedMeta = {
+    ...(providerMeta || {}),
+    document_id: insertedDoc?.id,
+  };
+
   await supabase
     .from('scraper_jobs')
     .update({
@@ -330,10 +343,11 @@ async function fetchAndSaveApifyResults(
       result_count: items.length,
       result_preview: items.slice(0, 5),
       completed_at: new Date().toISOString(),
+      provider_metadata: updatedMeta,
     })
     .eq('id', job.id);
 
-  return items.length;
+  return { resultCount: items.length, documentId: insertedDoc?.id };
 }
 
 // ============================================

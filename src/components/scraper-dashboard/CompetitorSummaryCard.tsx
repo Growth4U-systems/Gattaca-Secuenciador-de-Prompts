@@ -7,7 +7,7 @@
  * Used in the summary view - click to open detail view.
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Globe,
   ChevronRight,
@@ -16,6 +16,8 @@ import {
   Clock,
   Search,
   Sparkles,
+  Trash2,
+  Loader2,
 } from 'lucide-react'
 import { STEP_DOCUMENT_REQUIREMENTS } from '@/lib/playbooks/competitor-analysis/constants'
 
@@ -45,6 +47,7 @@ interface CompetitorSummaryCardProps {
   campaign: CompetitorCampaign
   documents: Document[]
   onClick: () => void
+  onDelete?: (campaignId: string) => Promise<void>
 }
 
 // Total analysis steps
@@ -58,10 +61,27 @@ export default function CompetitorSummaryCard({
   campaign,
   documents,
   onClick,
+  onDelete,
 }: CompetitorSummaryCardProps) {
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
   const competitorName = campaign.ecp_name || ''
   const normalizedName = competitorName.toLowerCase()
   const website = campaign.custom_variables?.competitor_website || ''
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!onDelete) return
+
+    setIsDeleting(true)
+    try {
+      await onDelete(campaign.id)
+    } finally {
+      setIsDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
 
   // Calculate scraper progress
   const scraperProgress = useMemo(() => {
@@ -176,8 +196,36 @@ export default function CompetitorSummaryCard({
           </div>
         </div>
 
-        {/* Right: Arrow */}
-        <div className="flex-shrink-0 self-center">
+        {/* Right: Actions */}
+        <div className="flex-shrink-0 self-center flex items-center gap-2">
+          {/* Delete button */}
+          {onDelete && (
+            showDeleteConfirm ? (
+              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                >
+                  {isDeleting ? <Loader2 size={12} className="animate-spin" /> : 'Sí'}
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); }}
+                  className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                >
+                  No
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                title="Eliminar competidor"
+              >
+                <Trash2 size={16} />
+              </button>
+            )
+          )}
           <ChevronRight
             size={20}
             className="text-gray-400 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all"

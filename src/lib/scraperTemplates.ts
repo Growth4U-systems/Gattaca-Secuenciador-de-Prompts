@@ -731,6 +731,30 @@ export function buildScraperInput(
     });
   }
 
+  // Special handling for Facebook posts/comments: startUrls needs to be array of {url: string} objects
+  if ((type === 'facebook_posts' || type === 'facebook_comments') && merged.startUrls && Array.isArray(merged.startUrls)) {
+    merged.startUrls = (merged.startUrls as (string | {url: string})[]).map(item => {
+      // If already an object with url property, keep it
+      if (typeof item === 'object' && item !== null && 'url' in item) {
+        return item;
+      }
+      // Convert string to object format
+      return { url: item as string };
+    });
+  }
+
+  // Special handling for YouTube scrapers: startUrls needs to be array of {url: string} objects
+  if ((type === 'youtube_channel_videos' || type === 'youtube_comments' || type === 'youtube_transcripts') && merged.startUrls && Array.isArray(merged.startUrls)) {
+    merged.startUrls = (merged.startUrls as (string | {url: string})[]).map(item => {
+      // If already an object with url property, keep it
+      if (typeof item === 'object' && item !== null && 'url' in item) {
+        return item;
+      }
+      // Convert string to object format
+      return { url: item as string };
+    });
+  }
+
   return merged;
 }
 
