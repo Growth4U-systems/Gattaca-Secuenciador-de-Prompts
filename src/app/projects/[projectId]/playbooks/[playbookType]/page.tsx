@@ -30,6 +30,7 @@ import ClientSidebar from '@/components/layout/ClientSidebar'
 import { PlaybookShell } from '@/components/playbook'
 import { getPlaybookConfig } from '@/components/playbook/configs'
 import { useScraperRecovery } from '@/hooks/useScraperRecovery'
+import { CompetitorAnalysisView } from '@/components/scraper-dashboard'
 
 type TabType = 'main' | 'documents' | 'setup' | 'campaigns' | 'export'
 
@@ -251,9 +252,18 @@ export default function PlaybookPage({
     const shellPlaybooks = ['seo-seed-keywords', 'linkedin-post-generator', 'github-fork-to-crm']
     const usesShell = shellPlaybooks.includes(playbookType)
 
-    // Standard playbooks (ecp, competitor_analysis)
-    const standardPlaybooks = ['ecp', 'competitor_analysis', 'competitor-analysis']
+    // Standard playbooks (ecp only now - competitor_analysis has its own view)
+    const standardPlaybooks = ['ecp']
     const isStandard = standardPlaybooks.includes(playbookType)
+
+    // Competitor Analysis uses new competitor-centric view (no tabs)
+    const isCompetitorAnalysis = ['competitor_analysis', 'competitor-analysis'].includes(playbookType)
+    if (isCompetitorAnalysis) {
+      return [
+        { id: 'main' as TabType, label: 'Competidores', icon: Rocket, description: 'Análisis de competidores' },
+        { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Context Lake' },
+      ]
+    }
 
     if (hasUnifiedView) {
       return [
@@ -364,6 +374,9 @@ export default function PlaybookPage({
         return <SignalBasedOutreachPlaybook projectId={params.projectId} />
       case 'video_viral_ia':
         return <VideoViralIAPlaybook projectId={params.projectId} />
+      case 'competitor_analysis':
+      case 'competitor-analysis':
+        return <CompetitorAnalysisView projectId={params.projectId} playbookId={playbookId} />
       case 'seo-seed-keywords':
       case 'linkedin-post-generator':
       case 'github-fork-to-crm':
