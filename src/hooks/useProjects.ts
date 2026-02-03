@@ -1,16 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 
 type Project = any
+
+// Helper to add timeout to promises
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+    ),
+  ])
+}
 
 export function useProjects(includeDeleted = false) {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     try {
       setLoading(true)
+      setError(null)
       const supabase = createClient()
       let query = supabase
         .from('projects')
@@ -22,21 +33,28 @@ export function useProjects(includeDeleted = false) {
         query = query.or('status.is.null,status.neq.deleted')
       }
 
-      const { data, error } = await query
+      // Add 30-second timeout to prevent infinite loading
+      // Execute query and wrap in timeout using Promise.resolve to ensure it's a real Promise
+      const { data, error: queryError } = await withTimeout(
+        Promise.resolve(query),
+        30000,
+        'La consulta de proyectos tardó demasiado. Por favor, recarga la página.'
+      )
 
-      if (error) throw error
+      if (queryError) throw queryError
 
       setProjects(data || [])
     } catch (err) {
+      console.error('Error loading projects:', err)
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setLoading(false)
     }
-  }
+  }, [includeDeleted])
 
   useEffect(() => {
     loadProjects()
-  }, [includeDeleted])
+  }, [loadProjects])
 
   return { projects, loading, error, reload: loadProjects }
 }
@@ -46,29 +64,40 @@ export function useDeletedProjects() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     try {
       setLoading(true)
+      setError(null)
       const supabase = createClient()
-      const { data, error } = await supabase
+
+      // Add 30-second timeout to prevent infinite loading
+      // Execute query and wrap in timeout using Promise.resolve to ensure it's a real Promise
+      const query = supabase
         .from('projects')
         .select('*, client:clients(id, name)')
         .eq('status', 'deleted')
         .order('deleted_at', { ascending: false })
 
-      if (error) throw error
+      const { data, error: queryError } = await withTimeout(
+        Promise.resolve(query),
+        30000,
+        'La consulta de proyectos eliminados tardó demasiado. Por favor, recarga la página.'
+      )
+
+      if (queryError) throw queryError
 
       setProjects(data || [])
     } catch (err) {
+      console.error('Error loading deleted projects:', err)
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadProjects()
-  }, [])
+  }, [loadProjects])
 
   return { projects, loading, error, reload: loadProjects }
 }
@@ -79,50 +108,74 @@ export function useProject(projectId: string) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadProject = async () => {
+  const loadProject = useCallback(async () => {
+    if (!projectId) {
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
+      setError(null)
       const supabase = createClient()
 
-      // Get current user
-      const { data: { session } } = await supabase.auth.getSession()
+      // Get current user with timeout
+      const { data: { session } } = await withTimeout(
+        Promise.resolve(supabase.auth.getSession()),
+        10000,
+        'Timeout al verificar sesión'
+      )
       if (!session?.user) {
         throw new Error('No authenticated user')
       }
 
       // Load project data with client info
-      const { data, error } = await supabase
+      const projectQuery = supabase
         .from('projects')
         .select('*, client:clients(id, name)')
         .eq('id', projectId)
         .single()
 
-      if (error) throw error
+      const { data, error: queryError } = await withTimeout(
+        Promise.resolve(projectQuery),
+        30000,
+        'La consulta del proyecto tardó demasiado. Por favor, recarga la página.'
+      )
+
+      if (queryError) throw queryError
 
       setProject(data)
 
-      // Get user's role in the project
-      const { data: role, error: roleError } = await supabase
-        .rpc('get_user_project_role', {
+      // Get user's role in the project (non-blocking)
+      try {
+        const roleQuery = supabase.rpc('get_user_project_role', {
           p_project_id: projectId,
           p_user_id: session.user.id
         })
 
-      if (!roleError) {
-        setUserRole(role)
+        const { data: role, error: roleError } = await withTimeout(
+          Promise.resolve(roleQuery),
+          10000,
+          'Timeout al obtener rol de usuario'
+        )
+
+        if (!roleError) {
+          setUserRole(role)
+        }
+      } catch (roleErr) {
+        console.warn('Could not fetch user role:', roleErr)
       }
     } catch (err) {
+      console.error('Error loading project:', err)
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setLoading(false)
     }
-  }
+  }, [projectId])
 
   useEffect(() => {
-    if (projectId) {
-      loadProject()
-    }
-  }, [projectId])
+    loadProject()
+  }, [loadProject])
 
   return { project, userRole, loading, error, reload: loadProject }
 }
@@ -131,7 +184,7 @@ export async function createProject(data: {
   name: string
   description?: string
   client_id: string
-  playbook_type?: string
+  playbook_type?: string | null  // Now truly optional - project can exist without a playbook
 }) {
   const supabase = createClient()
 
@@ -144,22 +197,45 @@ export async function createProject(data: {
     '-' +
     Date.now().toString(36)
 
+  // Build insert data - only include playbook_type if provided
+  const insertData: Record<string, any> = {
+    name: data.name,
+    description: data.description,
+    client_id: data.client_id,
+    slug,
+    status: 'active',
+    goals: [],
+    settings: {},
+  }
+
+  // Only set playbook_type if provided (for backwards compatibility)
+  if (data.playbook_type) {
+    insertData.playbook_type = data.playbook_type
+  }
+
   const { data: newProject, error } = await supabase
     .from('projects')
-    .insert({
-      name: data.name,
-      description: data.description,
-      client_id: data.client_id,
-      playbook_type: data.playbook_type || 'ecp',
-      slug,
-      status: 'active',
-      goals: [],
-      settings: {},
-    })
+    .insert(insertData)
     .select()
     .single()
 
   if (error) throw error
+
+  // If a playbook_type was provided, also add it to project_playbooks table
+  if (data.playbook_type) {
+    try {
+      await supabase
+        .from('project_playbooks')
+        .insert({
+          project_id: newProject.id,
+          playbook_type: data.playbook_type,
+          position: 0,
+        })
+    } catch (playbookError) {
+      // Silently ignore if table doesn't exist yet
+      console.warn('Failed to add to project_playbooks:', playbookError)
+    }
+  }
 
   // Also insert into projects_legacy for FK compatibility with ecp_campaigns
   // This is a workaround until we consolidate the tables

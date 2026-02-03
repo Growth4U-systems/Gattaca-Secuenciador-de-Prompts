@@ -1,5 +1,7 @@
 // Types for the unified playbook architecture with dual panel layout
 
+import type { FlowConfig } from '@/types/flow.types'
+
 export type StepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped' | 'error'
 export type PhaseStatus = 'pending' | 'in_progress' | 'completed' | 'error'
 
@@ -197,6 +199,13 @@ export interface PlaybookConfig {
   description?: string
   icon?: string
   phases: PhaseDefinition[]
+
+  /**
+   * Flow configuration with steps and prompts
+   * If provided, will be used when creating campaigns from this playbook
+   * Falls back to project.flow_config if not present
+   */
+  flow_config?: FlowConfig | null
 
   /**
    * Presentation metadata for the intro screen

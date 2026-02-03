@@ -11,9 +11,11 @@ interface FlowSetupProps {
   projectId: string
   clientId: string
   documents: any[]
+  /** If provided, use this as the initial flow config instead of loading from project */
+  playbookFlowConfig?: FlowConfig
 }
 
-export default function FlowSetup({ projectId, clientId, documents }: FlowSetupProps) {
+export default function FlowSetup({ projectId, clientId, documents, playbookFlowConfig }: FlowSetupProps) {
   const toast = useToast()
   const modal = useModal()
 
@@ -24,10 +26,11 @@ export default function FlowSetup({ projectId, clientId, documents }: FlowSetupP
   const [projectVariables, setProjectVariables] = useState<any[]>([])
 
   // Load flow config and project variables
+  // Include playbookFlowConfig in dependencies to handle async loading
   useEffect(() => {
     loadFlowConfig()
     loadProjectVariables()
-  }, [projectId])
+  }, [projectId, playbookFlowConfig])
 
   const loadProjectVariables = async () => {
     try {
@@ -43,6 +46,15 @@ export default function FlowSetup({ projectId, clientId, documents }: FlowSetupP
   }
 
   const loadFlowConfig = async () => {
+    // If playbook config is provided, use it directly
+    if (playbookFlowConfig && playbookFlowConfig.steps?.length > 0) {
+      console.log('[FlowSetup] Using playbookFlowConfig with', playbookFlowConfig.steps.length, 'steps')
+      setFlowConfig(playbookFlowConfig)
+      setLoading(false)
+      return
+    }
+
+    // Otherwise, load from project API
     try {
       const response = await fetch(`/api/flow/save-config?projectId=${projectId}`)
       const data = await response.json()

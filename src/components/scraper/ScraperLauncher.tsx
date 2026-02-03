@@ -7,62 +7,13 @@ import { SCRAPER_TEMPLATES } from '@/lib/scraperTemplates'
 import { DocCategory } from '@/types/database.types'
 import { SCRAPER_FIELD_SCHEMAS, FieldSchema, validateField, validateAllFields } from '@/lib/scraperFieldSchemas'
 import { useScraperStats, formatRelativeTime } from '@/hooks/useScraperStats'
-
-// Scraper status: 'enabled' = working, 'pending' = not tested yet
-type ScraperStatus = 'enabled' | 'pending'
-
-interface ScraperConfig {
-  type: ScraperType
-  status: ScraperStatus
-  category: 'social' | 'reviews' | 'web' | 'seo' | 'other'
-}
-
-// All scrapers with their status
-const ALL_SCRAPERS: ScraperConfig[] = [
-  // Social Media
-  { type: 'instagram_posts_comments', status: 'enabled', category: 'social' },
-  { type: 'tiktok_posts', status: 'enabled', category: 'social' },
-  { type: 'tiktok_comments', status: 'enabled', category: 'social' },
-  { type: 'linkedin_company_posts', status: 'enabled', category: 'social' },
-  { type: 'linkedin_comments', status: 'enabled', category: 'social' },
-  { type: 'linkedin_company_profile', status: 'enabled', category: 'social' },
-  { type: 'reddit_posts', status: 'enabled', category: 'social' },
-  // linkedin_company_insights: disabled - requires paid Apify subscription
-  { type: 'facebook_posts', status: 'enabled', category: 'social' },
-  { type: 'facebook_comments', status: 'enabled', category: 'social' },
-  { type: 'youtube_channel_videos', status: 'enabled', category: 'social' },
-  { type: 'youtube_comments', status: 'enabled', category: 'social' },
-  { type: 'youtube_transcripts', status: 'enabled', category: 'social' },
-
-  // Reviews
-  { type: 'trustpilot_reviews', status: 'enabled', category: 'reviews' },
-  { type: 'g2_reviews', status: 'enabled', category: 'reviews' },
-  { type: 'capterra_reviews', status: 'enabled', category: 'reviews' },
-  { type: 'appstore_reviews', status: 'enabled', category: 'reviews' },
-  { type: 'playstore_reviews', status: 'enabled', category: 'reviews' },
-  { type: 'google_maps_reviews', status: 'enabled', category: 'reviews' },
-
-  // Web & News
-  { type: 'website', status: 'enabled', category: 'web' },
-  { type: 'google_news', status: 'enabled', category: 'web' },
-  { type: 'news_bing', status: 'enabled', category: 'web' },
-
-  // SEO & Keywords (Mangools)
-  { type: 'seo_keywords', status: 'enabled', category: 'seo' },
-  { type: 'seo_serp_checker', status: 'enabled', category: 'seo' },
-  { type: 'seo_site_profiler', status: 'enabled', category: 'seo' },
-  { type: 'seo_link_miner', status: 'enabled', category: 'seo' },
-  { type: 'seo_competitor_keywords', status: 'enabled', category: 'seo' },
-]
-
-// Category labels
-const CATEGORY_LABELS: Record<string, string> = {
-  social: 'Redes Sociales',
-  reviews: 'Reviews',
-  web: 'Web & Noticias',
-  seo: 'SEO & Keywords',
-  other: 'Otros',
-}
+import {
+  ALL_SCRAPERS,
+  CATEGORY_LABELS,
+  SCRAPER_DESCRIPTIONS,
+  SCRAPER_COLORS,
+  getScraperColors,
+} from '@/lib/scraperConstants'
 
 interface ScraperLauncherProps {
   projectId: string
@@ -102,77 +53,7 @@ const SCRAPER_ICONS: Record<string, React.ReactNode> = {
   seo_competitor_keywords: <Search size={20} />,
 }
 
-// Detailed descriptions for each scraper (shown on hover and in configure step)
-const SCRAPER_DESCRIPTIONS: Record<string, string> = {
-  // Social Media
-  instagram_posts_comments: 'Extrae posts y comentarios de perfiles de Instagram. Obtiene imágenes, likes, texto y engagement.',
-  tiktok_posts: 'Obtiene videos de perfiles de TikTok con métricas de views, likes, shares y descripción.',
-  tiktok_comments: 'Extrae comentarios de videos específicos de TikTok con autor, likes y respuestas.',
-  linkedin_company_posts: 'Scrape publicaciones de páginas de empresa en LinkedIn con contenido, reacciones y comentarios.',
-  linkedin_comments: 'Extrae comentarios de posts específicos de LinkedIn con autor y engagement.',
-  linkedin_company_insights: 'Obtiene insights y métricas de páginas de empresa en LinkedIn.',
-  linkedin_company_profile: 'Perfil completo de empresa: empleados, followers, headquarters, especialidades. $8/1000 resultados.',
-  facebook_posts: 'Extrae publicaciones de páginas de Facebook con texto, imágenes y reacciones.',
-  facebook_comments: 'Obtiene comentarios de posts de Facebook con autor y respuestas.',
-  reddit_posts: 'Busca posts y comentarios en subreddits o búsquedas. Pay-per-use: $0.002/item (1000 gratis/mes).',
-
-  // YouTube
-  youtube_channel_videos: 'Lista de videos de canales de YouTube con título, descripción, views y likes.',
-  youtube_comments: 'Extrae comentarios de videos de YouTube ordenados por relevancia o fecha.',
-  youtube_transcripts: 'Obtiene transcripciones/subtítulos de videos de YouTube con timestamps.',
-
-  // Reviews
-  trustpilot_reviews: 'Reviews de empresas en Trustpilot con rating, título, texto completo y fecha.',
-  g2_reviews: 'Reviews de software B2B en G2 con pros, contras y ratings detallados. Mínimo 200 reviews.',
-  capterra_reviews: 'Reviews de software en Capterra con calificaciones por categoría y recomendaciones.',
-  appstore_reviews: 'Reviews de apps en Apple App Store con rating, versión de la app y país.',
-  playstore_reviews: 'Reviews de apps en Google Play Store con rating, versión y tipo de dispositivo.',
-  google_maps_reviews: 'Reviews de negocios locales en Google Maps con rating, texto y fotos del reviewer.',
-
-  // Web & News
-  website: 'Extrae contenido de páginas web. Modo scrape (1 página) o crawl (múltiples páginas del sitio).',
-  google_news: 'Busca noticias recientes en Google News por keywords, empresa o tema específico.',
-  news_bing: 'Busca noticias en Bing News con filtros avanzados de fecha, idioma y relevancia.',
-  seo_keywords: 'An\u00e1lisis de keywords SEO con volumen de b\u00fasqueda, dificultad y competencia (KWFinder).',
-  seo_serp_checker: 'An\u00e1lisis de SERPs con m\u00e9tricas SEO: DA, PA, CF, TF, backlinks y posiciones.',
-  seo_site_profiler: 'Perfil completo de dominio: autoridad, backlinks, tr\u00e1fico estimado y competidores.',
-  seo_link_miner: 'An\u00e1lisis de backlinks: encuentra enlaces entrantes con m\u00e9tricas de calidad.',
-  seo_competitor_keywords: 'Descubre keywords org\u00e1nicas de competidores con vol\u00famenes y posiciones.',
-}
-
-const SCRAPER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  // Social
-  instagram_posts_comments: { bg: 'bg-pink-50', text: 'text-pink-600', border: 'border-pink-200' },
-  tiktok_posts: { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' },
-  tiktok_comments: { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' },
-  linkedin_company_posts: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
-  linkedin_comments: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
-  linkedin_company_insights: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
-  linkedin_company_profile: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
-  facebook_posts: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
-  facebook_comments: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
-  reddit_posts: { bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200' },
-  youtube_channel_videos: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },
-  youtube_comments: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },
-  youtube_transcripts: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },
-  // Reviews
-  trustpilot_reviews: { bg: 'bg-green-50', text: 'text-green-600', border: 'border-green-200' },
-  g2_reviews: { bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200' },
-  capterra_reviews: { bg: 'bg-teal-50', text: 'text-teal-600', border: 'border-teal-200' },
-  appstore_reviews: { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' },
-  playstore_reviews: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' },
-  google_maps_reviews: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
-  // Web & News
-  website: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200' },
-  google_news: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
-  news_bing: { bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-200' },
-  // SEO & Keywords
-  seo_keywords: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
-  seo_serp_checker: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
-  seo_site_profiler: { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' },
-  seo_link_miner: { bg: 'bg-fuchsia-50', text: 'text-fuchsia-600', border: 'border-fuchsia-200' },
-  seo_competitor_keywords: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
-}
+// Note: SCRAPER_DESCRIPTIONS and SCRAPER_COLORS are now imported from @/lib/scraperConstants
 
 export default function ScraperLauncher({ projectId, onComplete, onClose }: ScraperLauncherProps) {
   // Load scraper execution stats
@@ -345,13 +226,14 @@ export default function ScraperLauncher({ projectId, onComplete, onClose }: Scra
   }, [selectedScraper, targetName])
 
   // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval)
-      }
-    }
-  }, [pollingInterval])
+  // DISABLED: Keep polling active even when modal closes so background jobs complete
+  // useEffect(() => {
+  //   return () => {
+  //     if (pollingInterval) {
+  //       clearInterval(pollingInterval)
+  //     }
+  //   }
+  // }, [pollingInterval])
 
   // Poll for job status - uses /api/scraper/poll which checks Apify status and updates DB
   const startPolling = (jobId: string) => {

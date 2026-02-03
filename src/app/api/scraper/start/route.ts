@@ -137,7 +137,7 @@ Contenido (primeros 2000 caracteres): ${content.slice(0, 2000)}`
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as StartScraperRequest;
-    const { project_id, scraper_type, input_config, batch, target_name, target_category, tags, output_config } = body;
+    const { project_id, scraper_type, input_config, batch, target_name, target_category, tags, output_config, metadata } = body;
 
     if (!project_id) {
       return NextResponse.json({ success: false, error: 'Missing project_id' }, { status: 400 });
@@ -176,7 +176,8 @@ export async function POST(request: NextRequest) {
         target_category,
         tags,
         output_config,
-        userId
+        userId,
+        metadata
       );
     } else {
       return NextResponse.json(
@@ -206,7 +207,8 @@ async function handleSingleScraper(
   targetCategory?: string,
   tags?: string[],
   outputConfig?: StartScraperRequest['output_config'],
-  userId?: string
+  userId?: string,
+  customMetadata?: Record<string, unknown>
 ): Promise<NextResponse<StartScraperResponse>> {
   const template = getScraperTemplate(scraperType as Parameters<typeof getScraperTemplate>[0]);
   if (!template) {
@@ -216,7 +218,15 @@ async function handleSingleScraper(
   const webhookSecret = randomUUID();
   const finalInput = buildScraperInput(template.type, inputConfig);
 
-  // Create job record with target info and output config
+  // Create job record with target info, output config, and custom metadata
+  const providerMetadata: Record<string, unknown> = {};
+  if (outputConfig) {
+    providerMetadata.output_config = outputConfig;
+  }
+  if (customMetadata) {
+    providerMetadata.custom_metadata = customMetadata;
+  }
+
   const { data: job, error: jobError } = await supabase
     .from('scraper_jobs')
     .insert({
@@ -230,7 +240,7 @@ async function handleSingleScraper(
       target_category: targetCategory || 'research',
       webhook_secret: webhookSecret,
       status: 'pending',
-      provider_metadata: outputConfig ? { output_config: outputConfig } : undefined,
+      provider_metadata: Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined,
     })
     .select()
     .single();
@@ -514,6 +524,10 @@ async function executeFirecrawlScrape(
 
   const adminClient = createAdminClient();
 
+  // Extract custom metadata from job (e.g., campaign_id, source_type for playbooks)
+  const jobProviderMeta = job.provider_metadata as Record<string, unknown> | undefined;
+  const customMeta = jobProviderMeta?.custom_metadata as Record<string, unknown> | undefined;
+
   const { data: doc, error: docError } = await adminClient
     .from('knowledge_base_docs')
     .insert({
@@ -532,6 +546,8 @@ async function executeFirecrawlScrape(
         metadata: result.data.metadata,
         target_name: effectiveTargetName,
         mode: 'scrape',
+        // Include custom metadata for playbook document matching
+        ...(customMeta || {}),
       },
     })
     .select()
@@ -711,6 +727,10 @@ async function executeFirecrawlCrawl(
 
   const adminClient = createAdminClient();
 
+  // Extract custom metadata from job (e.g., campaign_id, source_type for playbooks)
+  const crawlJobProviderMeta = job.provider_metadata as Record<string, unknown> | undefined;
+  const crawlCustomMeta = crawlJobProviderMeta?.custom_metadata as Record<string, unknown> | undefined;
+
   const { data: doc, error: docError } = await adminClient
     .from('knowledge_base_docs')
     .insert({
@@ -731,6 +751,8 @@ async function executeFirecrawlCrawl(
         pages_count: pages.length,
         crawl_config: { includePaths, excludePaths, limit: input.limit, maxDepth: input.maxDepth },
         pages_urls: pages.map(p => p.metadata?.sourceURL).filter(Boolean),
+        // Include custom metadata for playbook document matching
+        ...(crawlCustomMeta || {}),
       },
     })
     .select()
@@ -1053,6 +1075,10 @@ async function executeCustomScraper(
       : generateAutoTags(job.scraper_type, effectiveTargetName);
     const documentBrief = await generateDocumentBrief(documentContent, job.scraper_type, effectiveTargetName);
 
+    // Extract custom metadata from job (e.g., campaign_id, source_type for playbooks)
+    const customJobProviderMeta = job.provider_metadata as Record<string, unknown> | undefined;
+    const customJobCustomMeta = customJobProviderMeta?.custom_metadata as Record<string, unknown> | undefined;
+
     // Save document
     const adminClient = createAdminClient();
     const { data: doc, error: docError } = await adminClient
@@ -1072,6 +1098,8 @@ async function executeCustomScraper(
           target_name: effectiveTargetName,
           provider: 'custom',
           edge_function: job.actor_id,
+          // Include custom metadata for playbook document matching
+          ...(customJobCustomMeta || {}),
         },
       })
       .select()
@@ -1523,6 +1551,10 @@ async function saveMangoolsDocument(
     : generateAutoTags(job.scraper_type, effectiveTargetName);
   const documentBrief = await generateDocumentBrief(documentContent, job.scraper_type, effectiveTargetName);
 
+  // Extract custom metadata from job (e.g., campaign_id, source_type for playbooks)
+  const mangoolsJobProviderMeta = job.provider_metadata as Record<string, unknown> | undefined;
+  const mangoolsCustomMeta = mangoolsJobProviderMeta?.custom_metadata as Record<string, unknown> | undefined;
+
   const adminClient = createAdminClient();
   const { data: doc, error: docError } = await adminClient
     .from('knowledge_base_docs')
@@ -1541,6 +1573,8 @@ async function saveMangoolsDocument(
         target_name: effectiveTargetName,
         provider: 'mangools',
         ...metadata,
+        // Include custom metadata for playbook document matching
+        ...(mangoolsCustomMeta || {}),
       },
     })
     .select()
@@ -2029,6 +2063,10 @@ async function executePhantombuster(
     const documentContent = formatPhantombusterResults(results, job.scraper_type, input);
     const documentBrief = await generateDocumentBrief(documentContent, job.scraper_type, effectiveTargetName);
 
+    // Extract custom metadata from job (e.g., campaign_id, source_type for playbooks)
+    const phantomJobProviderMeta = job.provider_metadata as Record<string, unknown> | undefined;
+    const phantomCustomMeta = phantomJobProviderMeta?.custom_metadata as Record<string, unknown> | undefined;
+
     // Save to knowledge_base_docs
     const adminClient = createAdminClient();
     const { data: doc, error: docError } = await adminClient
@@ -2050,6 +2088,8 @@ async function executePhantombuster(
           containerId,
           profiles_count: results.length,
           raw_data: results, // Store raw data for later use
+          // Include custom metadata for playbook document matching
+          ...(phantomCustomMeta || {}),
         },
       })
       .select()

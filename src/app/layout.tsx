@@ -5,10 +5,21 @@ import { AuthProvider } from '@/lib/auth-context'
 import { OpenRouterProvider } from '@/lib/openrouter-context'
 import { UIProviders } from '@/components/ui'
 import Header from '@/components/Header'
+import { HelpSystemProvider } from '@/components/help'
 
 // Dynamic import with ssr: false to ensure client-only rendering
 const AssistantWrapper = dynamic(
   () => import('@/components/assistant/AssistantWrapper'),
+  { ssr: false }
+)
+
+const HelpModalWrapper = dynamic(
+  () => import('@/components/help/HelpModal'),
+  { ssr: false }
+)
+
+const HelpButtonWrapper = dynamic(
+  () => import('@/components/help/HelpButton'),
   { ssr: false }
 )
 
@@ -39,13 +50,17 @@ export default function RootLayout({
         <AuthProvider>
           <UIProviders>
             <OpenRouterProvider>
-              <div className="min-h-screen flex flex-col">
-                <Header />
-                <div className="flex-1">
-                  {children}
+              <HelpSystemProvider>
+                <div className="min-h-screen flex flex-col">
+                  <Header />
+                  <div className="flex-1">
+                    {children}
+                  </div>
+                  <AssistantWrapper />
+                  <HelpButtonWrapper />
+                  <HelpModalWrapper />
                 </div>
-                <AssistantWrapper />
-              </div>
+              </HelpSystemProvider>
             </OpenRouterProvider>
           </UIProviders>
         </AuthProvider>

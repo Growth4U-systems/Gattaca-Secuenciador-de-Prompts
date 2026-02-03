@@ -9,6 +9,7 @@ import { VIDEO_VIRAL_IA_FLOW_STEPS } from '@/lib/templates/video-viral-ia-playbo
 import { getDefaultPromptForStep } from '@/components/playbook/utils/getDefaultPrompts'
 import { APIFY_ACTORS } from '@/lib/scraperTemplates'
 import { trackLLMUsage } from '@/lib/polar-usage'
+import { interpolateStepOutputs } from '@/lib/utils/interpolation'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -406,7 +407,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Replace variables in prompt
+    // ==========================================
+    // STEP 1: Interpolate step outputs - {{step:step-id}}
+    // ==========================================
+    // This allows prompts to reference specific step outputs by ID
+    // Example: {{step:research}} gets replaced with the output from the "research" step
+    if (previousOutputs && previousOutputs.length > 0) {
+      const stepOutputRecords = previousOutputs.map(output => ({
+        step_id: output.step_id,
+        output_content: output.output_content,
+        imported_data: output.imported_data,
+        status: 'completed' as const,
+      }))
+
+      prompt = interpolateStepOutputs(prompt, stepOutputRecords)
+      console.log('[execute-step] Interpolated step outputs in prompt')
+    }
+
+    // ==========================================
+    // STEP 2: Replace regular variables
+    // ==========================================
     const allVariables = {
       ...vars,
       previous_step_output: previousStepOutput || vars?.previous_step_output || '(No hay output del paso anterior)',
@@ -517,26 +537,40 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Execute LLM call
-    const llmResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openrouterApiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        max_tokens: maxTokens,
-        temperature,
-      }),
-    })
+    // Execute LLM call with timeout
+    const llmController = new AbortController()
+    const llmTimeoutId = setTimeout(() => llmController.abort(), 120000) // 2 minute timeout
+
+    let llmResponse: Response
+    try {
+      llmResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openrouterApiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          max_tokens: maxTokens,
+          temperature,
+        }),
+        signal: llmController.signal,
+      })
+    } catch (fetchError) {
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        throw new Error('OpenRouter API request timed out after 2 minutes')
+      }
+      throw fetchError
+    } finally {
+      clearTimeout(llmTimeoutId)
+    }
 
     if (!llmResponse.ok) {
       const errorText = await llmResponse.text()
@@ -558,7 +592,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Save output to database
-    await adminClient
+    const { error: upsertError } = await adminClient
       .from('playbook_step_outputs')
       .upsert({
         project_id: projectId,
@@ -572,6 +606,11 @@ export async function POST(request: NextRequest) {
       }, {
         onConflict: 'project_id,playbook_type,step_id'
       })
+
+    if (upsertError) {
+      console.error('[playbook/execute-step] Error saving output:', upsertError)
+      throw new Error(`Failed to save step output: ${upsertError.message}`)
+    }
 
     return NextResponse.json({
       success: true,
@@ -599,8 +638,9 @@ export async function POST(request: NextRequest) {
         }, {
           onConflict: 'project_id,playbook_type,step_id'
         })
-    } catch {
-      // Ignore errors when trying to save error state
+    } catch (saveError) {
+      // Log but don't throw - we don't want to obscure the original error
+      console.error('[playbook/execute-step] Failed to save error state:', saveError)
     }
 
     return NextResponse.json({
@@ -680,7 +720,7 @@ async function handleScrapePostsStep(
     const output = formatPostsOutput(evaluatedPosts, creatorUrls.length)
 
     // 6. Save output to database
-    await adminClient
+    const { error: upsertError } = await adminClient
       .from('playbook_step_outputs')
       .upsert({
         project_id: projectId,
@@ -695,6 +735,11 @@ async function handleScrapePostsStep(
       }, {
         onConflict: 'project_id,playbook_type,step_id'
       })
+
+    if (upsertError) {
+      console.error('[scrape_posts] Error saving output:', upsertError)
+      throw new Error(`Failed to save scrape posts output: ${upsertError.message}`)
+    }
 
     return NextResponse.json({
       success: true,
@@ -1356,7 +1401,7 @@ ${JSON.stringify({ audio_url: audioUrl, mode, ...data }, null, 2)}
 `
 
     // Save to database
-    await adminClient
+    const { error: upsertError } = await adminClient
       .from('playbook_step_outputs')
       .upsert({
         project_id: projectId,
@@ -1371,6 +1416,11 @@ ${JSON.stringify({ audio_url: audioUrl, mode, ...data }, null, 2)}
       }, {
         onConflict: 'project_id,playbook_type,step_id'
       })
+
+    if (upsertError) {
+      console.error('[generate_audio] Error saving output:', upsertError)
+      throw new Error(`Failed to save audio output: ${upsertError.message}`)
+    }
 
     return NextResponse.json({
       success: true,
@@ -1515,7 +1565,7 @@ ${JSON.stringify({ video_url: finalVideoUrl, clips_used: clipUrls.length, has_au
 `
 
     // Save to database
-    await adminClient
+    const { error: upsertError } = await adminClient
       .from('playbook_step_outputs')
       .upsert({
         project_id: projectId,
@@ -1530,6 +1580,11 @@ ${JSON.stringify({ video_url: finalVideoUrl, clips_used: clipUrls.length, has_au
       }, {
         onConflict: 'project_id,playbook_type,step_id'
       })
+
+    if (upsertError) {
+      console.error('[compose_video] Error saving output:', upsertError)
+      throw new Error(`Failed to save video output: ${upsertError.message}`)
+    }
 
     return NextResponse.json({
       success: true,
@@ -1874,7 +1929,7 @@ ${JSON.stringify(data, null, 2)}
 `
 
     // Save to database
-    await adminClient
+    const { error: upsertError } = await adminClient
       .from('playbook_step_outputs')
       .upsert({
         project_id: projectId,
@@ -1896,6 +1951,11 @@ ${JSON.stringify(data, null, 2)}
       }, {
         onConflict: 'project_id,playbook_type,step_id'
       })
+
+    if (upsertError) {
+      console.error('[export] Error saving output:', upsertError)
+      throw new Error(`Failed to save export output: ${upsertError.message}`)
+    }
 
     return NextResponse.json({
       success: failedCount === 0,

@@ -21,6 +21,16 @@ type Playbook = {
   playbook_type: string
 }
 
+type Project = {
+  id: string
+  name: string
+  description: string | null
+  playbook_type: string | null
+  created_at: string
+}
+
+type ProjectMode = 'new' | 'existing'
+
 function NewProjectForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -34,11 +44,17 @@ function NewProjectForm() {
     name: '',
     description: '',
     client_id: '',
-    playbook_type: 'ecp' as string,
+    playbook_type: '' as string,
   })
   const [showNewClientForm, setShowNewClientForm] = useState(false)
   const [newClientName, setNewClientName] = useState('')
   const [creatingClient, setCreatingClient] = useState(false)
+
+  // Project mode: create new or use existing
+  const [projectMode, setProjectMode] = useState<ProjectMode>('new')
+  const [existingProjects, setExistingProjects] = useState<Project[]>([])
+  const [loadingProjects, setLoadingProjects] = useState(false)
+  const [projectSearchQuery, setProjectSearchQuery] = useState('')
 
   // Get preselected client and playbook from URL query params
   const preselectedClientId = searchParams.get('clientId')
@@ -80,11 +96,9 @@ function NewProjectForm() {
       const data = result.playbooks || []
       setPlaybooks(data)
 
-      // Pre-select playbook from URL or default to first one
+      // Pre-select playbook from URL if provided (otherwise leave empty)
       if (preselectedPlaybookType) {
         setFormData(prev => ({ ...prev, playbook_type: preselectedPlaybookType }))
-      } else if (data.length > 0) {
-        setFormData(prev => ({ ...prev, playbook_type: data[0].playbook_type || data[0].type }))
       }
     } catch (err) {
       console.error('Error loading playbooks:', err)
@@ -94,11 +108,40 @@ function NewProjectForm() {
     }
   }
 
+  // Load existing projects for the selected client
+  const loadExistingProjects = async (clientId: string) => {
+    if (!clientId) {
+      setExistingProjects([])
+      return
+    }
+
+    try {
+      setLoadingProjects(true)
+      const response = await fetch(`/api/v2/clients/${clientId}/projects`)
+      const result = await response.json()
+
+      if (!result.success) throw new Error(result.error || 'Failed to load projects')
+      setExistingProjects(result.projects || [])
+    } catch (err) {
+      console.error('Error loading projects:', err)
+      setExistingProjects([])
+    } finally {
+      setLoadingProjects(false)
+    }
+  }
+
   // Load clients on mount, preselect from URL if available
   useEffect(() => {
     loadClients(preselectedClientId || undefined)
     loadPlaybooks()
   }, [preselectedClientId, preselectedPlaybookType])
+
+  // Load existing projects when client changes
+  useEffect(() => {
+    if (formData.client_id) {
+      loadExistingProjects(formData.client_id)
+    }
+  }, [formData.client_id])
 
   // Create new client
   const handleCreateClient = async () => {
@@ -148,7 +191,7 @@ function NewProjectForm() {
         name: formData.name,
         description: formData.description || undefined,
         client_id: formData.client_id,
-        playbook_type: formData.playbook_type,
+        playbook_type: formData.playbook_type || undefined,
       })
 
       console.log('Project created:', newProject)
@@ -189,16 +232,25 @@ function NewProjectForm() {
     { icon: Rocket, title: 'Exportar resultados', description: 'Descarga CSV o exporta a Google Sheets' },
   ]
 
+  // Generic steps when no playbook is selected
+  const genericSteps = [
+    { icon: FolderPlus, title: 'Crear proyecto', description: 'Define nombre y cliente' },
+    { icon: Zap, title: 'Agregar playbooks', description: 'Añade playbooks desde la página del proyecto' },
+    { icon: FileText, title: 'Crear campañas', description: 'Lanza campañas para cada playbook' },
+  ]
+
   // Get steps based on playbook type
   const getStepsForPlaybook = (playbookType: string) => {
+    if (!playbookType) return genericSteps
     switch (playbookType) {
       case 'niche_finder':
         return nicheFinderSteps
       case 'competitor_analysis':
         return competitorAnalysisSteps
       case 'ecp':
-      default:
         return ecpSteps
+      default:
+        return genericSteps
     }
   }
   const steps = getStepsForPlaybook(formData.playbook_type)
@@ -229,14 +281,132 @@ function NewProjectForm() {
                   <div className="p-2 bg-white/10 backdrop-blur rounded-xl">
                     <FolderPlus className="w-6 h-6 text-white" />
                   </div>
-                  <h1 className="text-2xl font-bold text-white">Nuevo Proyecto</h1>
+                  <h1 className="text-2xl font-bold text-white">
+                    {projectMode === 'new' ? 'Nuevo Proyecto' : 'Seleccionar Proyecto'}
+                  </h1>
                 </div>
                 <p className="text-blue-100">
-                  Crea un nuevo proyecto para organizar tus estrategias de marketing
+                  {projectMode === 'new'
+                    ? 'Crea un nuevo proyecto para organizar tus estrategias de marketing'
+                    : 'Selecciona un proyecto existente para continuar trabajando'}
                 </p>
               </div>
 
-              {/* Form Content */}
+              {/* Mode Toggle */}
+              <div className="px-8 py-4 border-b border-gray-100 bg-gray-50/50">
+                <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-fit">
+                  <button
+                    type="button"
+                    onClick={() => setProjectMode('existing')}
+                    className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+                      projectMode === 'existing'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Search size={16} />
+                      Usar existente
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProjectMode('new')}
+                    className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+                      projectMode === 'new'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Plus size={16} />
+                      Crear nuevo
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Existing Projects List */}
+              {projectMode === 'existing' && (
+                <div className="p-8 space-y-4">
+                  {/* Search */}
+                  <div className="relative">
+                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={projectSearchQuery}
+                      onChange={(e) => setProjectSearchQuery(e.target.value)}
+                      placeholder="Buscar proyecto..."
+                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Projects List */}
+                  {loadingProjects ? (
+                    <div className="py-8 text-center text-gray-500">
+                      <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-2" />
+                      Cargando proyectos...
+                    </div>
+                  ) : existingProjects.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <FolderPlus size={24} className="text-gray-400" />
+                      </div>
+                      <p className="text-gray-600 font-medium">No hay proyectos existentes</p>
+                      <p className="text-sm text-gray-500 mt-1">Crea un nuevo proyecto para comenzar</p>
+                      <button
+                        type="button"
+                        onClick={() => setProjectMode('new')}
+                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        Crear proyecto
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {existingProjects
+                        .filter(p =>
+                          !projectSearchQuery ||
+                          p.name.toLowerCase().includes(projectSearchQuery.toLowerCase())
+                        )
+                        .map((project) => (
+                          <button
+                            key={project.id}
+                            type="button"
+                            onClick={() => {
+                              // Navigate with playbook type to trigger wizard
+                              const url = preselectedPlaybookType
+                                ? `/projects/${project.id}?addPlaybook=${preselectedPlaybookType}`
+                                : `/projects/${project.id}`
+                              router.push(url)
+                            }}
+                            className="w-full text-left px-4 py-3 border border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition-all group"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-medium text-gray-900 group-hover:text-blue-700">
+                                  {project.name}
+                                </p>
+                                {project.description && (
+                                  <p className="text-sm text-gray-500 mt-0.5 line-clamp-1">
+                                    {project.description}
+                                  </p>
+                                )}
+                                <p className="text-xs text-gray-400 mt-1">
+                                  Creado el {new Date(project.created_at).toLocaleDateString('es-ES')}
+                                </p>
+                              </div>
+                              <ArrowRight size={18} className="text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+                            </div>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Form Content - Only show when creating new */}
+              {projectMode === 'new' && (
               <form onSubmit={handleSubmit} className="p-8 space-y-6">
                 <div>
                   <label
@@ -364,7 +534,7 @@ function NewProjectForm() {
                     <span className="flex items-center gap-2">
                       <Zap size={16} />
                       Playbook
-                      <span className="text-red-500">*</span>
+                      <span className="text-gray-400 font-normal ml-1">(opcional)</span>
                     </span>
                   </label>
                   {loadingPlaybooks ? (
@@ -378,13 +548,13 @@ function NewProjectForm() {
                   ) : (
                     <div className="relative">
                       <select
-                        required
                         value={formData.playbook_type}
                         onChange={(e) =>
                           setFormData({ ...formData, playbook_type: e.target.value })
                         }
                         className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all appearance-none bg-white pr-10"
                       >
+                        <option value="">Sin playbook (agregar después)</option>
                         {playbooks.map((playbook) => (
                           <option key={playbook.id} value={playbook.playbook_type || playbook.type}>
                             {playbook.name}
@@ -471,6 +641,7 @@ function NewProjectForm() {
                   </Link>
                 </div>
               </form>
+              )}
             </div>
           </div>
 
@@ -501,7 +672,9 @@ function NewProjectForm() {
 
               <div className="mt-6 pt-4 border-t border-blue-200/50">
                 <p className="text-xs text-blue-700">
-                  <strong>Tip:</strong> {formData.playbook_type === 'niche_finder'
+                  <strong>Tip:</strong> {!formData.playbook_type
+                    ? 'Puedes crear un proyecto sin playbook y agregarlo después desde la página del proyecto.'
+                    : formData.playbook_type === 'niche_finder'
                     ? 'El buscador de nichos combina contextos de vida × palabras de producto para encontrar oportunidades.'
                     : formData.playbook_type === 'competitor_analysis'
                     ? 'El análisis de competidores identifica fortalezas, debilidades y oportunidades de diferenciación.'

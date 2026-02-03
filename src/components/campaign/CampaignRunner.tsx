@@ -1,17 +1,24 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight, Sparkles, Zap, Cpu, Pause, Star, ClipboardList } from 'lucide-react'
+import { Play, CheckCircle, Clock, AlertCircle, Download, Plus, X, Edit2, ChevronDown, ChevronRight, ChevronLeft, Settings, Trash2, Check, Eye, FileSpreadsheet, Search, Filter, Variable, FileText, Info, Copy, BookOpen, Rocket, RefreshCw, ArrowLeftRight, Sparkles, Zap, Cpu, Pause, Star, ClipboardList } from 'lucide-react'
 import CampaignFlowEditor from './CampaignFlowEditor'
 import StepOutputEditor from './StepOutputEditor'
 import CampaignBulkUpload from './CampaignBulkUpload'
 import CampaignComparison from './CampaignComparison'
 import { ReportGenerator } from '@/components/reports'
 import DeepResearchProgress from './DeepResearchProgress'
+import CampaignFullScreenView from './CampaignFullScreenView'
+import { getDocumentsForStep, STEP_DOCUMENT_REQUIREMENTS } from '@/lib/playbooks/competitor-analysis/constants'
+import CampaignWizard from '@/components/playbook/CampaignWizard'
+import { getPlaybookConfig } from '@/components/playbook/configs'
+import { getDocumentStatusForStep, type SupabaseClientLike } from '@/lib/playbooks/competitor-analysis/documentMatcher'
+import { createClient } from '@/lib/supabase-browser'
 import StatusManager, { CustomStatus, DEFAULT_STATUSES, getStatusIcon, getStatusColors } from './StatusManager'
 import { FlowConfig, FlowStep, LLMModel } from '@/types/flow.types'
 import { useToast, useModal } from '@/components/ui'
 import { useOpenRouter } from '@/lib/openrouter-context'
+import { useProjectPlaybooks } from '@/hooks/useProjectPlaybooks'
 import { useAuth } from '@/lib/auth-context'
 import { OpenRouterAuthModal } from '@/components/openrouter'
 import OpenRouterModelSelector from '@/components/openrouter/OpenRouterModelSelector'
@@ -57,6 +64,8 @@ const getTokenEquivalence = (tokens: number) => {
 interface CampaignRunnerProps {
   projectId: string
   project?: Project | null
+  playbookType?: string // When provided, filters campaigns to this playbook type only
+  playbookConfig?: Record<string, any> // Config from project_playbooks (includes flow_config)
 }
 
 interface Campaign {
@@ -74,6 +83,10 @@ interface Campaign {
   custom_variables?: Record<string, string> | any
   flow_config?: FlowConfig | null
   research_prompt?: string | null
+  // Wizard state persistence fields
+  current_phase?: 'knowledge_base' | 'analysis' | 'completed'
+  current_step?: number
+  documents_progress?: Record<string, 'pending' | 'in_progress' | 'completed' | 'skipped'>
 }
 
 interface ProjectDocument {
@@ -97,6 +110,7 @@ interface Project {
     id: string
     name: string
   }
+  playbook_type?: string
   variable_definitions: Array<{
     name: string
     default_value: string
@@ -117,17 +131,22 @@ interface CampaignDocument {
   created_at: string
 }
 
-export default function CampaignRunner({ projectId, project: projectProp }: CampaignRunnerProps) {
+export default function CampaignRunner({ projectId, project: projectProp, playbookType: playbookTypeProp, playbookConfig: playbookConfigProp }: CampaignRunnerProps) {
   const toast = useToast()
   const modal = useModal()
   const { isConnected: hasOpenRouter } = useOpenRouter()
   const { user } = useAuth()
+  const { playbooks: projectPlaybooks, loading: playbooksLoading } = useProjectPlaybooks(projectId)
   const [showOpenRouterModal, setShowOpenRouterModal] = useState(false)
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [project, setProject] = useState<Project | null>(projectProp || null)
   const [loading, setLoading] = useState(true)
   const [showNewForm, setShowNewForm] = useState(false)
+  const [showWizard, setShowWizard] = useState(false)
+  const [showPlaybookSelector, setShowPlaybookSelector] = useState(false)
+  // If playbookType is provided via prop (from playbook page), use it; otherwise allow selection
+  const [selectedPlaybookType, setSelectedPlaybookType] = useState<string | null>(playbookTypeProp || null)
   const [creating, setCreating] = useState(false)
   const [running, setRunning] = useState<string | null>(null)
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null)
@@ -149,6 +168,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
   const [showReportGenerator, setShowReportGenerator] = useState(false)
+  const [knowledgeBaseCampaign, setKnowledgeBaseCampaign] = useState<Campaign | null>(null)
 
   // Status management state
   const [statusDropdownOpen, setStatusDropdownOpen] = useState<{
@@ -284,6 +304,41 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
       toast.error('Error', error instanceof Error ? error.message : 'Error desconocido')
     } finally {
       setSavingVariables(false)
+    }
+  }
+
+  // Save wizard progress to campaign (for Knowledge Base Generator)
+  const saveWizardProgress = async (
+    campaignId: string,
+    step: number,
+    progress: Record<string, 'pending' | 'in_progress' | 'completed' | 'skipped'>
+  ) => {
+    try {
+      const response = await fetch(`/api/campaign/${campaignId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_phase: 'knowledge_base',
+          current_step: step,
+          documents_progress: progress,
+        }),
+      })
+
+      if (!response.ok) {
+        console.warn('Failed to save wizard progress')
+      } else {
+        // Update local campaign state
+        setCampaigns(prev => prev.map(c =>
+          c.id === campaignId ? {
+            ...c,
+            current_phase: 'knowledge_base' as const,
+            current_step: step,
+            documents_progress: progress,
+          } : c
+        ))
+      }
+    } catch (error) {
+      console.error('Error saving wizard progress:', error)
     }
   }
 
@@ -471,6 +526,55 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
       console.error('Error loading campaigns:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Helper to check if selected playbook is competitor analysis
+  const isCompetitorAnalysisPlaybook = (playbookType: string | null) => {
+    const pt = playbookType?.toLowerCase()
+    return pt === 'competitor_analysis' || pt === 'competitor-analysis'
+  }
+
+  // Get playbook label for display
+  const getPlaybookLabel = (playbookType: string) => {
+    const labels: Record<string, string> = {
+      'ecp': 'ECP',
+      'competitor_analysis': 'Competitor Analysis',
+      'niche_finder': 'Niche Finder',
+      'signal_based_outreach': 'Signal Outreach',
+      'video_viral_ia': 'Video Viral IA',
+      'seo-seed-keywords': 'SEO Keywords',
+      'linkedin-post-generator': 'LinkedIn Posts',
+      'github-fork-to-crm': 'Fork → CRM',
+    }
+    return labels[playbookType] || playbookType
+  }
+
+  // Handler for creating new campaign - shows playbook selector first if multiple playbooks
+  const handleNewCampaign = () => {
+    if (projectPlaybooks.length === 0) {
+      // No playbooks, show a message
+      toast.warning('Sin playbooks', 'Agrega un playbook al proyecto primero')
+      return
+    }
+    if (projectPlaybooks.length === 1) {
+      // Only one playbook, use it directly
+      handleSelectPlaybook(projectPlaybooks[0].playbook_type)
+    } else {
+      // Multiple playbooks, show selector
+      setShowPlaybookSelector(true)
+    }
+  }
+
+  // Handler for when user selects a playbook type
+  const handleSelectPlaybook = (playbookType: string) => {
+    setSelectedPlaybookType(playbookType)
+    setShowPlaybookSelector(false)
+
+    if (isCompetitorAnalysisPlaybook(playbookType)) {
+      setShowWizard(true)
+    } else {
+      openNewCampaignForm()
     }
   }
 
@@ -821,6 +925,72 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     }
   }
 
+  /**
+   * Check for missing documents before running a step (for competitor-analysis playbook)
+   * Shows a non-blocking warning if documents are missing
+   */
+  const checkMissingDocumentsForStep = async (
+    campaignId: string,
+    stepId: string,
+    campaign: Campaign
+  ): Promise<void> => {
+    try {
+      // Check if this is a competitor-analysis playbook step
+      const stepReq = STEP_DOCUMENT_REQUIREMENTS.find(s => s.stepId === stepId)
+      if (!stepReq || stepReq.source_types.length === 0) {
+        return // No document requirements for this step
+      }
+
+      // Get competitor name from campaign variables
+      const customVars = campaign.custom_variables as Record<string, string> | null
+      const competitorName = customVars?.competitor_name
+      if (!competitorName) {
+        return // Not a competitor-analysis campaign
+      }
+
+      // Check document status using Supabase
+      const supabase = createClient() as unknown as SupabaseClientLike
+      const docStatuses = await getDocumentStatusForStep(
+        supabase,
+        projectId,
+        competitorName,
+        stepReq.source_types as any[]
+      )
+
+      // Count missing documents
+      const missingDocs: string[] = []
+      const inProgressDocs: string[] = []
+
+      docStatuses.forEach((status, sourceType) => {
+        if (status.status === 'missing') {
+          const docReq = getDocumentsForStep(stepId).find(d => d.source_type === sourceType)
+          missingDocs.push(docReq?.name || sourceType)
+        } else if (status.status === 'in_progress') {
+          const docReq = getDocumentsForStep(stepId).find(d => d.source_type === sourceType)
+          inProgressDocs.push(docReq?.name || sourceType)
+        }
+      })
+
+      // Show warning if documents are missing (non-blocking)
+      if (missingDocs.length > 0) {
+        toast.warning(
+          'Documentos faltantes',
+          `Faltan ${missingDocs.length} documentos para este paso: ${missingDocs.slice(0, 3).join(', ')}${missingDocs.length > 3 ? '...' : ''}. La calidad del análisis puede verse afectada.`
+        )
+      }
+
+      if (inProgressDocs.length > 0) {
+        toast.info(
+          'Documentos en progreso',
+          `${inProgressDocs.length} documento(s) aún se están generando.`
+        )
+      }
+    } catch (error) {
+      console.warn('[checkMissingDocuments] Error checking documents:', error)
+      // Don't block execution if check fails
+    }
+  }
+
   const handleRunStep = async (
     campaignId: string,
     stepId: string,
@@ -833,6 +1003,13 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     if (!hasOpenRouter) {
       setShowOpenRouterModal(true)
       return
+    }
+
+    // Check for missing documents (non-blocking warning)
+    const campaign = campaigns.find(c => c.id === campaignId)
+    if (campaign) {
+      // Fire and forget - don't await to avoid blocking execution
+      checkMissingDocumentsForStep(campaignId, stepId, campaign)
     }
 
     // Ya no necesitamos confirmación porque viene del dialog de configuración
@@ -1183,7 +1360,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
     }
   }
 
-  // Filter campaigns based on search and status
+  // Filter campaigns based on search, status, and playbook type
   const filteredCampaigns = campaigns.filter(campaign => {
     const matchesSearch = searchQuery === '' ||
       campaign.ecp_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1193,7 +1370,13 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
 
     const matchesStatus = statusFilter === 'all' || campaign.status === statusFilter
 
-    return matchesSearch && matchesStatus
+    // Filter by playbook type if provided via prop (from dedicated playbook page)
+    const matchesPlaybookType = !playbookTypeProp ||
+      (campaign as any).playbook_type === playbookTypeProp ||
+      (campaign as any).playbook_type === playbookTypeProp.replace('_', '-') ||
+      (campaign as any).playbook_type === playbookTypeProp.replace('-', '_')
+
+    return matchesSearch && matchesStatus && matchesPlaybookType
   })
 
   const getFileExtensionAndMimeType = (format?: string): { extension: string; mimeType: string } => {
@@ -1390,16 +1573,17 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
             </div>
             <button
               onClick={() => {
-                if (showNewForm) {
+                if (showNewForm || showWizard) {
                   setShowNewForm(false)
+                  setShowWizard(false)
                 } else {
-                  openNewCampaignForm()
+                  handleNewCampaign()
                 }
               }}
               className="px-4 py-2.5 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-xl hover:from-orange-700 hover:to-amber-700 inline-flex items-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
             >
-              {showNewForm ? <X size={18} /> : <Plus size={18} />}
-              {showNewForm ? 'Cancelar' : 'Nueva Campaña'}
+              {(showNewForm || showWizard) ? <X size={18} /> : <Plus size={18} />}
+              {(showNewForm || showWizard) ? 'Cancelar' : 'Nueva Campaña'}
             </button>
           </div>
         </div>
@@ -1535,6 +1719,67 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
         </div>
       )}
 
+      {/* Playbook Selector Modal */}
+      {showPlaybookSelector && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Seleccionar Playbook</h2>
+              <button
+                onClick={() => setShowPlaybookSelector(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-500 mb-4">
+                Elige el tipo de playbook para esta campaña:
+              </p>
+              <div className="space-y-2">
+                {projectPlaybooks.map((pb) => (
+                  <button
+                    key={pb.id}
+                    onClick={() => handleSelectPlaybook(pb.playbook_type)}
+                    className="w-full flex items-start gap-3 p-4 border border-gray-200 rounded-xl hover:border-orange-300 hover:bg-orange-50 transition-colors text-left"
+                  >
+                    <div className="p-2 bg-orange-100 rounded-lg">
+                      <Rocket className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-gray-900">{getPlaybookLabel(pb.playbook_type)}</h3>
+                      <p className="text-sm text-gray-500 mt-0.5">{pb.playbook_type}</p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-gray-400 self-center" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Campaign Wizard for competitor_analysis playbooks */}
+      {showWizard && isCompetitorAnalysisPlaybook(selectedPlaybookType) && (
+        <CampaignWizard
+          projectId={projectId}
+          playbookConfig={playbookConfigProp?.flow_config
+            ? { ...getPlaybookConfig('competitor-analysis')!, flow_config: playbookConfigProp.flow_config }
+            : getPlaybookConfig('competitor-analysis')!
+          }
+          onClose={() => {
+            setShowWizard(false)
+            setSelectedPlaybookType(null)
+          }}
+          onCreated={(campaignId) => {
+            setShowWizard(false)
+            setSelectedPlaybookType(null)
+            loadCampaigns()
+            toast.success('Campaña creada', 'La campaña se ha creado exitosamente')
+          }}
+        />
+      )}
+
       {/* Filters */}
       {campaigns.length > 0 && (
         <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
@@ -1584,7 +1829,7 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
               Crea tu primera campaña para empezar a generar contenido
             </p>
             <button
-              onClick={openNewCampaignForm}
+              onClick={handleNewCampaign}
               className="px-5 py-2.5 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-xl hover:from-orange-700 hover:to-amber-700 inline-flex items-center gap-2 font-medium shadow-md"
             >
               <Plus size={18} />
@@ -1779,6 +2024,13 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
                           title="Copiar prompts"
                         >
                           {copiedPromptId === `all-${campaign.id}` ? <Check size={16} /> : <Copy size={16} />}
+                        </button>
+                        <button
+                          onClick={() => setKnowledgeBaseCampaign(campaign)}
+                          className="p-2.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                          title="Base de Conocimiento"
+                        >
+                          <BookOpen size={16} />
                         </button>
                         <button
                           onClick={() => handleDuplicateCampaign(campaign)}
@@ -2336,6 +2588,21 @@ export default function CampaignRunner({ projectId, project: projectProp }: Camp
           steps={project.flow_config?.steps || []}
           customStatuses={project.custom_statuses}
           onClose={() => setShowReportGenerator(false)}
+        />
+      )}
+
+      {/* Campaign Full Screen View - Scrapers & Flow */}
+      {knowledgeBaseCampaign && (
+        <CampaignFullScreenView
+          campaignId={knowledgeBaseCampaign.id}
+          projectId={projectId}
+          campaign={knowledgeBaseCampaign}
+          project={project}
+          onClose={() => {
+            setKnowledgeBaseCampaign(null)
+            loadCampaigns() // Reload to get updated data
+          }}
+          onCampaignUpdated={loadCampaigns}
         />
       )}
 

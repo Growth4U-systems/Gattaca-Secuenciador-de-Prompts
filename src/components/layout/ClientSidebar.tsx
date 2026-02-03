@@ -17,14 +17,23 @@ import {
   LayoutDashboard,
   PanelLeftClose,
   PanelLeft,
+  Rocket,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Growth4ULogo } from '@/components/ui/Growth4ULogo'
+
+interface ProjectPlaybook {
+  id: string
+  playbook_type: string
+  name: string
+  position: number
+}
 
 interface Project {
   id: string
   name: string
   playbook_type: string
+  playbooks?: ProjectPlaybook[]
 }
 
 interface Client {
@@ -37,11 +46,16 @@ interface Client {
 interface ClientSidebarProps {
   client: Client
   currentProjectId?: string
+  currentPlaybookId?: string
+  /** @deprecated Use currentPlaybookId instead */
+  currentPlaybookType?: string
 }
 
 export default function ClientSidebar({
   client,
   currentProjectId,
+  currentPlaybookId,
+  currentPlaybookType,
 }: ClientSidebarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -49,6 +63,7 @@ export default function ClientSidebar({
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [projectsExpanded, setProjectsExpanded] = useState(true)
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   // Load collapsed state from localStorage
@@ -69,15 +84,40 @@ export default function ClientSidebar({
   useEffect(() => {
     const loadProjects = async () => {
       try {
-        const { data, error } = await supabase
+        // Load projects
+        const { data: projectsData, error: projectsError } = await supabase
           .from('projects')
           .select('id, name, playbook_type')
           .eq('client_id', client.id)
           .order('updated_at', { ascending: false })
           .limit(10)
 
-        if (error) throw error
-        setProjects(data || [])
+        if (projectsError) throw projectsError
+
+        // Load playbooks for all projects
+        const projectIds = (projectsData || []).map(p => p.id)
+        const { data: playbooksData, error: playbooksError } = await supabase
+          .from('project_playbooks')
+          .select('id, project_id, playbook_type, name, position')
+          .in('project_id', projectIds)
+          .order('position', { ascending: true })
+
+        if (playbooksError) {
+          console.error('Error loading playbooks:', playbooksError)
+        }
+
+        // Attach playbooks to projects
+        const projectsWithPlaybooks = (projectsData || []).map(project => ({
+          ...project,
+          playbooks: (playbooksData || []).filter(pb => pb.project_id === project.id),
+        }))
+
+        setProjects(projectsWithPlaybooks)
+
+        // Auto-expand current project
+        if (currentProjectId) {
+          setExpandedProjects(prev => new Set([...prev, currentProjectId]))
+        }
       } catch (err) {
         console.error('Error loading projects for sidebar:', err)
       } finally {
@@ -86,7 +126,7 @@ export default function ClientSidebar({
     }
 
     loadProjects()
-  }, [client.id])
+  }, [client.id, currentProjectId])
 
   const navItems = [
     { id: 'overview', href: `/clients/${client.id}`, label: 'Resumen', icon: LayoutDashboard, exact: true },
@@ -104,6 +144,32 @@ export default function ClientSidebar({
 
     const hrefTab = item.href.includes('?tab=') ? item.href.split('?tab=')[1] : null
     return isClientPage && currentTab === hrefTab
+  }
+
+  const toggleProjectExpanded = (projectId: string) => {
+    setExpandedProjects(prev => {
+      const next = new Set(prev)
+      if (next.has(projectId)) {
+        next.delete(projectId)
+      } else {
+        next.add(projectId)
+      }
+      return next
+    })
+  }
+
+  const getPlaybookLabel = (playbookType: string) => {
+    const labels: Record<string, string> = {
+      'ecp': 'ECP',
+      'competitor_analysis': 'Competitor Analysis',
+      'niche_finder': 'Niche Finder',
+      'signal_based_outreach': 'Signal Outreach',
+      'video_viral_ia': 'Video Viral IA',
+      'seo-seed-keywords': 'SEO Keywords',
+      'linkedin-post-generator': 'LinkedIn Posts',
+      'github-fork-to-crm': 'Fork → CRM',
+    }
+    return labels[playbookType] || playbookType
   }
 
   if (isCollapsed) {
@@ -267,19 +333,60 @@ export default function ClientSidebar({
               ) : (
                 projects.map((project) => {
                   const isCurrentProject = currentProjectId === project.id || pathname === `/projects/${project.id}`
+                  const isExpanded = expandedProjects.has(project.id)
+                  const hasPlaybooks = project.playbooks && project.playbooks.length > 0
+
                   return (
-                    <Link
-                      key={project.id}
-                      href={`/projects/${project.id}`}
-                      className={`flex items-center gap-2 px-3 py-2 text-sm rounded-xl transition-colors ${
-                        isCurrentProject
-                          ? 'bg-blue-50 text-blue-700 font-medium'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }`}
-                    >
-                      <FolderOpen size={14} className={isCurrentProject ? 'text-blue-500' : 'text-gray-400'} />
-                      <span className="truncate">{project.name}</span>
-                    </Link>
+                    <div key={project.id}>
+                      <div className="flex items-center gap-1">
+                        {hasPlaybooks && (
+                          <button
+                            onClick={() => toggleProjectExpanded(project.id)}
+                            className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                          >
+                            {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                          </button>
+                        )}
+                        <Link
+                          href={`/projects/${project.id}`}
+                          className={`flex-1 flex items-center gap-2 px-2 py-2 text-sm rounded-xl transition-colors ${
+                            isCurrentProject
+                              ? 'bg-blue-50 text-blue-700 font-medium'
+                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          } ${!hasPlaybooks ? 'ml-5' : ''}`}
+                        >
+                          <FolderOpen size={14} className={isCurrentProject ? 'text-blue-500' : 'text-gray-400'} />
+                          <span className="truncate">{project.name}</span>
+                        </Link>
+                      </div>
+
+                      {/* Playbooks nested under project */}
+                      {hasPlaybooks && isExpanded && (
+                        <div className="ml-6 mt-1 space-y-0.5 border-l-2 border-gray-100 pl-2">
+                          {project.playbooks!.map((playbook) => {
+                            const isCurrentPlaybook = currentProjectId === project.id &&
+                              (currentPlaybookId === playbook.id ||
+                               currentPlaybookType === playbook.playbook_type ||
+                               currentPlaybookType === playbook.playbook_type.replace('_', '-') ||
+                               currentPlaybookType === playbook.playbook_type.replace('-', '_'))
+                            return (
+                              <Link
+                                key={playbook.id}
+                                href={`/projects/${project.id}/playbooks/${playbook.id}`}
+                                className={`flex items-center gap-2 px-2 py-1.5 text-xs rounded-lg transition-colors ${
+                                  isCurrentPlaybook
+                                    ? 'bg-indigo-50 text-indigo-700 font-medium'
+                                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                                }`}
+                              >
+                                <Rocket size={12} className={isCurrentPlaybook ? 'text-indigo-500' : 'text-gray-400'} />
+                                <span className="truncate">{playbook.name || getPlaybookLabel(playbook.playbook_type)}</span>
+                              </Link>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
                   )
                 })
               )}

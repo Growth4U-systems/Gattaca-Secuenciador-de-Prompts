@@ -97,10 +97,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('ecp_campaigns')
       .update(updateData)
       .eq('id', campaignId)
+
+    if (updateError) {
+      console.error('[campaign/run-step] Error updating campaign:', updateError)
+      return NextResponse.json({ error: 'Failed to update campaign status' }, { status: 500 })
+    }
 
     const startTime = Date.now()
 

@@ -9,6 +9,8 @@ import { findMatchingDocument, getConfidenceLabel } from '@/lib/documentMatcher'
 import PromptValidationPanel, { ValidationBadge } from './PromptValidationPanel'
 import { OpenRouterModelSelector } from '@/components/openrouter'
 import DocumentSelector from '@/components/documents/DocumentSelector'
+import HighlightedPromptEditor from './HighlightedPromptEditor'
+import ContextualTip from '@/components/help/ContextualTip'
 
 interface StepEditorProps {
   step: FlowStep
@@ -1399,13 +1401,13 @@ export default function StepEditor({
             ) : (
               // Vista editable con variables y autocompletado
               <div className="relative">
-                <textarea
-                  ref={textareaRef}
+                <HighlightedPromptEditor
+                  textareaRef={textareaRef}
                   value={editedStep.prompt}
                   onChange={handlePromptChange}
                   onKeyDown={handlePromptKeyDown}
+                  declaredVariables={declaredVariables}
                   rows={12}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 transition-all"
                   placeholder="Escribe {{ para ver las variables disponibles..."
                 />
                 {/* Autocomplete dropdown */}
@@ -1437,6 +1439,17 @@ export default function StepEditor({
               </p>
             )}
 
+            {/* Contextual tip for first-time users */}
+            <div className="mt-3">
+              <ContextualTip
+                tipId="step-editor-variables-tip"
+                title="Tip: Variables y autocompletado"
+                description="Las variables validas se muestran en indigo, las no declaradas en rojo. Escribe {{ para ver el autocompletado."
+                learnMoreTopic="variables"
+                variant="tip"
+              />
+            </div>
+
             {/* Prompt Validation Panel */}
             <div className="mt-4">
               <PromptValidationPanel
@@ -1445,13 +1458,30 @@ export default function StepEditor({
               />
             </div>
 
-            {/* Undeclared Variables - Add to Project */}
-            {onAddProjectVariable && undeclaredVariables.length > 0 && (
-              <div className="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-200">
+            {/* Undeclared Variables - Add to Project (or validation status) */}
+            {onAddProjectVariable && (
+              <div className={`mt-4 p-4 rounded-xl border ${
+                undeclaredVariables.length > 0
+                  ? 'bg-amber-50 border-amber-200'
+                  : 'bg-green-50 border-green-200'
+              }`}>
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-medium text-amber-800 flex items-center gap-2">
-                    <AlertTriangle size={16} />
-                    Variables detectadas no declaradas ({undeclaredVariables.length})
+                  <p className={`text-sm font-medium flex items-center gap-2 ${
+                    undeclaredVariables.length > 0
+                      ? 'text-amber-800'
+                      : 'text-green-800'
+                  }`}>
+                    {undeclaredVariables.length > 0 ? (
+                      <>
+                        <AlertTriangle size={16} />
+                        Variables detectadas no declaradas ({undeclaredVariables.length})
+                      </>
+                    ) : (
+                      <>
+                        <Check size={16} />
+                        Todas las variables están declaradas ✓
+                      </>
+                    )}
                   </p>
                   {undeclaredVariables.length > 1 && (
                     <button
@@ -1473,8 +1503,9 @@ export default function StepEditor({
                     </button>
                   )}
                 </div>
-                <div className="space-y-2">
-                  {undeclaredVariables.map((varName) => (
+                {undeclaredVariables.length > 0 ? (
+                  <div className="space-y-2">
+                    {undeclaredVariables.map((varName) => (
                     <div
                       key={varName}
                       className="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100"
@@ -1501,20 +1532,27 @@ export default function StepEditor({
                       </button>
                     </div>
                   ))}
-                </div>
-                <p className="text-xs text-amber-600 mt-3">
-                  Agrega estas variables al proyecto para que esten disponibles en todas las campanas.
+                  </div>
+                ) : (
+                  <p className="text-sm text-green-700 mt-2">
+                    No se detectaron variables sin declarar en el prompt. ¡Todo en orden!
+                  </p>
+                )}
+                <p className={`text-xs mt-3 ${undeclaredVariables.length > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                  {undeclaredVariables.length > 0
+                    ? 'Agrega estas variables al proyecto para que estén disponibles en todas las campañas.'
+                    : 'Todas las variables detectadas están correctamente declaradas en el proyecto.'}
                 </p>
               </div>
             )}
 
-            {/* Available Variables Section - Only show if there are declared variables */}
-            {declaredVariables.length > 0 && (
-              <div className="mt-4 p-4 bg-white/70 rounded-xl border border-indigo-100">
-                <p className="text-sm font-medium text-indigo-800 mb-3 flex items-center gap-2">
-                  <Sparkles size={16} />
-                  Variables del proyecto ({declaredVariables.length})
-                </p>
+            {/* Available Variables Section - Always show to guide users */}
+            <div className="mt-4 p-4 bg-white/70 rounded-xl border border-indigo-100">
+              <p className="text-sm font-medium text-indigo-800 mb-3 flex items-center gap-2">
+                <Sparkles size={16} />
+                Variables del proyecto ({declaredVariables.length})
+              </p>
+              {declaredVariables.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {declaredVariables.map((varName: string) => (
                     <code
@@ -1541,11 +1579,17 @@ export default function StepEditor({
                     </code>
                   ))}
                 </div>
-                <p className="text-xs text-indigo-600 mt-3">
-                  Haz clic en una variable para insertarla en el prompt
+              ) : (
+                <p className="text-sm text-gray-500 italic">
+                  No hay variables declaradas. Detecta variables en el prompt usando el formato {'{{ nombre_variable }}'} para agregarlas.
                 </p>
-              </div>
-            )}
+              )}
+              <p className="text-xs text-indigo-600 mt-3">
+                {declaredVariables.length > 0
+                  ? 'Haz clic en una variable para insertarla en el prompt'
+                  : 'Las variables detectadas en el prompt se mostrarán aquí una vez declaradas'}
+              </p>
+            </div>
           </div>
         </div>
 
