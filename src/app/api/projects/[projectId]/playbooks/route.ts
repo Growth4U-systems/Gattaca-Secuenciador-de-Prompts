@@ -116,10 +116,10 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Verify project exists
+    // Verify project exists and get client_id for cascade lookup
     const { data: project, error: projectError } = await supabase
       .from('projects')
-      .select('id')
+      .select('id, client_id')
       .eq('id', projectId)
       .single()
 
@@ -137,21 +137,42 @@ export async function POST(
 
     const nextPosition = existing && existing.length > 0 ? existing[0].position + 1 : 0
 
-    // Get the playbook template config (with flow steps, phases, etc.)
-    // Try different key formats for compatibility
-    const playbookConfig = getPlaybookConfig(playbook_type)
+    // CASCADA DE CONFIGURACIÓN: Cliente > Base Template
+    // 1. First check if client has a customized playbook
+    let clientPlaybookConfig = null
+    if (project.client_id) {
+      const { data: clientPlaybook } = await supabase
+        .from('client_playbooks')
+        .select('config')
+        .eq('client_id', project.client_id)
+        .eq('playbook_type', playbook_type)
+        .eq('is_enabled', true)
+        .single()
+
+      if (clientPlaybook?.config) {
+        clientPlaybookConfig = clientPlaybook.config
+      }
+    }
+
+    // 2. Get the base playbook template config
+    const basePlaybookConfig = getPlaybookConfig(playbook_type)
       || getPlaybookConfig(playbook_type.replace('_', '-'))
       || getPlaybookConfig(playbook_type.replace('-', '_'))
 
-    // Build the config to store - include flow_config from template
+    // 3. Use cascade: client config > base template
+    const effectiveConfig = clientPlaybookConfig || basePlaybookConfig
+
+    // Build the config to store - include flow_config from effective source
     // The flow_config contains the actual steps with prompts, models, etc.
     const storedConfig = {
       ...config,
       // Store the actual flow_config (with steps/prompts)
-      flow_config: playbookConfig?.flow_config || undefined,
+      flow_config: effectiveConfig?.flow_config || undefined,
       // Also store phases and variables for the wizard UI
-      phases: playbookConfig?.phases || undefined,
-      variables: playbookConfig?.variables || undefined,
+      phases: effectiveConfig?.phases || undefined,
+      variables: effectiveConfig?.variables || undefined,
+      // Track the source for debugging
+      _configSource: clientPlaybookConfig ? 'client' : 'base',
     }
 
     // Add playbook to project
@@ -180,13 +201,13 @@ export async function POST(
     }
 
     // Initialize project variables from playbook prompts if project has none
-    // Extract variables directly from the prompts in flow_config
-    const extractedVars = playbookConfig?.flow_config
-      ? extractVariablesFromFlowConfig(playbookConfig.flow_config)
+    // Extract variables directly from the prompts in flow_config (using effective config from cascade)
+    const extractedVars = effectiveConfig?.flow_config
+      ? extractVariablesFromFlowConfig(effectiveConfig.flow_config)
       : []
 
     // Also include any explicitly defined variables from the config
-    const configVars = (playbookConfig?.variables || []).map((v: any) => ({
+    const configVars = (effectiveConfig?.variables || []).map((v: any) => ({
       name: v.name || v.key,
       default_value: v.default || v.defaultValue || '',
       description: v.description || '',

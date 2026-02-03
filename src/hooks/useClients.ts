@@ -195,11 +195,19 @@ export function useClient(clientId: string) {
       setError(null)
 
       const supabase = createClient()
-      const { data, error: queryError } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('id', clientId)
-        .single()
+
+      // Add 30-second timeout to prevent infinite loading
+      const { data, error: queryError } = await withTimeout(
+        Promise.resolve(
+          supabase
+            .from('clients')
+            .select('*')
+            .eq('id', clientId)
+            .single()
+        ),
+        30000,
+        'La consulta del cliente tardó demasiado. Por favor, recarga la página.'
+      )
 
       if (queryError) throw queryError
       setClient(data)
