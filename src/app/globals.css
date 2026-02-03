@@ -21,6 +21,13 @@ body {
   background: hsl(var(--background));
 }
 
+/* Global placeholder styling - ensure readable contrast on all inputs */
+input::placeholder,
+textarea::placeholder {
+  color: #9ca3af; /* gray-400 */
+  opacity: 1;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
