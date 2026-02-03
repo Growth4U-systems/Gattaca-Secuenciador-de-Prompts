@@ -123,6 +123,27 @@ export default function CompetitorAnalysisView({
     toast.success('Competidor agregado', `${name} agregado exitosamente.`)
   }
 
+  // Handle competitor deleted
+  const handleDeleteCompetitor = async (campaignId: string) => {
+    try {
+      const response = await fetch(`/api/campaign/${campaignId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Error al eliminar')
+      }
+
+      // Remove from local state
+      setCampaigns(prev => prev.filter(c => c.id !== campaignId))
+      toast.success('Eliminado', 'Competidor eliminado correctamente')
+    } catch (error) {
+      console.error('Error deleting competitor:', error)
+      toast.error('Error', error instanceof Error ? error.message : 'No se pudo eliminar el competidor')
+    }
+  }
+
   // Get selected campaign
   const selectedCampaign = selectedCampaignId
     ? campaigns.find(c => c.id === selectedCampaignId)
@@ -233,6 +254,7 @@ export default function CompetitorAnalysisView({
               campaign={campaign}
               documents={documents}
               onClick={() => setSelectedCampaignId(campaign.id)}
+              onDelete={handleDeleteCompetitor}
             />
           ))}
         </div>

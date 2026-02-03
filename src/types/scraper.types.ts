@@ -269,6 +269,7 @@ export interface ScraperPollResponse {
   result_count?: number;
   completed: boolean;
   error?: string;
+  document_id?: string;
 }
 
 // ============================================

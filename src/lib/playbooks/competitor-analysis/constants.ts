@@ -87,105 +87,106 @@ export const COMPETITOR_VARIABLE_DEFINITIONS: VariableDefinition[] = [
 // SCRAPER INPUT MAPPINGS
 // ============================================
 
+// Keys must match ScraperConfigModal.tsx field keys
 export const SCRAPER_INPUT_MAPPINGS: Record<string, ScraperInputMapping> = {
   // Website & SEO
   'web-scraping': {
-    inputKey: 'url',
+    inputKey: 'competitor_website',
     label: 'Website URL',
     placeholder: 'https://competitor.com',
     type: 'url',
     required: true,
   },
   'seo-serp': {
-    inputKey: 'domain',
+    inputKey: 'competitor_website',
     label: 'Domain',
     placeholder: 'competitor.com',
     type: 'text',
     required: true,
   },
   'news-corpus': {
-    inputKey: 'query',
+    inputKey: 'competitor_name',
     label: 'Search Query',
     placeholder: '{{competitor_name}}',
     type: 'text',
     required: true,
   },
 
-  // Social Posts
+  // Social Posts - keys match ScraperConfigModal.tsx
   'ig-posts': {
-    inputKey: 'username',
+    inputKey: 'instagram_username',
     label: 'Instagram Username',
     placeholder: 'competitor',
     type: 'text',
     required: true,
   },
   'fb-posts': {
-    inputKey: 'url',
+    inputKey: 'facebook_url',
     label: 'Facebook Page URL',
     placeholder: 'https://facebook.com/competitor',
     type: 'url',
     required: true,
   },
   'li-posts': {
-    inputKey: 'companyUrl',
+    inputKey: 'linkedin_url',
     label: 'LinkedIn Company URL',
     placeholder: 'https://linkedin.com/company/competitor',
     type: 'url',
     required: true,
   },
   'li-insights': {
-    inputKey: 'companyUrl',
+    inputKey: 'linkedin_url',
     label: 'LinkedIn Company URL',
     placeholder: 'https://linkedin.com/company/competitor',
     type: 'url',
     required: true,
   },
   'tiktok-posts': {
-    inputKey: 'username',
+    inputKey: 'tiktok_username',
     label: 'TikTok Username',
     placeholder: '@competitor',
     type: 'text',
     required: true,
   },
   'yt-videos': {
-    inputKey: 'channelUrl',
+    inputKey: 'youtube_url',
     label: 'YouTube Channel URL',
     placeholder: 'https://youtube.com/@competitor',
     type: 'url',
     required: true,
   },
 
-  // Social Comments
+  // Social Comments - use same keys as posts
   'ig-comments': {
-    inputKey: 'username',
+    inputKey: 'instagram_username',
     label: 'Instagram Username',
     placeholder: 'competitor',
     type: 'text',
     required: true,
   },
   'fb-comments': {
-    inputKey: 'url',
+    inputKey: 'facebook_url',
     label: 'Facebook Page URL',
     placeholder: 'https://facebook.com/competitor',
     type: 'url',
     required: true,
   },
   'li-comments': {
-    inputKey: 'postUrls',
+    inputKey: 'linkedin_url',
     label: 'LinkedIn Post URLs (uno por línea)',
     placeholder: 'https://linkedin.com/posts/...',
     type: 'textarea',
     required: true,
   },
   'tiktok-comments': {
-    inputKey: 'username',
+    inputKey: 'tiktok_username',
     label: 'TikTok Username',
     placeholder: '@competitor',
     type: 'text',
     required: true,
   },
   'yt-comments': {
-    inputKey: 'videoUrls',
+    inputKey: 'youtube_url',
     label: 'YouTube Video URLs (uno por línea)',
     placeholder: 'https://youtube.com/watch?v=...',
     type: 'textarea',
@@ -194,35 +195,35 @@ export const SCRAPER_INPUT_MAPPINGS: Record<string, ScraperInputMapping> = {
 
   // Reviews
   'trustpilot-reviews': {
-    inputKey: 'url',
+    inputKey: 'trustpilot_url',
     label: 'Trustpilot URL',
     placeholder: 'https://trustpilot.com/review/competitor.com',
     type: 'url',
     required: true,
   },
   'g2-reviews': {
-    inputKey: 'url',
+    inputKey: 'g2_url',
     label: 'G2 Product URL',
     placeholder: 'https://g2.com/products/competitor',
     type: 'url',
     required: true,
   },
   'capterra-reviews': {
-    inputKey: 'url',
+    inputKey: 'capterra_url',
     label: 'Capterra URL',
     placeholder: 'https://capterra.com/p/...',
     type: 'url',
     required: true,
   },
   'play-store-reviews': {
-    inputKey: 'appId',
+    inputKey: 'play_store_app_id',
     label: 'Play Store App ID',
     placeholder: 'com.competitor.app',
     type: 'text',
     required: true,
   },
   'app-store-reviews': {
-    inputKey: 'appId',
+    inputKey: 'app_store_app_id',
     label: 'App Store App ID',
     placeholder: '123456789',
     type: 'text',
@@ -644,6 +645,120 @@ export function getScraperTypeForSource(sourceType: SourceType): string | null {
 }
 
 /**
+ * Maps storage keys (from ScraperConfigModal) to Apify-expected input keys.
+ * Storage uses descriptive keys like 'instagram_username', but Apify actors
+ * expect specific keys like 'username', 'startUrls', 'profiles', etc.
+ */
+const STORAGE_TO_APIFY_KEY_MAP: Record<string, string> = {
+  // Instagram
+  instagram_username: 'username',
+  // Facebook - needs startUrls array
+  facebook_url: 'startUrls',
+  // LinkedIn
+  linkedin_url: 'company_name', // for posts: uses company name extracted from URL
+  // YouTube - needs startUrls array
+  youtube_url: 'startUrls',
+  // TikTok - needs profiles array
+  tiktok_username: 'profiles',
+  // Trustpilot - needs companyDomain
+  trustpilot_url: 'companyDomain',
+  // G2 - needs product URL
+  g2_url: 'product',
+  // Capterra - needs startUrls array
+  capterra_url: 'startUrls',
+  // App stores - need startUrls array
+  play_store_app_id: 'startUrls',
+  app_store_app_id: 'startUrls',
+  // Website
+  competitor_website: 'url',
+  // News uses query
+  competitor_name: 'query',
+}
+
+/**
+ * Transform user input value to the format Apify expects.
+ * Some scrapers need arrays, some need extracted domains, etc.
+ */
+function transformInputValue(
+  storageKey: string,
+  value: string,
+  sourceType: SourceType
+): unknown {
+  // Handle URL-to-array transformations
+  if (['facebook_url', 'youtube_url', 'capterra_url'].includes(storageKey)) {
+    return [value] // Apify expects array of URLs
+  }
+
+  // Handle app store URLs - need to build full URL from app ID
+  if (storageKey === 'play_store_app_id') {
+    return [`https://play.google.com/store/apps/details?id=${value}`]
+  }
+  if (storageKey === 'app_store_app_id') {
+    return [`https://apps.apple.com/app/id${value}`]
+  }
+
+  // Handle TikTok username - needs to be in profiles array format
+  if (storageKey === 'tiktok_username') {
+    const username = value.startsWith('@') ? value.slice(1) : value
+    return [`https://www.tiktok.com/@${username}`]
+  }
+
+  // Handle Trustpilot URL - extract domain
+  if (storageKey === 'trustpilot_url') {
+    try {
+      // If it's a full URL, extract the domain from it
+      if (value.includes('trustpilot.com/review/')) {
+        const match = value.match(/trustpilot\.com\/review\/([^/?]+)/)
+        return match ? match[1] : value
+      }
+      // If it's already a domain, use it directly
+      return value.replace(/^https?:\/\//, '').replace(/\/$/, '')
+    } catch {
+      return value
+    }
+  }
+
+  // Handle G2 URL - use full URL
+  if (storageKey === 'g2_url') {
+    return value
+  }
+
+  // Handle LinkedIn URL - extract company name for posts scraper
+  if (storageKey === 'linkedin_url') {
+    try {
+      const match = value.match(/linkedin\.com\/company\/([^/?]+)/)
+      if (match) {
+        return match[1] // Return company slug
+      }
+      // For insights, we need the full URLs array
+      if (sourceType === 'linkedin_insights') {
+        return [value]
+      }
+    } catch {
+      // Fall through
+    }
+    return value
+  }
+
+  // Handle website URL
+  if (storageKey === 'competitor_website') {
+    // For SEO, extract just the domain
+    if (sourceType === 'seo_serp') {
+      try {
+        const url = new URL(value.startsWith('http') ? value : `https://${value}`)
+        return url.hostname.replace(/^www\./, '')
+      } catch {
+        return value
+      }
+    }
+    return value
+  }
+
+  // Default: return as-is
+  return value
+}
+
+/**
  * Build input config for a scraper based on source type and user input
  */
 export function buildScraperInputConfig(
@@ -656,8 +771,15 @@ export function buildScraperInputConfig(
     return {}
   }
 
+  // Get the Apify-expected key for this storage key
+  const storageKey = inputMapping.inputKey
+  const apifyKey = STORAGE_TO_APIFY_KEY_MAP[storageKey] || storageKey
+
+  // Transform the value to the format Apify expects
+  const transformedValue = transformInputValue(storageKey, userInput, sourceType)
+
   const inputConfig: Record<string, unknown> = {
-    [inputMapping.inputKey]: userInput,
+    [apifyKey]: transformedValue,
   }
 
   // Add specific defaults based on source type
@@ -672,7 +794,7 @@ export function buildScraperInputConfig(
     // LinkedIn
     linkedin_posts: { limit: 50, sort: 'recent' },
     linkedin_comments: { limit: 100 },
-    linkedin_insights: {},
+    linkedin_insights: { get_alumni: true, get_new_hires: true },
     // YouTube
     youtube_videos: { maxResults: 50, sortVideosBy: 'NEWEST' },
     youtube_comments: { maxComments: 100 },

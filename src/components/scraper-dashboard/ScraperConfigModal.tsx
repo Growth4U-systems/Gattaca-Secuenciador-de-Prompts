@@ -22,9 +22,13 @@ import {
   Search,
   AlertCircle,
   CheckCircle,
+  Twitter,
+  Sparkles,
 } from 'lucide-react'
 import { useToast } from '@/components/ui'
 import { SCRAPER_INPUT_MAPPINGS } from '@/lib/playbooks/competitor-analysis/constants'
+import ProfileDiscoveryModal from './ProfileDiscoveryModal'
+import type { Platform, DiscoveredProfile } from '@/lib/discovery/types'
 
 // ============================================
 // TYPES
@@ -76,6 +80,7 @@ const INPUT_FIELDS: InputCategory[] = [
       { key: 'linkedin_url', label: 'LinkedIn', placeholder: 'https://linkedin.com/company/...', type: 'url', icon: Linkedin },
       { key: 'youtube_url', label: 'YouTube', placeholder: 'https://youtube.com/@channel', type: 'url', icon: Youtube },
       { key: 'tiktok_username', label: 'TikTok', placeholder: '@username', type: 'text', icon: Music2 },
+      { key: 'twitter_username', label: 'Twitter/X', placeholder: '@username', type: 'text', icon: Twitter },
     ],
   },
   {
@@ -106,6 +111,7 @@ export default function ScraperConfigModal({
   const [values, setValues] = useState<Record<string, string>>({})
   const [isSaving, setIsSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [showDiscovery, setShowDiscovery] = useState(false)
 
   // Initialize values from campaign
   useEffect(() => {
@@ -201,6 +207,42 @@ export default function ScraperConfigModal({
     .filter(f => !!values[f.key]?.trim()).length
   const totalCount = INPUT_FIELDS.flatMap(c => c.fields).length
 
+  // Handle discovery results - pre-fill form with discovered profiles
+  const handleDiscoveryComplete = (profiles: Record<Platform, DiscoveredProfile>) => {
+    const newValues: Record<string, string> = { ...values }
+
+    // Map platform to input key
+    const platformToKey: Record<Platform, string> = {
+      instagram: 'instagram_username',
+      facebook: 'facebook_url',
+      linkedin: 'linkedin_url',
+      youtube: 'youtube_url',
+      tiktok: 'tiktok_username',
+      twitter: 'twitter_username',
+      trustpilot: 'trustpilot_url',
+      g2: 'g2_url',
+      capterra: 'capterra_url',
+      playstore: 'play_store_app_id',
+      appstore: 'app_store_app_id',
+    }
+
+    // Update values with discovered profiles
+    for (const [platform, profile] of Object.entries(profiles)) {
+      if (profile.url || profile.handle) {
+        const key = platformToKey[platform as Platform]
+        if (key) {
+          // Use handle for username fields, URL for URL fields
+          const isHandleField = key.includes('username') || key.includes('app_id')
+          newValues[key] = isHandleField && profile.handle ? profile.handle : (profile.url || '')
+        }
+      }
+    }
+
+    setValues(newValues)
+    setShowDiscovery(false)
+    toast.success('Perfiles descubiertos', 'Los campos han sido pre-rellenados')
+  }
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
@@ -214,12 +256,23 @@ export default function ScraperConfigModal({
               {campaign.ecp_name} · {configuredCount}/{totalCount} configurados
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            {values.competitor_website && (
+              <button
+                onClick={() => setShowDiscovery(true)}
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors text-sm font-medium"
+              >
+                <Sparkles size={16} />
+                Auto-Descubrir
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -273,7 +326,7 @@ export default function ScraperConfigModal({
                             value={values[field.key] || ''}
                             onChange={(e) => handleChange(field.key, e.target.value)}
                             placeholder={field.placeholder}
-                            className={`w-full pl-10 pr-10 py-2.5 border rounded-lg text-sm transition-colors
+                            className={`w-full pl-10 pr-10 py-2.5 border rounded-lg text-sm transition-colors text-gray-900
                               ${hasError
                                 ? 'border-red-300 bg-red-50 focus:ring-red-500'
                                 : hasValue
@@ -339,6 +392,18 @@ export default function ScraperConfigModal({
           </div>
         </div>
       </div>
+
+      {/* Profile Discovery Modal */}
+      {showDiscovery && values.competitor_website && (
+        <ProfileDiscoveryModal
+          projectId={projectId}
+          campaignId={campaign.id}
+          competitorName={campaign.ecp_name}
+          websiteUrl={values.competitor_website}
+          onClose={() => setShowDiscovery(false)}
+          onSave={handleDiscoveryComplete}
+        />
+      )}
     </div>
   )
 }

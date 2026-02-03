@@ -2,7 +2,8 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database, Building2, Plus, X, Search, Zap, Target, Globe, Filter, Brain, BarChart3, Table, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Sparkles, FolderPlus, Lightbulb, ArrowRight, FileText, Settings, Rocket, Database, Building2, Plus, X, Search, Zap, Target, Globe, Filter, Brain, BarChart3, Table } from 'lucide-react'
+import PlaybookSelector from '@/components/playbook/PlaybookSelector'
 import Link from 'next/link'
 import { createProject } from '@/hooks/useProjects'
 import { useToast } from '@/components/ui'
@@ -528,7 +529,7 @@ function NewProjectForm() {
                   )}
                 </div>
 
-                {/* Playbook Type Selector - Dropdown */}
+                {/* Playbook Type Selector - Horizontal */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     <span className="flex items-center gap-2">
@@ -537,39 +538,13 @@ function NewProjectForm() {
                       <span className="text-gray-400 font-normal ml-1">(opcional)</span>
                     </span>
                   </label>
-                  {loadingPlaybooks ? (
-                    <div className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-400">
-                      Cargando playbooks...
-                    </div>
-                  ) : playbooks.length === 0 ? (
-                    <div className="w-full px-4 py-3 border border-amber-200 rounded-xl bg-amber-50 text-amber-700 text-sm">
-                      No hay playbooks disponibles.
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <select
-                        value={formData.playbook_type}
-                        onChange={(e) =>
-                          setFormData({ ...formData, playbook_type: e.target.value })
-                        }
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all appearance-none bg-white pr-10"
-                      >
-                        <option value="">Sin playbook (agregar después)</option>
-                        {playbooks.map((playbook) => (
-                          <option key={playbook.id} value={playbook.playbook_type || playbook.type}>
-                            {playbook.name}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                    </div>
-                  )}
-                  {/* Show selected playbook description */}
-                  {!loadingPlaybooks && playbooks.length > 0 && (
-                    <p className="mt-2 text-sm text-gray-500">
-                      {playbooks.find(p => (p.playbook_type || p.type) === formData.playbook_type)?.description || ''}
-                    </p>
-                  )}
+                  <PlaybookSelector
+                    value={formData.playbook_type}
+                    onChange={(value) => setFormData({ ...formData, playbook_type: value })}
+                    clientId={formData.client_id}
+                    disabled={loading}
+                    showDescription={true}
+                  />
                 </div>
 
                 <div>

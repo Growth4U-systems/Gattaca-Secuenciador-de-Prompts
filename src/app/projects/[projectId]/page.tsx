@@ -360,7 +360,7 @@ function ProjectPageContent({
       <div className="flex-1 min-w-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {/* Project Header Card */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-6">
             <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 px-6 py-5">
               <div className="flex items-start justify-between">
                 {editingProject ? (
@@ -428,13 +428,13 @@ function ProjectPageContent({
                       {showMenu && (
                         <>
                           <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-                          <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50">
+                          <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-100 z-50 py-1">
                             <button
                               onClick={() => {
                                 setShowMenu(false)
                                 setShowShareModal(true)
                               }}
-                              className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+                              className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
                             >
                               <Share2 size={16} />
                               Compartir proyecto
@@ -444,17 +444,18 @@ function ProjectPageContent({
                                 setShowMenu(false)
                                 handleEditProject()
                               }}
-                              className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+                              className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
                             >
                               <Edit2 size={16} />
                               Editar proyecto
                             </button>
+                            <div className="border-t border-gray-100 my-1" />
                             <button
                               onClick={() => {
                                 setShowMenu(false)
                                 handleDeleteProject()
                               }}
-                              className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
+                              className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
                             >
                               <Trash2 size={16} />
                               Eliminar proyecto
