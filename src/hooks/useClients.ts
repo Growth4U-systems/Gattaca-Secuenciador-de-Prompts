@@ -37,16 +37,6 @@ export type ClientInsert = {
 
 export type ClientUpdate = Partial<ClientInsert>
 
-// Helper to add timeout to promises
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
-    ),
-  ])
-}
-
 /**
  * Hook para listar todos los clientes.
  * Si se proporciona agencyId, filtra por agencia.
@@ -73,13 +63,8 @@ export function useClients(agencyId?: string) {
         query = query.eq('agency_id', agencyId)
       }
 
-      // Add 30-second timeout to prevent infinite loading
-      // Execute query and wrap in timeout using Promise.resolve to ensure it's a real Promise
-      const { data, error: queryError } = await withTimeout(
-        Promise.resolve(query),
-        30000,
-        'La consulta de clientes tardó demasiado. Por favor, recarga la página.'
-      )
+      // Execute query directly (Supabase query builder is thenable)
+      const { data, error: queryError } = await query
 
       if (queryError) throw queryError
       setClients(data || [])
@@ -196,18 +181,12 @@ export function useClient(clientId: string) {
 
       const supabase = createClient()
 
-      // Add 30-second timeout to prevent infinite loading
-      const { data, error: queryError } = await withTimeout(
-        Promise.resolve(
-          supabase
-            .from('clients')
-            .select('*')
-            .eq('id', clientId)
-            .single()
-        ),
-        30000,
-        'La consulta del cliente tardó demasiado. Por favor, recarga la página.'
-      )
+      // Execute query directly
+      const { data, error: queryError } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', clientId)
+        .single()
 
       if (queryError) throw queryError
       setClient(data)

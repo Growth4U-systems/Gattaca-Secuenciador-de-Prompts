@@ -520,8 +520,8 @@ export default function StepEditor({
   const isDeepResearch = editedStep.model?.startsWith('deep-research')
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-2">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[96vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-purple-50">
           <div className="flex items-center justify-between">
@@ -530,7 +530,9 @@ export default function StepEditor({
                 {editedStep.order}
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">Editar Paso</h2>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Editar Paso: {editedStep.name}
+                </h2>
                 <p className="text-sm text-gray-600 mt-0.5">
                   Configura nombre, documentos, prompt y dependencias
                 </p>
@@ -1395,7 +1397,7 @@ export default function StepEditor({
 
             {showRealValues ? (
               // Vista de solo lectura con valores reales
-              <div className="w-full px-4 py-3 border border-green-200 bg-green-50 rounded-xl font-mono text-sm text-gray-900 whitespace-pre-wrap max-h-96 overflow-y-auto">
+              <div className="w-full px-4 py-3 border border-green-200 bg-green-50 rounded-xl font-mono text-sm text-gray-900 whitespace-pre-wrap max-h-[500px] overflow-y-auto">
                 {displayPrompt}
               </div>
             ) : (
@@ -1407,7 +1409,7 @@ export default function StepEditor({
                   onChange={handlePromptChange}
                   onKeyDown={handlePromptKeyDown}
                   declaredVariables={declaredVariables}
-                  rows={12}
+                  rows={20}
                   placeholder="Escribe {{ para ver las variables disponibles..."
                 />
                 {/* Autocomplete dropdown */}
