@@ -531,7 +531,7 @@ function ContextLakeTab({
 import { playbookMetadata, getPlaybookName, formatStepName } from '@/lib/playbook-metadata'
 import ApiKeysConfig from '@/components/settings/ApiKeysConfig'
 import { useClientPlaybooks } from '@/hooks/useClientPlaybooks'
-import { Pencil, Library } from 'lucide-react'
+import { Pencil, Library, Copy } from 'lucide-react'
 
 // Playbooks Tab - Now shows client's custom playbooks and link to library
 function PlaybooksTab({
@@ -541,12 +541,20 @@ function PlaybooksTab({
   clientId: string
   playbookTypesInUse: Set<string>
 }) {
+  const router = useRouter()
+  const toast = useToast()
   const {
     customPlaybooks,
     basePlaybooks,
     loading,
-    error,
+    forkFromTemplate,
   } = useClientPlaybooks(clientId)
+
+  // State for customization modal
+  const [showNameModal, setShowNameModal] = useState(false)
+  const [newPlaybookName, setNewPlaybookName] = useState('')
+  const [selectedType, setSelectedType] = useState<string | null>(null)
+  const [isCustomizing, setIsCustomizing] = useState(false)
 
   // Map playbook_type to icon
   const getPlaybookIcon = (type: string) => {
@@ -563,6 +571,34 @@ function PlaybooksTab({
       'video-viral-ia': '🎬',
     }
     return icons[type] || '📖'
+  }
+
+  const handleCustomize = (playbookType: string) => {
+    const template = basePlaybooks.find(t => t.type === playbookType)
+    setSelectedType(playbookType)
+    setNewPlaybookName(template?.name || playbookType)
+    setShowNameModal(true)
+  }
+
+  const handleConfirmCustomize = async () => {
+    if (!selectedType || !newPlaybookName.trim()) return
+
+    setIsCustomizing(true)
+    setShowNameModal(false)
+
+    try {
+      const playbook = await forkFromTemplate(selectedType, newPlaybookName.trim())
+      if (playbook) {
+        toast.success('Playbook creado', `Se creó "${newPlaybookName}" para este cliente`)
+        router.push(`/clients/${clientId}/playbooks/${playbook.id}/edit`)
+      }
+    } catch (err: any) {
+      toast.error('Error', err.message || 'No se pudo crear el playbook')
+    } finally {
+      setIsCustomizing(false)
+      setSelectedType(null)
+      setNewPlaybookName('')
+    }
   }
 
   if (loading) {
@@ -713,12 +749,27 @@ function PlaybooksTab({
                     </div>
                   </div>
                   <div className="flex gap-2 mt-3">
-                    <Link
-                      href={`/clients/${clientId}/playbooks`}
-                      className="flex-1 text-center px-3 py-1.5 text-xs text-gray-600 font-medium rounded-lg border border-gray-200 hover:bg-gray-50"
-                    >
-                      {template.isCustomized ? 'Ver' : 'Personalizar'}
-                    </Link>
+                    {template.isCustomized ? (
+                      <Link
+                        href={`/clients/${clientId}/playbooks`}
+                        className="flex-1 text-center px-3 py-1.5 text-xs text-gray-600 font-medium rounded-lg border border-gray-200 hover:bg-gray-50"
+                      >
+                        Ver
+                      </Link>
+                    ) : (
+                      <button
+                        onClick={() => handleCustomize(template.type)}
+                        disabled={isCustomizing}
+                        className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs text-indigo-600 font-medium rounded-lg border border-indigo-200 hover:bg-indigo-50 disabled:opacity-50"
+                      >
+                        {isCustomizing && selectedType === template.type ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Copy size={12} />
+                        )}
+                        Personalizar
+                      </button>
+                    )}
                     <Link
                       href={`/projects/new?clientId=${clientId}&playbookType=${template.type}`}
                       className="flex-1 text-center px-3 py-1.5 text-xs bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700"
@@ -732,6 +783,51 @@ function PlaybooksTab({
           </div>
         )}
       </div>
+
+      {/* Name Modal for Customization */}
+      {showNameModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Personalizar Playbook
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Crea una versión personalizada de este playbook para el cliente.
+            </p>
+            <input
+              type="text"
+              value={newPlaybookName}
+              onChange={(e) => setNewPlaybookName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleConfirmCustomize()
+                if (e.key === 'Escape') setShowNameModal(false)
+              }}
+              placeholder="Nombre del playbook..."
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              autoFocus
+            />
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowNameModal(false)
+                  setSelectedType(null)
+                  setNewPlaybookName('')
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmCustomize}
+                disabled={!newPlaybookName.trim()}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                Crear y Editar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
