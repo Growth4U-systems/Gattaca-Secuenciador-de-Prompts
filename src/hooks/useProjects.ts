@@ -3,16 +3,6 @@ import { createClient } from '@/lib/supabase-browser'
 
 type Project = any
 
-// Helper to add timeout to promises
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
-    ),
-  ])
-}
-
 export function useProjects(includeDeleted = false) {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,13 +23,8 @@ export function useProjects(includeDeleted = false) {
         query = query.or('status.is.null,status.neq.deleted')
       }
 
-      // Add 30-second timeout to prevent infinite loading
-      // Execute query and wrap in timeout using Promise.resolve to ensure it's a real Promise
-      const { data, error: queryError } = await withTimeout(
-        Promise.resolve(query),
-        30000,
-        'La consulta de proyectos tardó demasiado. Por favor, recarga la página.'
-      )
+      // Execute query directly
+      const { data, error: queryError } = await query
 
       if (queryError) throw queryError
 
@@ -70,19 +55,12 @@ export function useDeletedProjects() {
       setError(null)
       const supabase = createClient()
 
-      // Add 30-second timeout to prevent infinite loading
-      // Execute query and wrap in timeout using Promise.resolve to ensure it's a real Promise
-      const query = supabase
+      // Execute query directly
+      const { data, error: queryError } = await supabase
         .from('projects')
         .select('*, client:clients(id, name)')
         .eq('status', 'deleted')
         .order('deleted_at', { ascending: false })
-
-      const { data, error: queryError } = await withTimeout(
-        Promise.resolve(query),
-        30000,
-        'La consulta de proyectos eliminados tardó demasiado. Por favor, recarga la página.'
-      )
 
       if (queryError) throw queryError
 
@@ -119,28 +97,18 @@ export function useProject(projectId: string) {
       setError(null)
       const supabase = createClient()
 
-      // Get current user with timeout
-      const { data: { session } } = await withTimeout(
-        Promise.resolve(supabase.auth.getSession()),
-        10000,
-        'Timeout al verificar sesión'
-      )
+      // Get current user
+      const { data: { session } } = await supabase.auth.getSession()
       if (!session?.user) {
         throw new Error('No authenticated user')
       }
 
       // Load project data with client info
-      const projectQuery = supabase
+      const { data, error: queryError } = await supabase
         .from('projects')
         .select('*, client:clients(id, name)')
         .eq('id', projectId)
         .single()
-
-      const { data, error: queryError } = await withTimeout(
-        Promise.resolve(projectQuery),
-        30000,
-        'La consulta del proyecto tardó demasiado. Por favor, recarga la página.'
-      )
 
       if (queryError) throw queryError
 
@@ -148,16 +116,10 @@ export function useProject(projectId: string) {
 
       // Get user's role in the project (non-blocking)
       try {
-        const roleQuery = supabase.rpc('get_user_project_role', {
+        const { data: role, error: roleError } = await supabase.rpc('get_user_project_role', {
           p_project_id: projectId,
           p_user_id: session.user.id
         })
-
-        const { data: role, error: roleError } = await withTimeout(
-          Promise.resolve(roleQuery),
-          10000,
-          'Timeout al obtener rol de usuario'
-        )
 
         if (!roleError) {
           setUserRole(role)

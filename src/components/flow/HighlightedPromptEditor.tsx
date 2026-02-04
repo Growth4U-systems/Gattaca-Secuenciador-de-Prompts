@@ -85,7 +85,7 @@ export default function HighlightedPromptEditor({
       {/* Highlight layer (behind) - exact same dimensions as textarea */}
       <div
         ref={highlightRef}
-        className="absolute inset-0 px-4 py-3 font-mono text-sm overflow-auto pointer-events-none rounded-xl border border-transparent"
+        className="absolute inset-0 px-4 py-3 font-mono text-sm overflow-auto pointer-events-none rounded-xl border border-gray-200 bg-white"
         style={{
           whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',

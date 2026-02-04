@@ -63,7 +63,11 @@ import type { ScraperType, ScraperOutputFormat, ScraperOutputConfig } from '@/ty
 import { createDocumentMetadata } from '@/lib/playbooks/competitor-analysis/documentMatcher'
 import { useScraperJobPersistence, PersistedJob } from '@/hooks/useScraperJobPersistence'
 import type { SourceType } from '@/lib/playbooks/competitor-analysis/types'
+import type { FlowStep } from '@/types/flow.types'
+import { COMPETITOR_FLOW_STEPS } from '@/lib/playbooks/competitor-analysis/config'
 import ScraperConfigModal from './ScraperConfigModal'
+import StepOutputEditor from '@/components/campaign/StepOutputEditor'
+import StepEditor from '@/components/flow/StepEditor'
 
 // ============================================
 // TYPES
@@ -75,7 +79,8 @@ interface CompetitorCampaign {
   custom_variables: Record<string, string>
   created_at: string
   status: string
-  step_outputs?: Record<string, unknown>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  step_outputs?: Record<string, any>
 }
 
 interface Document {
@@ -94,6 +99,7 @@ interface CompetitorDetailViewProps {
   campaign: CompetitorCampaign
   documents: Document[]
   projectId: string
+  clientId?: string
   onBack: () => void
   onRefresh: () => void
 }
@@ -177,6 +183,26 @@ function extractPromptVariables(promptText: string): string[] {
   return Array.from(variables)
 }
 
+// Mapping from ANALYSIS_STEPS id to COMPETITOR_FLOW_STEPS id
+const STEP_ID_MAPPING: Record<string, string> = {
+  'autopercepcion': 'comp-step-1-autopercepcion',
+  'percepcion-terceros': 'comp-step-2-percepcion-terceros',
+  'percepcion-rrss': 'comp-step-3-percepcion-rrss',
+  'percepcion-reviews': 'comp-step-4-percepcion-reviews',
+  'resumen': 'comp-step-5-sintesis',
+}
+
+// Get FlowStep from COMPETITOR_FLOW_STEPS based on analysis step id
+// Note: COMPETITOR_FLOW_STEPS uses a slightly different type definition, so we cast it
+function getFlowStepForAnalysis(analysisStepId: string): FlowStep | null {
+  const flowStepId = STEP_ID_MAPPING[analysisStepId]
+  if (!flowStepId) return null
+  const step = COMPETITOR_FLOW_STEPS.find(s => s.id === flowStepId)
+  if (!step) return null
+  // Cast to FlowStep from flow.types (compatible since all our steps are type: 'llm')
+  return step as unknown as FlowStep
+}
+
 // Source type labels for display
 const SOURCE_TYPE_LABELS: Record<string, string> = {
   deep_research: 'Deep Research',
@@ -209,6 +235,7 @@ export default function CompetitorDetailView({
   campaign,
   documents,
   projectId,
+  clientId = '',
   onBack,
   onRefresh,
 }: CompetitorDetailViewProps) {
@@ -221,14 +248,22 @@ export default function CompetitorDetailView({
   const [, setTick] = useState(0)
   // State for expanded analysis steps
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
-  // State for step configuration editing
+  // State for step configuration editing (inline - deprecated)
   const [editingStepId, setEditingStepId] = useState<string | null>(null)
   const [stepVariables, setStepVariables] = useState<Record<string, string>>({})
   const [selectedDocs, setSelectedDocs] = useState<Record<string, Set<string>>>({})
   const [stepPrompts, setStepPrompts] = useState<Record<string, string>>({})
   const [isSavingStep, setIsSavingStep] = useState(false)
+  // State for full StepEditor modal
+  const [editingFlowStep, setEditingFlowStep] = useState<FlowStep | null>(null)
   // Document viewer modal state
   const [viewingDoc, setViewingDoc] = useState<Document | null>(null)
+  // Step output viewer modal state
+  const [viewingStepOutput, setViewingStepOutput] = useState<{
+    stepId: string
+    stepName: string
+    stepOrder: number
+  } | null>(null)
 
   // Confirmation modal state - full configuration like ScraperLauncher
   const [confirmModal, setConfirmModal] = useState<{
@@ -835,6 +870,13 @@ export default function CompetitorDetailView({
     const stepInfo = ANALYSIS_STEPS.find(s => s.id === stepId)
     if (!stepInfo) return
 
+    // Map to the correct flow step ID used in flow_config
+    const flowStepId = STEP_ID_MAPPING[stepId]
+    if (!flowStepId) {
+      toast.error('Error', `No se encontró el paso ${stepId}`)
+      return
+    }
+
     setRunningSteps(prev => new Set(prev).add(stepId))
     toast.info('Ejecutando...', `Iniciando ${stepInfo.name}`)
 
@@ -844,7 +886,7 @@ export default function CompetitorDetailView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           campaignId: campaign.id,
-          stepId: stepId,
+          stepId: flowStepId,  // Use the mapped flow step ID
         }),
       })
 
@@ -920,11 +962,10 @@ export default function CompetitorDetailView({
       }
 
       // Update campaign custom_variables
-      const response = await fetch('/api/campaigns/update', {
+      const response = await fetch(`/api/campaign/${campaign.id}/update-variables`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: campaign.id,
           custom_variables: updatedVariables,
         }),
       })
@@ -950,6 +991,63 @@ export default function CompetitorDetailView({
     setStepVariables({})
     setStepPrompts({})
   }, [])
+
+  // Save FlowStep configuration from StepEditor
+  const handleSaveFlowStep = useCallback(async (updatedStep: FlowStep) => {
+    try {
+      // Find the analysis step id from the flow step id
+      const analysisStepId = Object.entries(STEP_ID_MAPPING).find(
+        ([, flowId]) => flowId === updatedStep.id
+      )?.[0]
+
+      if (!analysisStepId) {
+        throw new Error('No se pudo identificar el paso')
+      }
+
+      // Save the step configuration to campaign custom_variables
+      const configToSave = {
+        prompt: updatedStep.prompt,
+        model: updatedStep.model,
+        temperature: updatedStep.temperature,
+        max_tokens: updatedStep.max_tokens,
+        output_format: updatedStep.output_format,
+        retrieval_mode: updatedStep.retrieval_mode,
+        base_doc_ids: updatedStep.base_doc_ids,
+      }
+
+      console.log('[handleSaveFlowStep] Saving config for step:', analysisStepId)
+      console.log('[handleSaveFlowStep] Config:', JSON.stringify(configToSave, null, 2))
+
+      const response = await fetch(`/api/campaign/${campaign.id}/update-variables`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          custom_variables: {
+            [`${analysisStepId}_config`]: configToSave,
+          },
+        }),
+      })
+
+      const responseData = await response.json()
+      console.log('[handleSaveFlowStep] Response status:', response.status, response.ok)
+      console.log('[handleSaveFlowStep] Response data:', responseData)
+
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Failed to save configuration')
+      }
+
+      toast.success('Guardado', 'Configuración del paso actualizada')
+      setEditingFlowStep(null)
+
+      // Force refresh to get updated data
+      console.log('[handleSaveFlowStep] Calling onRefresh...')
+      await onRefresh()
+      console.log('[handleSaveFlowStep] Refresh completed')
+    } catch (error) {
+      console.error('[handleSaveFlowStep] Error:', error)
+      toast.error('Error', error instanceof Error ? error.message : 'No se pudo guardar la configuración')
+    }
+  }, [campaign.id, toast, onRefresh])
 
   return (
     <div className="space-y-6">
@@ -1245,7 +1343,18 @@ export default function CompetitorDetailView({
               const status = analysisStepStatus[step.id]
               const StepIcon = step.icon
               const isExpanded = expandedSteps.has(step.id)
-              const promptText = ALL_PROMPTS[step.promptKey]
+              // Get saved config for this step from custom_variables
+              const configKey = `${step.id}_config`
+              const savedStepConfig = campaign.custom_variables?.[configKey] as { prompt?: string } | undefined
+              // DEBUG: Log what we're reading
+              console.log(`[PREVIEW DEBUG] Step ${step.id}:`, {
+                configKey,
+                hasSavedConfig: !!savedStepConfig,
+                savedPromptLength: savedStepConfig?.prompt?.length,
+                customVariablesKeys: Object.keys(campaign.custom_variables || {}),
+              })
+              // Use saved prompt if available, otherwise fall back to default
+              const promptText = savedStepConfig?.prompt || ALL_PROMPTS[step.promptKey]
               const promptVariables = extractPromptVariables(promptText)
 
               // Get matching documents for this step's required sources
@@ -1280,8 +1389,8 @@ export default function CompetitorDetailView({
                     }}
                   >
                     <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3">
-                        <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
+                      <div className="flex items-start gap-4">
+                        <div className={`flex items-center justify-center w-12 h-12 rounded-xl text-xl font-bold shadow-sm ${
                           status?.isCompleted
                             ? 'bg-green-600 text-white'
                             : status?.canRun
@@ -1336,11 +1445,16 @@ export default function CompetitorDetailView({
                         ) : status?.isCompleted ? (
                           <button
                             onClick={() => {
-                              toast.info('Ver resultados', 'Funcionalidad en desarrollo')
+                              setViewingStepOutput({
+                                stepId: step.id,
+                                stepName: step.name,
+                                stepOrder: index + 1,
+                              })
                             }}
-                            className="text-sm px-3 py-1.5 text-green-700 hover:bg-green-100 rounded-lg transition-colors"
+                            className="inline-flex items-center gap-1.5 text-sm px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium shadow-sm"
                           >
-                            Ver
+                            <Eye size={14} />
+                            Ver Resultado
                           </button>
                         ) : status?.canRun ? (
                           <button
@@ -1386,11 +1500,40 @@ export default function CompetitorDetailView({
                           <>
                             <span className="text-sm text-gray-500">Configuración del paso</span>
                             <button
-                              onClick={(e) => { e.stopPropagation(); startEditingStep(step.id) }}
-                              className="text-xs px-2 py-1 text-indigo-600 hover:bg-indigo-100 rounded transition-colors flex items-center gap-1"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                const flowStep = getFlowStepForAnalysis(step.id)
+                                if (flowStep) {
+                                  // Load saved config from custom_variables (not step_outputs!)
+                                  const savedConfig = campaign.custom_variables?.[`${step.id}_config`] as {
+                                    prompt?: string
+                                    model?: string
+                                    temperature?: number
+                                    max_tokens?: number
+                                    output_format?: string
+                                    retrieval_mode?: string
+                                    base_doc_ids?: string[]
+                                  } | undefined
+
+                                  setEditingFlowStep({
+                                    ...flowStep,
+                                    // Apply all saved config values, falling back to defaults
+                                    prompt: savedConfig?.prompt || flowStep.prompt,
+                                    model: savedConfig?.model || flowStep.model,
+                                    temperature: savedConfig?.temperature ?? flowStep.temperature,
+                                    max_tokens: savedConfig?.max_tokens ?? flowStep.max_tokens,
+                                    output_format: savedConfig?.output_format || flowStep.output_format,
+                                    retrieval_mode: savedConfig?.retrieval_mode || flowStep.retrieval_mode,
+                                    base_doc_ids: savedConfig?.base_doc_ids || flowStep.base_doc_ids || [],
+                                  } as FlowStep)
+                                } else {
+                                  toast.error('Error', 'No se encontró la configuración del paso')
+                                }
+                              }}
+                              className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1.5 text-sm font-medium shadow-sm"
                             >
-                              <Edit3 size={12} />
-                              Editar
+                              <Edit3 size={14} />
+                              Editar Configuración
                             </button>
                           </>
                         )}
@@ -1605,13 +1748,13 @@ export default function CompetitorDetailView({
                             value={stepPrompts[step.id] || promptText}
                             onChange={(e) => setStepPrompts(prev => ({ ...prev, [step.id]: e.target.value }))}
                             onClick={(e) => e.stopPropagation()}
-                            className="w-full h-64 px-3 py-2 bg-slate-800 text-white rounded-lg text-xs font-mono resize-y focus:ring-2 focus:ring-indigo-500 focus:outline-none placeholder:text-slate-400"
+                            className="w-full min-h-[400px] px-4 py-3 bg-slate-800 text-white rounded-xl text-sm font-mono resize-y focus:ring-2 focus:ring-indigo-500 focus:outline-none placeholder:text-slate-400"
                             placeholder="Escribe el prompt para este paso..."
                           />
                         ) : (
-                          <div className="bg-slate-800 text-white p-3 rounded-lg text-xs font-mono max-h-48 overflow-y-auto whitespace-pre-wrap">
-                            {promptText.slice(0, 800)}
-                            {promptText.length > 800 && '...'}
+                          <div className="bg-slate-800 text-white p-4 rounded-xl text-sm font-mono max-h-[400px] overflow-y-auto whitespace-pre-wrap">
+                            {promptText.slice(0, 2000)}
+                            {promptText.length > 2000 && '...'}
                           </div>
                         )}
                         <p className="text-xs text-gray-500 mt-2">
@@ -1928,6 +2071,71 @@ export default function CompetitorDetailView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Step Output Editor Modal */}
+      {viewingStepOutput && campaign.step_outputs?.[viewingStepOutput.stepId] && (
+        <StepOutputEditor
+          campaignId={campaign.id}
+          campaignName={competitorName}
+          stepId={viewingStepOutput.stepId}
+          stepName={viewingStepOutput.stepName}
+          stepOrder={viewingStepOutput.stepOrder}
+          currentOutput={campaign.step_outputs[viewingStepOutput.stepId] as {
+            step_name: string
+            output: string
+            tokens?: number
+            status: string
+            completed_at?: string
+            edited_at?: string
+            original_output?: string
+            model_used?: string
+            model_provider?: string
+            input_tokens?: number
+            output_tokens?: number
+          }}
+          allStepOutputs={campaign.step_outputs as Record<string, any>}
+          onSave={async (updatedStepOutputs) => {
+            try {
+              const response = await fetch('/api/campaigns/update', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: campaign.id,
+                  step_outputs: updatedStepOutputs,
+                }),
+              })
+              if (!response.ok) throw new Error('Failed to save')
+              toast.success('Guardado', 'Resultado actualizado')
+              onRefresh()
+            } catch (error) {
+              console.error('Error saving step output:', error)
+              toast.error('Error', 'No se pudo guardar el resultado')
+            }
+          }}
+          onClose={() => setViewingStepOutput(null)}
+          projectId={projectId}
+          campaignVariables={campaign.custom_variables}
+        />
+      )}
+
+      {/* StepEditor Modal - Full configuration editor */}
+      {editingFlowStep && (
+        <StepEditor
+          step={editingFlowStep}
+          projectId={projectId}
+          clientId={clientId}
+          documents={documents}
+          allSteps={COMPETITOR_FLOW_STEPS as unknown as FlowStep[]}
+          projectVariables={COMPETITOR_VARIABLE_DEFINITIONS.map(v => ({
+            name: v.name,
+            default_value: v.default_value || v.placeholder || '',
+            description: v.description,
+          }))}
+          campaignVariables={campaign.custom_variables || {}}
+          onSave={handleSaveFlowStep}
+          onCancel={() => setEditingFlowStep(null)}
+        />
       )}
     </div>
   )

@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { trackLLMUsage } from '@/lib/polar-usage'
+import { COMPETITOR_FLOW_STEPS } from '@/lib/playbooks/competitor-analysis/config'
 
 export const runtime = 'nodejs'
 export const maxDuration = 800 // ~13 minutes (Vercel Pro limit for Deep Research)
+
+// Mapping from flow step IDs to analysis step IDs (for loading saved configs)
+// This is the REVERSE of STEP_ID_MAPPING in CompetitorDetailView
+const FLOW_TO_ANALYSIS_ID: Record<string, string> = {
+  'comp-step-1-autopercepcion': 'autopercepcion',
+  'comp-step-2-percepcion-terceros': 'percepcion-terceros',
+  'comp-step-3-percepcion-rrss': 'percepcion-rrss',
+  'comp-step-4-percepcion-reviews': 'percepcion-reviews',
+  'comp-step-5-sintesis': 'resumen',
+}
 
 interface FlowStep {
   id: string
@@ -63,7 +74,12 @@ export async function POST(request: NextRequest) {
     const project = campaign.projects_legacy
 
     // Use campaign's flow_config if available, otherwise fall back to project's flow_config
-    const flowConfig = campaign.flow_config || project.flow_config
+    let flowConfig = campaign.flow_config || project?.flow_config
+
+    // Fallback for competitor_analysis playbook - use COMPETITOR_FLOW_STEPS
+    if ((!flowConfig || !flowConfig.steps) && campaign.playbook_type === 'competitor_analysis') {
+      flowConfig = { steps: COMPETITOR_FLOW_STEPS }
+    }
 
     // Check if flow_config exists
     if (!flowConfig || !flowConfig.steps) {
@@ -82,7 +98,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`Executing single step: ${step.name}`)
+    // Load saved step configuration from custom_variables (if any)
+    // The config is saved with the analysis step ID (e.g., "autopercepcion_config")
+    const analysisStepId = FLOW_TO_ANALYSIS_ID[stepId]
+    const savedConfig = analysisStepId
+      ? campaign.custom_variables?.[`${analysisStepId}_config`] as {
+          prompt?: string
+          model?: string
+          temperature?: number
+          max_tokens?: number
+          output_format?: string
+          retrieval_mode?: string
+          base_doc_ids?: string[]
+        } | undefined
+      : undefined
+
+    // Merge saved config with step defaults
+    const stepWithSavedConfig = savedConfig ? {
+      ...step,
+      prompt: savedConfig.prompt || step.prompt,
+      model: savedConfig.model || step.model,
+      temperature: savedConfig.temperature ?? step.temperature,
+      max_tokens: savedConfig.max_tokens ?? step.max_tokens,
+      output_format: savedConfig.output_format || step.output_format,
+      retrieval_mode: savedConfig.retrieval_mode || step.retrieval_mode,
+      base_doc_ids: savedConfig.base_doc_ids || step.base_doc_ids,
+    } : step
+
+    console.log(`Executing single step: ${step.name}${savedConfig ? ' (with saved config)' : ''}`)
 
     // Update current step and mark as running if not already
     const updateData: any = {
@@ -112,9 +155,9 @@ export async function POST(request: NextRequest) {
     // Call edge function to execute step
     const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/execute-flow-step`
 
-    // Aplicar overrides si están definidos
+    // Aplicar overrides si están definidos (overrides have highest priority)
     const stepConfig = {
-      ...step,
+      ...stepWithSavedConfig,
       ...(overrideModel && { model: overrideModel }),
       ...(overrideTemperature !== undefined && { temperature: overrideTemperature }),
       ...(overrideMaxTokens !== undefined && { max_tokens: overrideMaxTokens }),
