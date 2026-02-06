@@ -178,8 +178,10 @@ export default function PlaybookSelector({
           const playbookType = playbook.playbook_type || playbook.type || ''
           const isSelected = value === playbookType
           // Skip if there's a custom version of this playbook
+          // Normalize playbook types for comparison (handle hyphen/underscore variations)
+          const normalizedType = playbookType.replace(/-/g, '_').toLowerCase()
           const hasCustomVersion = customPlaybooks.some(
-            (cp) => cp.playbook_type === playbookType
+            (cp) => cp.playbook_type.replace(/-/g, '_').toLowerCase() === normalizedType
           )
           if (hasCustomVersion) return null
 

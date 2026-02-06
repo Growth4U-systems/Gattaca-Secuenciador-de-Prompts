@@ -183,18 +183,25 @@ export async function createProject(data: {
 
   if (error) throw error
 
-  // If a playbook_type was provided, also add it to project_playbooks table
+  // If a playbook_type was provided, add it to project_playbooks via API
+  // This ensures the cascade logic (client_playbook > base template) is applied
   if (data.playbook_type) {
     try {
-      await supabase
-        .from('project_playbooks')
-        .insert({
-          project_id: newProject.id,
+      const response = await fetch(`/api/projects/${newProject.id}/playbooks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           playbook_type: data.playbook_type,
-          position: 0,
-        })
+          name: data.playbook_type, // API will use this as default name
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.warn('Failed to add playbook via API:', errorData)
+      }
     } catch (playbookError) {
-      // Silently ignore if table doesn't exist yet
+      // Silently ignore if API fails
       console.warn('Failed to add to project_playbooks:', playbookError)
     }
   }

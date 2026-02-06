@@ -139,18 +139,29 @@ export async function POST(
 
     // CASCADA DE CONFIGURACIÓN: Cliente > Base Template
     // 1. First check if client has a customized playbook
+    // Try both underscore and hyphen formats for playbook_type
     let clientPlaybookConfig = null
     if (project.client_id) {
-      const { data: clientPlaybook } = await supabase
-        .from('client_playbooks')
-        .select('config')
-        .eq('client_id', project.client_id)
-        .eq('playbook_type', playbook_type)
-        .eq('is_enabled', true)
-        .single()
+      const typeVariants = [
+        playbook_type,
+        playbook_type.replace('_', '-'),
+        playbook_type.replace('-', '_'),
+      ]
 
-      if (clientPlaybook?.config) {
-        clientPlaybookConfig = clientPlaybook.config
+      for (const variant of typeVariants) {
+        const { data: clientPlaybook } = await supabase
+          .from('client_playbooks')
+          .select('config')
+          .eq('client_id', project.client_id)
+          .eq('playbook_type', variant)
+          .eq('is_enabled', true)
+          .maybeSingle()
+
+        if (clientPlaybook?.config) {
+          clientPlaybookConfig = clientPlaybook.config
+          console.log(`[project_playbooks] Found client_playbooks with type: ${variant}`)
+          break
+        }
       }
     }
 
@@ -161,6 +172,12 @@ export async function POST(
 
     // 3. Use cascade: client config > base template
     const effectiveConfig = clientPlaybookConfig || basePlaybookConfig
+
+    if (clientPlaybookConfig) {
+      console.log(`[project_playbooks] Using config from client_playbooks`)
+    } else if (basePlaybookConfig) {
+      console.log(`[project_playbooks] Using config from base template`)
+    }
 
     // Build the config to store - include flow_config from effective source
     // The flow_config contains the actual steps with prompts, models, etc.

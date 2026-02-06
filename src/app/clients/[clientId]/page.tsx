@@ -531,7 +531,8 @@ function ContextLakeTab({
 import { playbookMetadata, getPlaybookName, formatStepName } from '@/lib/playbook-metadata'
 import ApiKeysConfig from '@/components/settings/ApiKeysConfig'
 import { useClientPlaybooks } from '@/hooks/useClientPlaybooks'
-import { Pencil, Library, Copy } from 'lucide-react'
+import { Pencil, Library, Copy, ChevronDown, ChevronUp } from 'lucide-react'
+import { getPlaybookConfig } from '@/components/playbook/configs'
 
 // Playbooks Tab - Now shows client's custom playbooks and link to library
 function PlaybooksTab({
@@ -555,6 +556,58 @@ function PlaybooksTab({
   const [newPlaybookName, setNewPlaybookName] = useState('')
   const [selectedType, setSelectedType] = useState<string | null>(null)
   const [isCustomizing, setIsCustomizing] = useState(false)
+
+  // State for viewing playbook details
+  const [viewingPlaybook, setViewingPlaybook] = useState<{
+    type: string
+    name: string
+    description: string
+    isCustom?: boolean
+    config?: any
+  } | null>(null)
+  const [loadingPlaybookConfig, setLoadingPlaybookConfig] = useState(false)
+  const [playbookConfig, setPlaybookConfig] = useState<{
+    steps?: Array<{
+      id: string
+      name: string
+      description?: string
+      prompt?: string
+    }>
+    variables?: Array<{
+      key: string
+      label: string
+      description?: string
+    }>
+  } | null>(null)
+
+  // Load playbook config when viewing
+  useEffect(() => {
+    if (!viewingPlaybook) {
+      setPlaybookConfig(null)
+      return
+    }
+
+    // Get config from static playbook configs
+    const config = getPlaybookConfig(viewingPlaybook.type)
+      || getPlaybookConfig(viewingPlaybook.type.replace('_', '-'))
+      || getPlaybookConfig(viewingPlaybook.type.replace('-', '_'))
+
+    if (config) {
+      setPlaybookConfig({
+        steps: config.flow_config?.steps?.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          prompt: s.prompt,
+        })) || [],
+        variables: config.variables?.map((v: any) => ({
+          key: v.key || v.name,
+          label: v.label || v.name || v.key,
+          description: v.description,
+        })) || [],
+      })
+    }
+  }, [viewingPlaybook])
 
   // Map playbook_type to icon
   const getPlaybookIcon = (type: string) => {
@@ -618,22 +671,13 @@ function PlaybooksTab({
             {customPlaybooks.length} personalizados • {basePlaybooks.length} disponibles
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link
-            href={`/clients/${clientId}/playbooks`}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-all font-medium"
-          >
-            <Library size={18} />
-            Biblioteca
-          </Link>
-          <Link
-            href={`/projects/new?clientId=${clientId}`}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm font-medium"
-          >
-            <Sparkles size={18} />
-            Nuevo Proyecto
-          </Link>
-        </div>
+        <Link
+          href={`/projects/new?clientId=${clientId}`}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm font-medium"
+        >
+          <Sparkles size={18} />
+          Nuevo Proyecto
+        </Link>
       </div>
 
       {/* Custom Playbooks Section */}
@@ -707,56 +751,51 @@ function PlaybooksTab({
           Templates Disponibles
         </h2>
 
-        {basePlaybooks.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-            <Book className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="font-medium text-gray-900 mb-2">No hay templates</h3>
-            <p className="text-gray-500 text-sm">
-              No se encontraron playbooks disponibles
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {basePlaybooks.map((template) => {
-              const isInUse = playbookTypesInUse.has(template.type)
+        {(() => {
+          // Filter out templates that have been customized - they appear in the "Playbooks Personalizados" section
+          const availableTemplates = basePlaybooks.filter(t => !t.isCustomized)
 
-              return (
-                <div
-                  key={template.type}
-                  className={`bg-white rounded-xl border p-4 hover:shadow-md transition-all ${
-                    template.isCustomized ? 'border-green-200' : 'border-gray-200'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg text-lg">
-                      {getPlaybookIcon(template.type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-medium text-gray-900 text-sm">{template.name}</h3>
-                        {template.isCustomized && (
-                          <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                            ✓ Personalizado
-                          </span>
-                        )}
-                        {isInUse && (
-                          <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
-                            En uso
-                          </span>
-                        )}
+          return availableTemplates.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+              <Book className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="font-medium text-gray-900 mb-2">Todos los templates están personalizados</h3>
+              <p className="text-gray-500 text-sm">
+                Ya has personalizado todos los playbooks disponibles
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {availableTemplates.map((template) => {
+                const isInUse = playbookTypesInUse.has(template.type)
+
+                return (
+                  <div
+                    key={template.type}
+                    className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-all cursor-pointer"
+                    onClick={() => setViewingPlaybook({
+                      type: template.type,
+                      name: template.name,
+                      description: template.description,
+                      isCustom: false,
+                    })}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg text-lg">
+                        {getPlaybookIcon(template.type)}
                       </div>
-                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">{template.description}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-medium text-gray-900 text-sm">{template.name}</h3>
+                          {isInUse && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                              En uso
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{template.description}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    {template.isCustomized ? (
-                      <Link
-                        href={`/clients/${clientId}/playbooks`}
-                        className="flex-1 text-center px-3 py-1.5 text-xs text-gray-600 font-medium rounded-lg border border-gray-200 hover:bg-gray-50"
-                      >
-                        Ver
-                      </Link>
-                    ) : (
+                    <div className="flex gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleCustomize(template.type)}
                         disabled={isCustomizing}
@@ -769,19 +808,19 @@ function PlaybooksTab({
                         )}
                         Personalizar
                       </button>
-                    )}
-                    <Link
-                      href={`/projects/new?clientId=${clientId}&playbookType=${template.type}`}
-                      className="flex-1 text-center px-3 py-1.5 text-xs bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700"
-                    >
-                      Usar
-                    </Link>
+                      <Link
+                        href={`/projects/new?clientId=${clientId}&playbookType=${template.type}`}
+                        className="flex-1 text-center px-3 py-1.5 text-xs bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700"
+                      >
+                        Usar
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+                )
+              })}
+            </div>
+          )
+        })()}
       </div>
 
       {/* Name Modal for Customization */}
@@ -824,6 +863,132 @@ function PlaybooksTab({
               >
                 Crear y Editar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Playbook Modal */}
+      {viewingPlaybook && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-2xl mx-4 shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-100">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl text-2xl">
+                    {getPlaybookIcon(viewingPlaybook.type)}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">{viewingPlaybook.name}</h2>
+                    <p className="text-sm text-gray-500 mt-1">{viewingPlaybook.type}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setViewingPlaybook(null)}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="space-y-6">
+                {/* Description */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Descripción</h3>
+                  <p className="text-gray-600">{viewingPlaybook.description}</p>
+                </div>
+
+                {/* Variables */}
+                {playbookConfig?.variables && playbookConfig.variables.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Variables ({playbookConfig.variables.length})</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {playbookConfig.variables.map((v) => (
+                        <span
+                          key={v.key}
+                          className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-md border border-purple-100"
+                          title={v.description}
+                        >
+                          {`{{${v.key}}}`}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Steps */}
+                {playbookConfig?.steps && playbookConfig.steps.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Pasos del Análisis ({playbookConfig.steps.length})</h3>
+                    <div className="space-y-2">
+                      {playbookConfig.steps.map((step, index) => (
+                        <details key={step.id} className="group border border-gray-200 rounded-lg overflow-hidden">
+                          <summary className="flex items-center gap-3 p-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
+                            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+                              {index + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium text-gray-900 text-sm">{step.name}</span>
+                              {step.description && (
+                                <span className="text-gray-500 text-xs ml-2">- {step.description}</span>
+                              )}
+                            </div>
+                            <ChevronDown size={16} className="text-gray-400 group-open:rotate-180 transition-transform" />
+                          </summary>
+                          <div className="p-3 bg-white border-t border-gray-100">
+                            {step.prompt ? (
+                              <pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded-lg max-h-48 overflow-y-auto">
+                                {step.prompt.slice(0, 500)}{step.prompt.length > 500 ? '...' : ''}
+                              </pre>
+                            ) : (
+                              <p className="text-xs text-gray-400 italic">Sin prompt definido</p>
+                            )}
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Info about customization */}
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                  <p className="text-sm text-blue-800">
+                    Este es un template base. Para modificar los prompts y configuraciones,
+                    haz clic en <strong>"Personalizar"</strong> para crear tu propia versión.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setViewingPlaybook(null)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => {
+                  handleCustomize(viewingPlaybook.type)
+                  setViewingPlaybook(null)
+                }}
+                className="px-4 py-2 text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50"
+              >
+                <Copy size={16} className="inline mr-2" />
+                Personalizar
+              </button>
+              <Link
+                href={`/projects/new?clientId=${clientId}&playbookType=${viewingPlaybook.type}`}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                onClick={() => setViewingPlaybook(null)}
+              >
+                Usar en Proyecto
+              </Link>
             </div>
           </div>
         </div>
