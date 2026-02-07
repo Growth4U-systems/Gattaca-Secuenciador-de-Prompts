@@ -78,7 +78,9 @@ export async function GET(
           type,
           name: config.name || type,
           description: config.description || config.presentation?.tagline || '',
-          isCustomized: customTypes.has(type) || customTypes.has(type.replace('-', '_')),
+          isCustomized: customTypes.has(type) ||
+                        customTypes.has(type.replace('-', '_')) ||
+                        customTypes.has(type.replace('_', '-')),
         }))
     }
 

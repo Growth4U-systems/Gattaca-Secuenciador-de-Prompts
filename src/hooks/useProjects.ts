@@ -187,22 +187,29 @@ export async function createProject(data: {
   // This ensures the cascade logic (client_playbook > base template) is applied
   if (data.playbook_type) {
     try {
+      // Generate a default name from the playbook type
+      const defaultPlaybookName = data.playbook_type
+        .replace(/[-_]/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase())
+
       const response = await fetch(`/api/projects/${newProject.id}/playbooks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           playbook_type: data.playbook_type,
-          name: data.playbook_type, // API will use this as default name
+          name: defaultPlaybookName, // e.g., "Competitor Analysis"
         }),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        console.warn('Failed to add playbook via API:', errorData)
+        console.error('Failed to add playbook via API:', errorData)
+        throw new Error(errorData.error || 'Failed to add playbook to project')
       }
     } catch (playbookError) {
-      // Silently ignore if API fails
-      console.warn('Failed to add to project_playbooks:', playbookError)
+      // Re-throw the error so project creation fails visibly
+      console.error('Failed to add to project_playbooks:', playbookError)
+      throw playbookError
     }
   }
 
