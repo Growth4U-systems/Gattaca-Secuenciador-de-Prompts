@@ -787,7 +787,7 @@ export function buildScraperInputConfig(
   const scraperDefaults: Record<string, Record<string, unknown>> = {
     // Instagram uses same actor for posts and comments
     instagram_posts: { resultsLimit: 200, resultsType: 'posts' },
-    instagram_comments: { resultsLimit: 200, resultsType: 'posts' },
+    instagram_comments: { resultsLimit: 200, resultsType: 'comments' },
     // TikTok
     tiktok_posts: { resultsPerPage: 50, profileSorting: 'latest' },
     tiktok_comments: { commentsPerPost: 100 },

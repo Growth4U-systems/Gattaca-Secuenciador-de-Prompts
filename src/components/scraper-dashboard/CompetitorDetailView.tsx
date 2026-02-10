@@ -698,19 +698,17 @@ export default function CompetitorDetailView({
     const vars = campaign.custom_variables || {}
 
     // Explicit mapping: source_type -> { varKey: campaign variable key, apifyKey: Apify field name, isArray: boolean }
+    // Note: Comment scrapers (tiktok_comments, facebook_comments, etc.) are NOT mapped here
+    // because they get their input from post URLs extracted from parent scraper documents.
     const sourceToApifyMapping: Record<string, { varKey: string; apifyKey: string; isArray: boolean }> = {
       // Social posts
       instagram_posts: { varKey: 'instagram_username', apifyKey: 'username', isArray: false },
       instagram_comments: { varKey: 'instagram_username', apifyKey: 'username', isArray: false },
       facebook_posts: { varKey: 'facebook_url', apifyKey: 'startUrls', isArray: true },
-      facebook_comments: { varKey: 'facebook_url', apifyKey: 'startUrls', isArray: true },
       linkedin_posts: { varKey: 'linkedin_url', apifyKey: 'companyUrls', isArray: true },
-      linkedin_comments: { varKey: 'linkedin_url', apifyKey: 'companyUrls', isArray: true },
       linkedin_insights: { varKey: 'linkedin_url', apifyKey: 'companyUrls', isArray: true },
       youtube_videos: { varKey: 'youtube_url', apifyKey: 'startUrls', isArray: true },
-      youtube_comments: { varKey: 'youtube_url', apifyKey: 'startUrls', isArray: true },
       tiktok_posts: { varKey: 'tiktok_username', apifyKey: 'profiles', isArray: true },
-      tiktok_comments: { varKey: 'tiktok_username', apifyKey: 'profiles', isArray: true },
       // Reviews
       trustpilot_reviews: { varKey: 'trustpilot_url', apifyKey: 'startUrls', isArray: true },
       g2_reviews: { varKey: 'g2_url', apifyKey: 'startUrls', isArray: true },
@@ -751,6 +749,39 @@ export default function CompetitorDetailView({
       }
     }
 
+    // Auto-inject post URLs for comment scrapers from parent scraper documents
+    const dependency = getScraperDependency(sourceType)
+    if (dependency && dependency.targetInputField !== 'username') {
+      // Find the parent posts document for this competitor
+      const parentDoc = documents.find(d =>
+        d.source_metadata?.source_type === dependency.dependsOn &&
+        d.source_metadata?.competitor?.toLowerCase() === normalizedName
+      )
+
+      if (parentDoc) {
+        const extractedUrls = dependency.urlExtractor(parentDoc)
+        if (extractedUrls.length > 0) {
+          // Inject URLs in the format expected by the Apify actor
+          if (dependency.urlAsObject) {
+            initialConfig[dependency.targetInputField] = extractedUrls.map(url => ({ url }))
+          } else {
+            initialConfig[dependency.targetInputField] = extractedUrls
+          }
+          console.log(`[handleRunScraper] Auto-injected ${extractedUrls.length} URLs from ${dependency.dependsOn} into ${dependency.targetInputField}`)
+        } else {
+          toast.warning(
+            'Sin URLs de posts',
+            `El documento de ${dependency.dependsOn} existe pero no se pudieron extraer URLs. Revisa el contenido.`
+          )
+        }
+      } else {
+        toast.warning(
+          'Dependencia pendiente',
+          `Ejecuta primero el scraper de ${dependency.dependsOn} para obtener las URLs de posts/videos.`
+        )
+      }
+    }
+
     // Show configuration modal
     setConfirmModal({
       sourceType,
@@ -760,7 +791,7 @@ export default function CompetitorDetailView({
       fieldErrors: {},
       outputFormat: 'json',
     })
-  }, [runningScrapers, runningDeepResearch, campaign.custom_variables, toast])
+  }, [runningScrapers, runningDeepResearch, campaign.custom_variables, toast, documents, normalizedName])
 
   // Update field in confirmation modal
   const handleModalFieldChange = useCallback((key: string, value: unknown) => {
@@ -1184,49 +1215,20 @@ export default function CompetitorDetailView({
             `Ejecutando ${batch.length} scrapers...`
           )
 
-          // For dependent scrapers, check if parent needs to run first
+          // For dependent scrapers (comments), verify parent docs exist.
+          // URL injection into inputConfig happens inside handleRunScraper via getScraperDependency.
           for (const scraper of batch) {
             const dependency = getScraperDependency(scraper.sourceType)
-
-            if (dependency) {
-              // Check if parent document already exists (filtered by current competitor)
+            if (dependency && dependency.targetInputField !== 'username') {
               const parentDoc = documents.find(d =>
                 d.source_metadata?.source_type === dependency.dependsOn &&
                 d.source_metadata?.competitor?.toLowerCase() === normalizedName
               )
-
               if (!parentDoc) {
-                // Parent doesn't exist, execute it first
-                toast.info(
-                  'Dependencia detectada',
-                  `Ejecutando ${dependency.dependsOn} antes de ${scraper.name}`
+                toast.warning(
+                  'Dependencia pendiente',
+                  `${scraper.name} necesita que se ejecute primero el scraper de ${dependency.dependsOn}`
                 )
-
-                // Execute parent
-                await handleRunScraper(dependency.dependsOn)
-                // Wait for it to complete
-                await waitForScrapersToComplete([{ sourceType: dependency.dependsOn }])
-
-                // Reload documents to get the new document
-                onRefresh()
-                // Small delay for state to update
-                await new Promise(resolve => setTimeout(resolve, 1000))
-              }
-
-              // Now extract URLs from parent document (existing or newly created)
-              const updatedParentDoc = documents.find(d =>
-                d.source_metadata?.source_type === dependency.dependsOn &&
-                d.source_metadata?.competitor?.toLowerCase() === normalizedName
-              )
-
-              if (updatedParentDoc) {
-                const urls = dependency.urlExtractor(updatedParentDoc)
-                if (urls.length > 0) {
-                  // Store URLs in custom_variables for this scraper
-                  console.log(`[executeScrapersInBatches] Extracted ${urls.length} URLs for ${scraper.sourceType}`)
-                  // These URLs will be picked up by the scraper when it runs
-                  // TODO: Implement updateCampaignVariable if needed
-                }
               }
             }
           }
@@ -1257,9 +1259,9 @@ export default function CompetitorDetailView({
   }, [handleRunScraper, documents, onRefresh, toast, runningScrapers, waitForScrapersToComplete])
 
   // Get scraper status for visual indicators
-  const getScraperStatus = useCallback((scraper: { sourceType: string; inputValue?: string; isCompleted: boolean }) => {
-    const hasInput = !!scraper.inputValue
-    const hasDefaults = !!SCRAPER_DEFAULTS[scraper.sourceType]
+  const getScraperStatus = useCallback((scraper: { sourceType: string; inputKey?: string; inputValue?: string; isCompleted: boolean }) => {
+    // A scraper "has input" if it doesn't require one (no inputKey) or the value is non-empty
+    const hasInput = !scraper.inputKey || !!scraper.inputValue?.trim()
 
     // Check if this specific platform was auto-discovered
     let discoveredPlatforms: string[] = []
@@ -1267,7 +1269,6 @@ export default function CompetitorDetailView({
       const raw = campaign.custom_variables?.discovered_platforms
       if (raw) discoveredPlatforms = JSON.parse(raw)
     } catch { /* ignore */ }
-    // Map source_type to platform name for discovery check
     const platformFromSource = scraper.sourceType.replace(/_posts|_comments|_videos|_reviews|_insights/, '')
     const wasDiscovered = discoveredPlatforms.includes(platformFromSource) && hasInput
 
@@ -1304,22 +1305,11 @@ export default function CompetitorDetailView({
       }
     }
 
-    if (hasDefaults && !hasInput) {
-      return {
-        status: 'default' as const,
-        badge: {
-          text: 'Valores por defecto',
-          color: 'yellow',
-          icon: <Settings size={12} />
-        }
-      }
-    }
-
     return {
-      status: 'unconfigured' as const,
+      status: 'pending' as const,
       badge: {
-        text: 'Sin configurar',
-        color: 'red',
+        text: 'Pendiente',
+        color: 'amber',
         icon: <AlertCircle size={12} />
       }
     }
@@ -2088,8 +2078,7 @@ export default function CompetitorDetailView({
                                   ${status.badge.color === 'green' ? 'bg-green-100 text-green-700' : ''}
                                   ${status.badge.color === 'emerald' ? 'bg-emerald-100 text-emerald-700' : ''}
                                   ${status.badge.color === 'blue' ? 'bg-blue-100 text-blue-700' : ''}
-                                  ${status.badge.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' : ''}
-                                  ${status.badge.color === 'red' ? 'bg-red-100 text-red-700' : ''}
+                                  ${status.badge.color === 'amber' ? 'bg-amber-100 text-amber-700' : ''}
                                 `}>
                                   {status.badge.icon}
                                   <span>{status.badge.text}</span>

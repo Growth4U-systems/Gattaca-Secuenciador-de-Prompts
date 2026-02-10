@@ -14,6 +14,10 @@ export interface ScraperDependency {
   scraper: string
   /** The scraper it depends on */
   dependsOn: string
+  /** The Apify input field name where extracted URLs should be injected */
+  targetInputField: string
+  /** Whether URLs should be wrapped as {url: string} objects (for Facebook/YouTube) */
+  urlAsObject: boolean
   /** Function to extract URLs from the parent scraper's document */
   urlExtractor: (document: Document) => string[]
 }
@@ -38,7 +42,9 @@ interface Scraper {
 export const SCRAPER_DEPENDENCIES: ScraperDependency[] = [
   {
     scraper: 'youtube_comments',
-    dependsOn: 'youtube_channel_videos',
+    dependsOn: 'youtube_videos',
+    targetInputField: 'startUrls',
+    urlAsObject: true,
     urlExtractor: (doc: Document) => {
       if (!doc.extracted_content) return []
 
@@ -56,7 +62,9 @@ export const SCRAPER_DEPENDENCIES: ScraperDependency[] = [
 
   {
     scraper: 'linkedin_comments',
-    dependsOn: 'linkedin_company_posts',
+    dependsOn: 'linkedin_posts',
+    targetInputField: 'postIds',
+    urlAsObject: false,
     urlExtractor: (doc: Document) => {
       if (!doc.extracted_content) return []
 
@@ -74,6 +82,8 @@ export const SCRAPER_DEPENDENCIES: ScraperDependency[] = [
   {
     scraper: 'instagram_posts_comments',
     dependsOn: 'instagram_posts',
+    targetInputField: 'username',
+    urlAsObject: false,
     urlExtractor: (doc: Document) => {
       // Instagram posts already include comments in the same scraper
       // This dependency is informational - no need for second scraper
@@ -84,6 +94,8 @@ export const SCRAPER_DEPENDENCIES: ScraperDependency[] = [
   {
     scraper: 'tiktok_comments',
     dependsOn: 'tiktok_posts',
+    targetInputField: 'postURLs',
+    urlAsObject: false,
     urlExtractor: (doc: Document) => {
       if (!doc.extracted_content) return []
 
@@ -101,6 +113,8 @@ export const SCRAPER_DEPENDENCIES: ScraperDependency[] = [
   {
     scraper: 'facebook_comments',
     dependsOn: 'facebook_posts',
+    targetInputField: 'startUrls',
+    urlAsObject: true,
     urlExtractor: (doc: Document) => {
       if (!doc.extracted_content) return []
 
