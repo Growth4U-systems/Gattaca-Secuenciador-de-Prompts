@@ -1178,9 +1178,10 @@ export default function CompetitorDetailView({
             const dependency = getScraperDependency(scraper.sourceType)
 
             if (dependency) {
-              // Check if parent document already exists
+              // Check if parent document already exists (filtered by current competitor)
               const parentDoc = documents.find(d =>
-                d.source_metadata?.source_type === dependency.dependsOn
+                d.source_metadata?.source_type === dependency.dependsOn &&
+                d.source_metadata?.competitor?.toLowerCase() === normalizedName
               )
 
               if (!parentDoc) {
@@ -1203,7 +1204,8 @@ export default function CompetitorDetailView({
 
               // Now extract URLs from parent document (existing or newly created)
               const updatedParentDoc = documents.find(d =>
-                d.source_metadata?.source_type === dependency.dependsOn
+                d.source_metadata?.source_type === dependency.dependsOn &&
+                d.source_metadata?.competitor?.toLowerCase() === normalizedName
               )
 
               if (updatedParentDoc) {
@@ -2969,7 +2971,6 @@ export default function CompetitorDetailView({
         <ScraperConfigModal
           campaign={campaign}
           projectId={projectId}
-          clientName={clientName}
           onClose={() => setShowConfigModal(false)}
           onSaved={handleConfigSaved}
         />
