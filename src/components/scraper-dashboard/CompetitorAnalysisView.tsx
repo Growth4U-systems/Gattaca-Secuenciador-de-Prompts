@@ -172,6 +172,7 @@ export default function CompetitorAnalysisView({
     return (
       <CompetitorDetailView
         campaign={selectedCampaign}
+        campaigns={campaigns}
         documents={documents}
         projectId={projectId}
         onBack={() => setSelectedCampaignId(null)}
