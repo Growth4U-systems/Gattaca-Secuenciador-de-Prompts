@@ -33,6 +33,7 @@ export interface JobHistoryEntry extends PersistedJob {
 
 interface UseScraperJobPersistenceOptions {
   projectId: string
+  campaignId?: string
   onJobCompleted?: (job: PersistedJob) => void
   onJobFailed?: (job: PersistedJob) => void
 }
@@ -73,6 +74,7 @@ const POLL_INTERVAL_MS = 5000 // 5 seconds
 
 export function useScraperJobPersistence({
   projectId,
+  campaignId,
   onJobCompleted,
   onJobFailed,
 }: UseScraperJobPersistenceOptions): UseScraperJobPersistenceReturn {
@@ -83,8 +85,18 @@ export function useScraperJobPersistence({
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
   const hasRecovered = useRef(false)
 
-  const storageKey = `${STORAGE_KEY_PREFIX}${projectId}`
-  const historyKey = `${HISTORY_KEY_PREFIX}${projectId}`
+  // Include campaignId in storage keys so each competitor has its own job tracking
+  const keySuffix = campaignId ? `${projectId}_${campaignId}` : projectId
+  const storageKey = `${STORAGE_KEY_PREFIX}${keySuffix}`
+  const historyKey = `${HISTORY_KEY_PREFIX}${keySuffix}`
+
+  // Reset recovery when campaignId changes (switching competitors)
+  useEffect(() => {
+    hasRecovered.current = false
+    setActiveJobs(new Map())
+    setJobHistory([])
+    setIsRecovering(true)
+  }, [keySuffix])
 
   // ============================================
   // PERSISTENCE HELPERS
