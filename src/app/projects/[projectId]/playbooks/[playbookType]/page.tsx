@@ -820,6 +820,7 @@ function DocumentsTab({
   const [viewingDoc, setViewingDoc] = useState<any | null>(null)
   const [campaigns, setCampaigns] = useState<Array<{ id: string; ecp_name: string }>>([])
   const [showScraperLauncher, setShowScraperLauncher] = useState(false)
+  const isCompetitorPlaybook = ['competitor_analysis', 'competitor-analysis'].includes(playbookType)
   const [viewMode, setViewMode] = useState<'list' | 'folders'>('list')
   const [showNewFolderInput, setShowNewFolderInput] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
@@ -940,31 +941,33 @@ function DocumentsTab({
           <p className="text-sm text-gray-500 mt-1">Documentos para este playbook</p>
         </div>
         <div className="flex items-center gap-3">
-          {/* View Mode Toggle */}
-          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              title="Vista lista"
-            >
-              <List size={16} />
-            </button>
-            <button
-              onClick={() => setViewMode('folders')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'folders'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              title="Vista carpetas"
-            >
-              <Folder size={16} />
-            </button>
-          </div>
+          {/* View Mode Toggle - hidden for competitor analysis (always grouped by competitor) */}
+          {!isCompetitorPlaybook && (
+            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded-md transition-colors ${
+                  viewMode === 'list'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title="Vista lista"
+              >
+                <List size={16} />
+              </button>
+              <button
+                onClick={() => setViewMode('folders')}
+                className={`p-2 rounded-md transition-colors ${
+                  viewMode === 'folders'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title="Vista carpetas"
+              >
+                <Folder size={16} />
+              </button>
+            </div>
+          )}
 
           <button
             onClick={() => setShowScraperLauncher(true)}
@@ -1041,6 +1044,18 @@ function DocumentsTab({
             <div key={i} className="h-20 bg-gray-50 rounded-xl animate-pulse" />
           ))}
         </div>
+      ) : isCompetitorPlaybook ? (
+        <DocumentList
+          documents={documents}
+          campaigns={campaigns}
+          onDelete={handleDelete}
+          onView={setViewingDoc}
+          onCampaignChange={handleCampaignChange}
+          onRename={handleRename}
+          onMoveToFolder={handleMoveToFolder}
+          availableFolders={existingFolders}
+          groupByCompetitor
+        />
       ) : viewMode === 'folders' ? (
         <DocumentFolderView
           documents={documents}
