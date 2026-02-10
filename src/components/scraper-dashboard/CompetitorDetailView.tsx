@@ -1257,9 +1257,9 @@ export default function CompetitorDetailView({
   }, [handleRunScraper, documents, onRefresh, toast, runningScrapers, waitForScrapersToComplete])
 
   // Get scraper status for visual indicators
-  const getScraperStatus = useCallback((scraper: { sourceType: string; inputValue?: string; isCompleted: boolean }) => {
-    const hasInput = !!scraper.inputValue
-    const hasDefaults = !!SCRAPER_DEFAULTS[scraper.sourceType]
+  const getScraperStatus = useCallback((scraper: { sourceType: string; inputKey?: string; inputValue?: string; isCompleted: boolean }) => {
+    // A scraper "has input" if it doesn't require one (no inputKey) or the value is non-empty
+    const hasInput = !scraper.inputKey || !!scraper.inputValue?.trim()
 
     // Check if this specific platform was auto-discovered
     let discoveredPlatforms: string[] = []
@@ -1267,7 +1267,6 @@ export default function CompetitorDetailView({
       const raw = campaign.custom_variables?.discovered_platforms
       if (raw) discoveredPlatforms = JSON.parse(raw)
     } catch { /* ignore */ }
-    // Map source_type to platform name for discovery check
     const platformFromSource = scraper.sourceType.replace(/_posts|_comments|_videos|_reviews|_insights/, '')
     const wasDiscovered = discoveredPlatforms.includes(platformFromSource) && hasInput
 
@@ -1304,22 +1303,11 @@ export default function CompetitorDetailView({
       }
     }
 
-    if (hasDefaults && !hasInput) {
-      return {
-        status: 'default' as const,
-        badge: {
-          text: 'Valores por defecto',
-          color: 'yellow',
-          icon: <Settings size={12} />
-        }
-      }
-    }
-
     return {
-      status: 'unconfigured' as const,
+      status: 'pending' as const,
       badge: {
-        text: 'Sin configurar',
-        color: 'red',
+        text: 'Pendiente',
+        color: 'amber',
         icon: <AlertCircle size={12} />
       }
     }
@@ -2088,8 +2076,7 @@ export default function CompetitorDetailView({
                                   ${status.badge.color === 'green' ? 'bg-green-100 text-green-700' : ''}
                                   ${status.badge.color === 'emerald' ? 'bg-emerald-100 text-emerald-700' : ''}
                                   ${status.badge.color === 'blue' ? 'bg-blue-100 text-blue-700' : ''}
-                                  ${status.badge.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' : ''}
-                                  ${status.badge.color === 'red' ? 'bg-red-100 text-red-700' : ''}
+                                  ${status.badge.color === 'amber' ? 'bg-amber-100 text-amber-700' : ''}
                                 `}>
                                   {status.badge.icon}
                                   <span>{status.badge.text}</span>
