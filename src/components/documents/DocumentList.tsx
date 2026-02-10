@@ -184,6 +184,21 @@ export default function DocumentList({
       }
       return true
     })
+    // Sort: competitor docs first, grouped by competitor name, then the rest by date
+    .sort((a, b) => {
+      const aIsCompetitor = a.category === 'competitor'
+      const bIsCompetitor = b.category === 'competitor'
+      if (aIsCompetitor && !bIsCompetitor) return -1
+      if (!aIsCompetitor && bIsCompetitor) return 1
+      if (aIsCompetitor && bIsCompetitor) {
+        // Group by competitor name (first tag that isn't a source/date tag)
+        const aName = a.tags?.[0] || ''
+        const bName = b.tags?.[0] || ''
+        if (aName !== bName) return aName.localeCompare(bName)
+      }
+      // Within same group, sort by date descending
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
   }, [documents, searchQuery, searchInContent, categoryFilter, tagFilter, assignmentFilter, sourceTypeFilter, tierFilter, sharedFilter])
 
   // Get content match snippet
