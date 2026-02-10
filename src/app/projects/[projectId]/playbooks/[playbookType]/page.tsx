@@ -23,7 +23,7 @@ import TokenMonitor from '@/components/TokenMonitor'
 import CampaignRunner from '@/components/campaign/CampaignRunner'
 import SetupTab from '@/components/project/SetupTab'
 import ExportDataTab from '@/components/project/ExportDataTab'
-import NicheFinderPlaybookV2 from '@/components/niche-finder/NicheFinderPlaybookV2'
+import NicheFinderShell from '@/components/niche-finder/shell/NicheFinderShell'
 import SignalBasedOutreachPlaybook from '@/components/signal-outreach/SignalBasedOutreachPlaybook'
 import { VideoViralIAPlaybook } from '@/components/video-viral-ia'
 import ClientSidebar from '@/components/layout/ClientSidebar'
@@ -369,14 +369,14 @@ export default function PlaybookPage({
   const renderMainContent = () => {
     switch (playbookType) {
       case 'niche_finder':
-        return <NicheFinderPlaybookV2 projectId={params.projectId} />
+        return <NicheFinderShell projectId={params.projectId} />
       case 'signal_based_outreach':
         return <SignalBasedOutreachPlaybook projectId={params.projectId} />
       case 'video_viral_ia':
         return <VideoViralIAPlaybook projectId={params.projectId} />
       case 'competitor_analysis':
       case 'competitor-analysis':
-        return <CompetitorAnalysisView projectId={params.projectId} playbookId={playbookId} />
+        return <CompetitorAnalysisView projectId={params.projectId} playbookId={playbookId} clientName={project.client?.name} />
       case 'seo-seed-keywords':
       case 'linkedin-post-generator':
       case 'github-fork-to-crm':
