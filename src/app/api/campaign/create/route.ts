@@ -51,17 +51,34 @@ export async function POST(request: NextRequest) {
 
     // If no flow_config provided and we have a playbook_type, try to get it
     if (!campaignFlowConfig && playbook_type) {
+      // Try both underscore and hyphen formats for playbook_type
+      const typeVariants = [
+        playbook_type,
+        playbook_type.replace('_', '-'),
+        playbook_type.replace('-', '_'),
+      ]
+
       // First try to get from project_playbooks (stored when playbook was added to project)
-      const { data: projectPlaybook } = await supabase
-        .from('project_playbooks')
-        .select('config')
-        .eq('project_id', projectId)
-        .eq('playbook_type', playbook_type)
-        .single()
+      let projectPlaybook = null
+      for (const variant of typeVariants) {
+        const { data } = await supabase
+          .from('project_playbooks')
+          .select('config')
+          .eq('project_id', projectId)
+          .eq('playbook_type', variant)
+          .maybeSingle()
+
+        if (data?.config?.flow_config) {
+          projectPlaybook = data
+          console.log(`[campaign/create] Found project_playbooks with type: ${variant}`)
+          break
+        }
+      }
 
       if (projectPlaybook?.config?.flow_config) {
         // Use flow_config stored when playbook was added to project
         campaignFlowConfig = projectPlaybook.config.flow_config
+        console.log(`[campaign/create] Using flow_config from project_playbooks`)
       } else {
         // Fallback: get from playbook template directly
         const playbookConfig = getPlaybookConfig(playbook_type)
@@ -71,6 +88,7 @@ export async function POST(request: NextRequest) {
         if (playbookConfig?.flow_config) {
           // Use the actual flow_config with steps/prompts
           campaignFlowConfig = playbookConfig.flow_config
+          console.log(`[campaign/create] Using flow_config from base template (no project_playbooks found)`)
         }
       }
     }

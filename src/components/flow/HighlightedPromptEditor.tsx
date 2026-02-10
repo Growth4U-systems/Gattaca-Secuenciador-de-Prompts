@@ -67,6 +67,12 @@ export default function HighlightedPromptEditor({
     }
   }, [textareaRef, handleScroll])
 
+  // Force re-sync scroll position when value or segments change
+  // This prevents text misalignment issues when adding/removing variables
+  useEffect(() => {
+    handleScroll()
+  }, [value, segments.length, handleScroll])
+
   // Render highlighted content
   const renderHighlightedContent = () => {
     if (segments.length === 0) {
@@ -76,7 +82,10 @@ export default function HighlightedPromptEditor({
     }
 
     return segments.map((segment, index) => (
-      <HighlightedSegmentSpan key={index} segment={segment} />
+      <HighlightedSegmentSpan
+        key={`${index}-${segment.type}-${segment.text.slice(0, 10)}`}
+        segment={segment}
+      />
     ))
   }
 

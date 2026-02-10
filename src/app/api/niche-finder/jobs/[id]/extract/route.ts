@@ -236,6 +236,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       .select('*')
       .eq('job_id', jobId)
       .eq('status', 'scraped')
+      .neq('selected', false)  // Respect user URL selection (default true)
       .not('content_markdown', 'is', null)
       .limit(batchSize)
 
@@ -445,6 +446,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       .select('*', { count: 'exact', head: true })
       .eq('job_id', jobId)
       .eq('status', 'scraped')
+      .neq('selected', false)  // Respect user URL selection
 
     const hasMore = (remainingCount || 0) > 0
 

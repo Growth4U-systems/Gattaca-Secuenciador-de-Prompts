@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
 
     // Fallback for competitor_analysis playbook - use COMPETITOR_FLOW_STEPS
     if ((!flowConfig || !flowConfig.steps) && campaign.playbook_type === 'competitor_analysis') {
+      console.warn(`[run-step] Campaign ${campaignId} missing flow_config - using base template (this campaign may have been created incorrectly)`)
       flowConfig = { steps: COMPETITOR_FLOW_STEPS }
     }
 

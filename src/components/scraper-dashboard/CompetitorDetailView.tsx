@@ -81,6 +81,15 @@ interface CompetitorCampaign {
   status: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   step_outputs?: Record<string, any>
+  // flow_config contains the snapshot of playbook configuration at campaign creation
+  flow_config?: {
+    steps?: Array<{
+      id: string
+      prompt?: string
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      [key: string]: any
+    }>
+  }
 }
 
 interface Document {
@@ -1343,18 +1352,29 @@ export default function CompetitorDetailView({
               const status = analysisStepStatus[step.id]
               const StepIcon = step.icon
               const isExpanded = expandedSteps.has(step.id)
-              // Get saved config for this step from custom_variables
+              // Get saved config for this step from custom_variables (campaign-specific edits)
               const configKey = `${step.id}_config`
               const savedStepConfig = campaign.custom_variables?.[configKey] as { prompt?: string } | undefined
-              // DEBUG: Log what we're reading
+
+              // Get prompt from flow_config if available (from customized playbook snapshot)
+              const flowStepId = STEP_ID_MAPPING[step.id]
+              const flowStep = campaign.flow_config?.steps?.find(
+                (s: { id: string; prompt?: string }) => s.id === flowStepId
+              )
+
+              // DEBUG: Log prompt resolution
               console.log(`[PREVIEW DEBUG] Step ${step.id}:`, {
                 configKey,
                 hasSavedConfig: !!savedStepConfig,
-                savedPromptLength: savedStepConfig?.prompt?.length,
-                customVariablesKeys: Object.keys(campaign.custom_variables || {}),
+                flowStepFound: !!flowStep,
+                flowStepPromptLength: flowStep?.prompt?.length,
+                usingSource: savedStepConfig?.prompt ? 'campaign_edit' : flowStep?.prompt ? 'playbook_custom' : 'base_template'
               })
-              // Use saved prompt if available, otherwise fall back to default
-              const promptText = savedStepConfig?.prompt || ALL_PROMPTS[step.promptKey]
+
+              // Priority: campaign edit > playbook customization > base template
+              const promptText = savedStepConfig?.prompt
+                || flowStep?.prompt
+                || ALL_PROMPTS[step.promptKey]
               const promptVariables = extractPromptVariables(promptText)
 
               // Get matching documents for this step's required sources
