@@ -46,6 +46,7 @@ interface Document {
 export interface CompetitorAnalysisViewProps {
   projectId: string
   playbookId?: string
+  clientName?: string
 }
 
 // ============================================
