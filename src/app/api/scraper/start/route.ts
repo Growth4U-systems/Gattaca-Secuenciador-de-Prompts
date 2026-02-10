@@ -573,6 +573,7 @@ async function executeFirecrawlScrape(
       result_preview: [{ title: documentName, url }],
       completed_at: new Date().toISOString(),
       provider_metadata: {
+        ...((job.provider_metadata as Record<string, unknown>) || {}),
         firecrawl_metadata: result.data.metadata,
         document_id: doc?.id,
         mode: 'scrape',
@@ -672,11 +673,12 @@ async function executeFirecrawlCrawl(
       throw new Error(statusResult.error || 'Crawl failed');
     }
 
-    // Update job progress
+    // Update job progress (merge with existing metadata to preserve custom_metadata)
     await supabase
       .from('scraper_jobs')
       .update({
         provider_metadata: {
+          ...((job.provider_metadata as Record<string, unknown>) || {}),
           crawl_id: crawlId,
           status: statusResult.status,
           completed: statusResult.completed,
@@ -781,6 +783,7 @@ async function executeFirecrawlCrawl(
       })),
       completed_at: new Date().toISOString(),
       provider_metadata: {
+        ...((job.provider_metadata as Record<string, unknown>) || {}),
         crawl_id: crawlId,
         mode: 'crawl',
         document_id: doc?.id,
@@ -910,6 +913,7 @@ async function executeFirecrawlMap(
       result_preview: links.slice(0, 10).map(link => ({ title: link, url: link })),
       completed_at: new Date().toISOString(),
       provider_metadata: {
+        ...((job.provider_metadata as Record<string, unknown>) || {}),
         mode: 'map',
         document_id: doc?.id,
         urls_count: links.length,
@@ -1124,6 +1128,7 @@ async function executeCustomScraper(
         result_count: resultCount,
         completed_at: new Date().toISOString(),
         provider_metadata: {
+          ...((job.provider_metadata as Record<string, unknown>) || {}),
           document_id: doc?.id,
           edge_function: job.actor_id,
         },
@@ -1598,6 +1603,7 @@ async function saveMangoolsDocument(
       result_count: resultCount,
       completed_at: new Date().toISOString(),
       provider_metadata: {
+        ...((job.provider_metadata as Record<string, unknown>) || {}),
         document_id: doc?.id,
         ...metadata,
       },
@@ -2014,11 +2020,12 @@ async function executePhantombuster(
 
       console.log('[scraper/start] Phantombuster status:', outputData.containerStatus);
 
-      // Update job progress
+      // Update job progress (merge with existing metadata to preserve custom_metadata)
       await supabase
         .from('scraper_jobs')
         .update({
           provider_metadata: {
+            ...((job.provider_metadata as Record<string, unknown>) || {}),
             containerId,
             status: outputData.containerStatus,
           },
@@ -2119,6 +2126,7 @@ async function executePhantombuster(
         })),
         completed_at: new Date().toISOString(),
         provider_metadata: {
+          ...((job.provider_metadata as Record<string, unknown>) || {}),
           containerId,
           document_id: doc?.id,
           profiles_count: results.length,

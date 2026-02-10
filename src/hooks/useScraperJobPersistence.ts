@@ -90,6 +90,22 @@ export function useScraperJobPersistence({
   const storageKey = `${STORAGE_KEY_PREFIX}${keySuffix}`
   const historyKey = `${HISTORY_KEY_PREFIX}${keySuffix}`
 
+  // Clean up old-format localStorage keys (without campaignId) on first mount
+  // This prevents data from the old format leaking into any competitor view
+  const hasCleanedOldKeys = useRef(false)
+  useEffect(() => {
+    if (hasCleanedOldKeys.current || typeof window === 'undefined' || !campaignId) return
+    hasCleanedOldKeys.current = true
+    const oldStorageKey = `${STORAGE_KEY_PREFIX}${projectId}`
+    const oldHistoryKey = `${HISTORY_KEY_PREFIX}${projectId}`
+    if (localStorage.getItem(oldStorageKey)) {
+      localStorage.removeItem(oldStorageKey)
+    }
+    if (localStorage.getItem(oldHistoryKey)) {
+      localStorage.removeItem(oldHistoryKey)
+    }
+  }, [projectId, campaignId])
+
   // Reset recovery when campaignId changes (switching competitors)
   useEffect(() => {
     hasRecovered.current = false
