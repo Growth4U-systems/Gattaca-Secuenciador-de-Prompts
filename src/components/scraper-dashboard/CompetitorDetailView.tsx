@@ -752,14 +752,17 @@ export default function CompetitorDetailView({
     // Auto-inject post URLs for comment scrapers from parent scraper documents
     const dependency = getScraperDependency(sourceType)
     if (dependency && dependency.targetInputField !== 'username') {
-      // Find the parent posts document for this competitor
-      const parentDoc = documents.find(d =>
+      // Find ALL parent posts documents for this competitor (there may be multiple runs)
+      const parentDocs = documents.filter(d =>
         d.source_metadata?.source_type === dependency.dependsOn &&
         d.source_metadata?.competitor?.toLowerCase() === normalizedName
       )
 
-      if (parentDoc) {
-        const extractedUrls = dependency.urlExtractor(parentDoc)
+      if (parentDocs.length > 0) {
+        // Extract URLs from all documents and deduplicate
+        const allUrls = parentDocs.flatMap(doc => dependency.urlExtractor(doc))
+        const extractedUrls = Array.from(new Set(allUrls))
+
         if (extractedUrls.length > 0) {
           // Inject URLs in the format expected by the Apify actor
           if (dependency.urlAsObject) {
@@ -767,11 +770,11 @@ export default function CompetitorDetailView({
           } else {
             initialConfig[dependency.targetInputField] = extractedUrls
           }
-          console.log(`[handleRunScraper] Auto-injected ${extractedUrls.length} URLs from ${dependency.dependsOn} into ${dependency.targetInputField}`)
+          console.log(`[handleRunScraper] Auto-injected ${extractedUrls.length} URLs from ${parentDocs.length} ${dependency.dependsOn} doc(s) into ${dependency.targetInputField}`)
         } else {
           toast.warning(
             'Sin URLs de posts',
-            `El documento de ${dependency.dependsOn} existe pero no se pudieron extraer URLs. Revisa el contenido.`
+            `Los documentos de ${dependency.dependsOn} existen pero no se pudieron extraer URLs. Revisa el contenido.`
           )
         }
       } else {
