@@ -1,63 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import crypto from 'crypto';
+import { encryptAPIKey, decryptAPIKey } from '@/lib/encryption';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
-const ALGORITHM = 'aes-256-gcm';
-
 // Supported services (OpenRouter se configura desde el Header modal para ver créditos/consumo)
 const SUPPORTED_SERVICES = ['apify', 'firecrawl', 'serper', 'wavespeed', 'fal', 'blotato', 'dumpling'] as const;
 type ServiceName = (typeof SUPPORTED_SERVICES)[number];
-
-// ============================================
-// ENCRYPTION HELPERS
-// ============================================
-
-function encrypt(text: string): string {
-  if (!ENCRYPTION_KEY) {
-    throw new Error('ENCRYPTION_KEY not configured');
-  }
-
-  // Create a 32-byte key from the encryption key
-  const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-
-  let encrypted = cipher.update(text, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-
-  const authTag = cipher.getAuthTag();
-
-  // Return iv:authTag:encrypted
-  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
-}
-
-function decrypt(encryptedData: string): string {
-  if (!ENCRYPTION_KEY) {
-    throw new Error('ENCRYPTION_KEY not configured');
-  }
-
-  const parts = encryptedData.split(':');
-  if (parts.length !== 3) {
-    throw new Error('Invalid encrypted data format');
-  }
-
-  const [ivHex, authTagHex, encrypted] = parts;
-  const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
-  const iv = Buffer.from(ivHex, 'hex');
-  const authTag = Buffer.from(authTagHex, 'hex');
-
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(authTag);
-
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-
-  return decrypted;
-}
 
 function maskApiKey(key: string): string {
   if (key.length <= 8) {
@@ -96,7 +46,7 @@ export async function GET() {
     const maskedKeys = (keys || []).map((key) => {
       let maskedKey = '****';
       try {
-        const decrypted = decrypt(key.api_key_encrypted);
+        const decrypted = decryptAPIKey(key.api_key_encrypted);
         maskedKey = maskApiKey(decrypted);
       } catch {
         // If decryption fails, show error
@@ -161,8 +111,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid API key' }, { status: 400 });
     }
 
-    // Encrypt the API key
-    const encryptedKey = encrypt(api_key.trim());
+    // Encrypt the API key using the shared encryption module
+    const { encryptedKey } = encryptAPIKey(api_key.trim());
 
     // Upsert the key (insert or update)
     const { data, error } = await supabase
