@@ -1930,17 +1930,24 @@ export default function CompetitorDetailView({
                     <span>Error: {campaign.custom_variables.discovery_error}</span>
                     <span className="text-xs text-gray-400">(presiona Re-ejecutar)</span>
                   </span>
-                ) : campaign.custom_variables?.discovery_completed === 'true'
-                  ? `${campaign.custom_variables?.discovery_found_count || '0'} perfiles encontrados`
-                  : campaign.custom_variables?.discovery_completed === 'false'
+                ) : campaign.custom_variables?.discovery_completed === 'false'
                   ? (
                     <span className="flex items-center gap-1.5">
                       <Loader2 size={14} className="animate-spin text-purple-600" />
-                      <span>Buscando perfiles... ⏳</span>
+                      <span>Buscando perfiles...</span>
                       <span className="text-xs text-gray-400">(se actualiza automáticamente)</span>
                     </span>
                   )
-                  : 'Listo para buscar perfiles'}
+                  : (() => {
+                    const filledCount = SOCIAL_PLATFORMS.filter(p => {
+                      const url = editingProfiles[`${p.key}_url`]
+                      const username = editingProfiles[`${p.key}_username`]
+                      return (url && url.trim()) || (username && username.trim())
+                    }).length
+                    return filledCount > 0
+                      ? `${filledCount} de ${SOCIAL_PLATFORMS.length} perfiles configurados`
+                      : 'Sin perfiles configurados'
+                  })()}
               </p>
             </div>
             <ChevronDown
@@ -1992,30 +1999,31 @@ export default function CompetitorDetailView({
         </div>
 
         {!isProfilesSectionCollapsed && (
-          <div className="p-5 space-y-6">
-            <div className="grid md:grid-cols-2 gap-4">
+          <div className="p-4 space-y-4">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
               {SOCIAL_PLATFORMS.map(platform => {
               const urlKey = `${platform.key}_url`
               const usernameKey = `${platform.key}_username`
               const currentUrl = editingProfiles[urlKey] || ''
               const currentUsername = editingProfiles[usernameKey] || ''
+              const hasSomeValue = !!(currentUrl.trim() || currentUsername.trim())
               // Check if this specific platform was auto-discovered
               let discoveredPlatformsForProfile: string[] = []
               try {
                 const raw = campaign.custom_variables?.discovered_platforms
                 if (raw) discoveredPlatformsForProfile = JSON.parse(raw as string)
               } catch { /* ignore */ }
-              const wasDiscovered = discoveredPlatformsForProfile.includes(platform.key) && (currentUrl || currentUsername)
+              const wasDiscovered = discoveredPlatformsForProfile.includes(platform.key) && hasSomeValue
 
               return (
-                <div key={platform.key} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:border-indigo-300 transition-colors">
-                  <span className="text-2xl mt-1">{platform.icon}</span>
-                  <div className="flex-1 space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
+                <div key={platform.key} className={`flex items-start gap-2.5 p-2.5 border rounded-lg transition-colors ${hasSomeValue ? 'border-indigo-200 bg-indigo-50/30' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <span className="text-lg mt-0.5">{platform.icon}</span>
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
                       {platform.name}
                       {wasDiscovered && (
-                        <span className="ml-2 text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">
-                          Auto-detectado
+                        <span className="text-[10px] px-1.5 py-px bg-emerald-100 text-emerald-700 rounded-full">
+                          auto
                         </span>
                       )}
                     </label>
@@ -2026,8 +2034,8 @@ export default function CompetitorDetailView({
                         type="text"
                         value={currentUsername}
                         onChange={(e) => handleProfileChange(usernameKey, e.target.value)}
-                        placeholder={`Username (sin @)`}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                        placeholder="Username (sin @)"
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
                       />
                     )}
 
@@ -2036,8 +2044,8 @@ export default function CompetitorDetailView({
                       type="text"
                       value={currentUrl}
                       onChange={(e) => handleProfileChange(urlKey, e.target.value)}
-                      placeholder={`URL de ${platform.name} (opcional)`}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                      placeholder={platform.needsUsername ? 'URL (opcional)' : `URL o identificador`}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
                     />
                   </div>
                 </div>
