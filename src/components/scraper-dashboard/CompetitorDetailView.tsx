@@ -31,11 +31,10 @@ import {
   ExternalLink,
   RefreshCw,
   X,
-  Clock,
   AlertCircle,
   Trash2,
-  Activity,
   XCircle,
+  Clock,
   ChevronDown,
   ChevronRight,
   Code,
@@ -442,6 +441,7 @@ export default function CompetitorDetailView({
   const router = useRouter()
 
   const [showConfigModal, setShowConfigModal] = useState(false)
+  const [showScraperHistory, setShowScraperHistory] = useState(false)
   const [runningSteps, setRunningSteps] = useState<Set<string>>(new Set())
   // State to force re-render for elapsed time display
   const [, setTick] = useState(0)
@@ -1804,115 +1804,6 @@ export default function CompetitorDetailView({
 
       {/* Configuration status - compact info, no blocking banner */}
 
-      {/* Scraper Status Panel - Always visible */}
-      {(activeJobs.size > 0 || jobHistory.length > 0) && (
-        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Activity size={18} className="text-indigo-600" />
-              <h3 className="font-semibold text-gray-900">Estado de Scrapers</h3>
-            </div>
-            {activeJobs.size > 0 && (
-              <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
-                {activeJobs.size} activo{activeJobs.size > 1 ? 's' : ''}
-              </span>
-            )}
-          </div>
-
-          <div className="p-4 space-y-3">
-            {/* Active Jobs */}
-            {Array.from(activeJobs.values()).map((job) => {
-              const elapsedSeconds = Math.round((Date.now() - new Date(job.startedAt).getTime()) / 1000)
-              const elapsedFormatted = elapsedSeconds > 60
-                ? `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s`
-                : `${elapsedSeconds}s`
-
-              return (
-                <div key={job.jobId} className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Loader2 size={16} className="text-blue-600 animate-spin" />
-                      <span className="font-medium text-gray-900">{job.scraperName}</span>
-                    </div>
-                    <span className="text-xs text-blue-600 flex items-center gap-1">
-                      <Clock size={12} />
-                      {elapsedFormatted}
-                    </span>
-                  </div>
-                  {/* Indeterminate progress bar - moving stripe */}
-                  <div className="w-full h-2 bg-blue-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full w-1/3 bg-blue-600 rounded-full"
-                      style={{
-                        animation: 'indeterminate 1.2s ease-in-out infinite',
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs text-blue-600 mt-1">
-                    {job.status === 'processing' ? 'Procesando resultados...' : 'Extrayendo datos...'}
-                  </p>
-                </div>
-              )
-            })}
-
-            {/* Recent completed/failed jobs (last 5) */}
-            {jobHistory.slice(0, 5).map((job) => {
-              const isSuccess = job.status === 'completed'
-              const timeAgo = job.completedAt
-                ? formatTimeAgo(new Date(job.completedAt))
-                : formatTimeAgo(new Date(job.startedAt))
-
-              return (
-                <div
-                  key={job.jobId}
-                  className={`p-3 rounded-xl flex items-center justify-between ${
-                    isSuccess ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    {isSuccess ? (
-                      <CheckCircle size={16} className="text-green-600" />
-                    ) : (
-                      <XCircle size={16} className="text-red-600" />
-                    )}
-                    <span className={`font-medium ${isSuccess ? 'text-green-900' : 'text-red-900'}`}>
-                      {job.scraperName}
-                    </span>
-                    <span className={`text-xs ${isSuccess ? 'text-green-600' : 'text-red-600'}`}>
-                      {timeAgo}
-                    </span>
-                  </div>
-                  {isSuccess && job.documentId && (
-                    <button
-                      onClick={() => {
-                        // Find document by ID and open viewer
-                        const doc = documents.find(d => d.id === job.documentId)
-                        if (doc) {
-                          setViewingDoc(doc)
-                        } else {
-                          // Document not loaded yet, refresh and try again
-                          toast.info('Actualizando...', 'Cargando documentos')
-                          onRefresh()
-                        }
-                      }}
-                      className="text-xs px-2 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
-                    >
-                      <FileText size={12} />
-                      Ver documento
-                    </button>
-                  )}
-                  {!isSuccess && job.error && (
-                    <span className="text-xs text-red-600 max-w-[200px] truncate" title={job.error}>
-                      {job.error}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Perfiles Descubiertos Section */}
       <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -2082,29 +1973,47 @@ export default function CompetitorDetailView({
                 </p>
               </div>
             </div>
-            {totalScraperProgress.completed < totalScraperProgress.total && (
-              <button
-                onClick={handleRunAllScrapers}
-                disabled={runningAllScrapers}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
-                  runningAllScrapers
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                }`}
-              >
-                {runningAllScrapers ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Ejecutando...
-                  </>
-                ) : (
-                  <>
-                    <Play size={16} />
-                    Ejecutar todos
-                  </>
-                )}
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {jobHistory.length > 0 && (
+                <button
+                  onClick={() => setShowScraperHistory(!showScraperHistory)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors text-sm font-medium border ${
+                    showScraperHistory
+                      ? 'bg-gray-100 border-gray-300 text-gray-700'
+                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <Clock size={14} />
+                  Historial
+                  <span className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">
+                    {jobHistory.length}
+                  </span>
+                </button>
+              )}
+              {totalScraperProgress.completed < totalScraperProgress.total && (
+                <button
+                  onClick={handleRunAllScrapers}
+                  disabled={runningAllScrapers}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                    runningAllScrapers
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                  }`}
+                >
+                  {runningAllScrapers ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Ejecutando...
+                    </>
+                  ) : (
+                    <>
+                      <Play size={16} />
+                      Ejecutar todos
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="p-4 space-y-4 max-h-[500px] overflow-y-auto">
@@ -2220,6 +2129,65 @@ export default function CompetitorDetailView({
               )
             })}
           </div>
+
+          {/* Scraper History - collapsible */}
+          {showScraperHistory && jobHistory.length > 0 && (
+            <div className="border-t border-gray-100 p-4 space-y-2 bg-gray-50">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                Ejecuciones recientes
+              </h4>
+              {jobHistory.map((job) => {
+                const isSuccess = job.status === 'completed'
+                const timeAgo = job.completedAt
+                  ? formatTimeAgo(new Date(job.completedAt))
+                  : formatTimeAgo(new Date(job.startedAt))
+
+                return (
+                  <div
+                    key={job.jobId}
+                    className={`flex items-center justify-between py-2 px-3 rounded-lg text-sm ${
+                      isSuccess ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isSuccess ? (
+                        <CheckCircle size={14} className="text-green-500" />
+                      ) : (
+                        <XCircle size={14} className="text-red-500" />
+                      )}
+                      <span className={isSuccess ? 'text-green-800' : 'text-red-800'}>
+                        {job.scraperName}
+                      </span>
+                      <span className={`text-xs ${isSuccess ? 'text-green-500' : 'text-red-500'}`}>
+                        {timeAgo}
+                      </span>
+                    </div>
+                    {isSuccess && job.documentId && (
+                      <button
+                        onClick={() => {
+                          const doc = documents.find(d => d.id === job.documentId)
+                          if (doc) {
+                            setViewingDoc(doc)
+                          } else {
+                            onRefresh()
+                          }
+                        }}
+                        className="text-xs px-2 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
+                      >
+                        <FileText size={12} />
+                        Ver
+                      </button>
+                    )}
+                    {!isSuccess && job.error && (
+                      <span className="text-xs text-red-500 max-w-[180px] truncate" title={job.error}>
+                        {job.error}
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Right: Analysis Flow */}
