@@ -110,7 +110,7 @@ interface Document {
   }
 }
 
-// Custom dropdown that survives parent re-renders (unlike native <select>)
+// Custom dropdown using fixed positioning to escape overflow-hidden ancestors
 function DocumentDropdown({
   docs,
   selectedDocId,
@@ -121,18 +121,37 @@ function DocumentDropdown({
   onSelect: (docId: string) => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 })
 
-  // Close on outside click
+  // Calculate menu position from button's viewport coords
+  useEffect(() => {
+    if (!isOpen || !buttonRef.current) return
+    const rect = buttonRef.current.getBoundingClientRect()
+    setMenuPos({
+      top: rect.bottom + 4,
+      left: Math.max(8, rect.right - 240),
+    })
+  }, [isOpen])
+
+  // Close on outside click or scroll
   useEffect(() => {
     if (!isOpen) return
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setIsOpen(false)
-      }
+    const handleClose = (e: MouseEvent) => {
+      if (
+        buttonRef.current?.contains(e.target as Node) ||
+        menuRef.current?.contains(e.target as Node)
+      ) return
+      setIsOpen(false)
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    const handleScroll = () => setIsOpen(false)
+    document.addEventListener('mousedown', handleClose)
+    window.addEventListener('scroll', handleScroll, true)
+    return () => {
+      document.removeEventListener('mousedown', handleClose)
+      window.removeEventListener('scroll', handleScroll, true)
+    }
   }, [isOpen])
 
   const selectedDoc = docs.find(d => d.id === selectedDocId)
@@ -141,17 +160,22 @@ function DocumentDropdown({
     : 'Sin documento'
 
   return (
-    <div ref={ref} className="relative" onClick={e => e.stopPropagation()}>
+    <>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setIsOpen(prev => !prev)}
-        className="text-xs px-2 py-1 border border-gray-200 rounded bg-white text-gray-700 max-w-[200px] truncate hover:border-indigo-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer flex items-center gap-1"
+        onClick={(e) => { e.stopPropagation(); setIsOpen(prev => !prev) }}
+        className="text-xs px-2 py-1 border border-gray-200 rounded bg-white text-gray-700 max-w-[200px] hover:border-indigo-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer flex items-center gap-1"
       >
         <span className="truncate">{label}</span>
         <ChevronDown size={10} className={`flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[220px] max-h-[200px] overflow-y-auto">
+        <div
+          ref={menuRef}
+          className="fixed z-[9999] bg-white border border-gray-200 rounded-lg shadow-xl min-w-[240px] max-h-[200px] overflow-y-auto"
+          style={{ top: menuPos.top, left: menuPos.left }}
+        >
           <button
             type="button"
             onClick={() => { onSelect(''); setIsOpen(false) }}
@@ -171,7 +195,7 @@ function DocumentDropdown({
           ))}
         </div>
       )}
-    </div>
+    </>
   )
 }
 
