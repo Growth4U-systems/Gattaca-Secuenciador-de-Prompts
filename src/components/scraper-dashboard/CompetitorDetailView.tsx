@@ -494,6 +494,7 @@ export default function CompetitorDetailView({
     trackJob,
   } = useScraperJobPersistence({
     projectId,
+    campaignId: campaign.id,
     onJobCompleted: handleJobCompleted,
     onJobFailed: handleJobFailed,
   })
