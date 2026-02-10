@@ -45,6 +45,17 @@ import {
   Eye,
   Copy,
 } from 'lucide-react'
+import {
+  FaInstagram,
+  FaFacebook,
+  FaLinkedin,
+  FaYoutube,
+  FaTiktok,
+  FaXTwitter,
+  FaAppStoreIos,
+  FaGooglePlay,
+} from 'react-icons/fa6'
+import { SiTrustpilot, SiG2 } from 'react-icons/si'
 import { useToast } from '@/components/ui'
 import {
   STEP_DOCUMENT_REQUIREMENTS,
@@ -1388,18 +1399,18 @@ export default function CompetitorDetailView({
   // ============================================
 
   // Social platforms for discovery
-  const SOCIAL_PLATFORMS = [
-    { key: 'instagram', name: 'Instagram', icon: '📸', needsUsername: true },
-    { key: 'facebook', name: 'Facebook', icon: '📘', needsUsername: false },
-    { key: 'linkedin', name: 'LinkedIn', icon: '💼', needsUsername: false },
-    { key: 'youtube', name: 'YouTube', icon: '🎬', needsUsername: false },
-    { key: 'tiktok', name: 'TikTok', icon: '🎵', needsUsername: true },
-    { key: 'twitter', name: 'Twitter/X', icon: '🐦', needsUsername: false },
-    { key: 'appstore', name: 'App Store', icon: '📱', needsUsername: false },
-    { key: 'playstore', name: 'Play Store', icon: '🤖', needsUsername: false },
-    { key: 'trustpilot', name: 'Trustpilot', icon: '⭐', needsUsername: false },
-    { key: 'g2', name: 'G2', icon: '🏆', needsUsername: false },
-    { key: 'capterra', name: 'Capterra', icon: '📊', needsUsername: false },
+  const SOCIAL_PLATFORMS: { key: string; name: string; icon: React.ReactNode; needsUsername: boolean }[] = [
+    { key: 'instagram', name: 'Instagram', icon: <FaInstagram className="text-[#E4405F]" />, needsUsername: true },
+    { key: 'facebook', name: 'Facebook', icon: <FaFacebook className="text-[#1877F2]" />, needsUsername: false },
+    { key: 'linkedin', name: 'LinkedIn', icon: <FaLinkedin className="text-[#0A66C2]" />, needsUsername: false },
+    { key: 'youtube', name: 'YouTube', icon: <FaYoutube className="text-[#FF0000]" />, needsUsername: false },
+    { key: 'tiktok', name: 'TikTok', icon: <FaTiktok className="text-black" />, needsUsername: true },
+    { key: 'twitter', name: 'Twitter/X', icon: <FaXTwitter className="text-black" />, needsUsername: false },
+    { key: 'appstore', name: 'App Store', icon: <FaAppStoreIos className="text-[#0D96F6]" />, needsUsername: false },
+    { key: 'playstore', name: 'Play Store', icon: <FaGooglePlay className="text-[#414141]" />, needsUsername: false },
+    { key: 'trustpilot', name: 'Trustpilot', icon: <SiTrustpilot className="text-[#00B67A]" />, needsUsername: false },
+    { key: 'g2', name: 'G2', icon: <SiG2 className="text-[#FF492C]" />, needsUsername: false },
+    { key: 'capterra', name: 'Capterra', icon: <svg viewBox="0 0 24 24" fill="#FF9D28" className="w-[1em] h-[1em]"><path d="M12 2L2 19.5h20L12 2zm0 4.5l6.5 11.5h-13L12 6.5z"/></svg>, needsUsername: false },
   ]
 
   // State for editing profiles
@@ -1908,7 +1919,7 @@ export default function CompetitorDetailView({
 
               return (
                 <div key={platform.key} className={`flex items-start gap-2.5 p-2.5 border rounded-lg transition-colors ${hasSomeValue ? 'border-indigo-200 bg-indigo-50/30' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <span className="text-lg mt-0.5">{platform.icon}</span>
+                  <span className="text-xl mt-1 shrink-0">{platform.icon}</span>
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
                       {platform.name}
