@@ -76,6 +76,21 @@ export interface DiscoveryResults {
   verifiedCount: number
   likelyCount: number
   notFoundCount: number
+  // Optional metadata extracted during discovery
+  metadata?: {
+    description: string
+    industry: string
+    targetAudience: string
+    confidence: string
+  }
+}
+
+// Competitor metadata extracted via AI
+export interface CompetitorMetadata {
+  description: string
+  industry: string
+  targetAudience: string
+  confidence: string
 }
 
 // Discovery request
