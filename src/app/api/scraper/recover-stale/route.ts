@@ -88,19 +88,69 @@ export async function POST(request: NextRequest) {
     }
 
     // Filter to only jobs the user owns
-    const userJobs = (staleJobs || []).filter(
+    const userStaleJobs = (staleJobs || []).filter(
       (job: any) => job.projects?.user_id === session.user.id
     );
 
-    if (userJobs.length === 0) {
+    // ============================================
+    // PHASE 2: Find "completed" jobs missing their document
+    // ============================================
+
+    let completedMissingQuery = supabase
+      .from('scraper_jobs')
+      .select('*, projects!inner(user_id)')
+      .eq('status', 'completed')
+      .eq('provider', 'apify')
+      .not('actor_run_id', 'is', null);
+
+    if (projectId) {
+      completedMissingQuery = completedMissingQuery.eq('project_id', projectId);
+    }
+
+    const { data: completedJobs } = await completedMissingQuery;
+
+    const userCompletedJobs = (completedJobs || []).filter(
+      (job: any) => job.projects?.user_id === session.user.id
+    );
+
+    // Check which completed jobs are actually missing their document
+    const orphanedJobs: typeof userCompletedJobs = [];
+    const unlinkedJobs: Array<{ job: any; docId: string }> = [];
+
+    for (const job of userCompletedJobs) {
+      const meta = (job.provider_metadata as Record<string, unknown>) || {};
+      // If already has document_id, check it exists
+      if (meta.document_id) continue;
+
+      // Check if document exists by source_job_id
+      const { data: existingDoc } = await supabase
+        .from('knowledge_base_docs')
+        .select('id')
+        .eq('source_job_id', job.id)
+        .maybeSingle();
+
+      if (existingDoc) {
+        // Document exists but not linked in provider_metadata
+        unlinkedJobs.push({ job, docId: existingDoc.id });
+      } else {
+        // Document truly missing - needs recovery from Apify
+        orphanedJobs.push(job);
+      }
+    }
+
+    // Combine all jobs that need work
+    const allJobsToProcess = userStaleJobs.length + orphanedJobs.length + unlinkedJobs.length;
+
+    if (allJobsToProcess === 0) {
       return NextResponse.json({
         message: 'No stale jobs found',
         recovered: 0,
         failed: 0,
+        linked: 0,
       });
     }
 
-    console.log(`[recover-stale] Found ${userJobs.length} stale jobs to check`);
+    console.log(`[recover-stale] Found ${userStaleJobs.length} stale, ${orphanedJobs.length} orphaned, ${unlinkedJobs.length} unlinked jobs`);
 
     // Get Apify token
     const apifyToken = await getUserApiKey({
@@ -109,22 +159,47 @@ export async function POST(request: NextRequest) {
       supabase,
     });
 
-    if (!apifyToken) {
-      return NextResponse.json({
-        message: 'Apify API key not configured',
-        recovered: 0,
-        failed: 0,
-        skipped: userJobs.length,
-      });
-    }
-
     const adminSupabase = createAdminClient();
     let recovered = 0;
     let failed = 0;
+    let linked = 0;
     const results: Array<{ jobId: string; status: string; message: string }> = [];
 
-    // Process each stale job
-    for (const job of userJobs as ScraperJob[]) {
+    // ============================================
+    // Fix unlinked jobs first (quick, no Apify call needed)
+    // ============================================
+
+    for (const { job, docId } of unlinkedJobs) {
+      const meta = (job.provider_metadata as Record<string, unknown>) || {};
+      await adminSupabase
+        .from('scraper_jobs')
+        .update({
+          provider_metadata: { ...meta, document_id: docId },
+        })
+        .eq('id', job.id);
+      linked++;
+      results.push({
+        jobId: job.id,
+        status: 'linked',
+        message: `Documento existente vinculado (${docId.slice(0, 8)})`,
+      });
+    }
+
+    if (!apifyToken) {
+      return NextResponse.json({
+        message: `Linked ${linked} jobs. Apify API key not configured for recovery.`,
+        recovered: 0,
+        failed: 0,
+        linked,
+        skipped: userStaleJobs.length + orphanedJobs.length,
+      });
+    }
+
+    // Merge stale + orphaned for Apify recovery
+    const jobsNeedingApify = [...(userStaleJobs as ScraperJob[]), ...(orphanedJobs as ScraperJob[])];
+
+    // Process each job needing Apify recovery
+    for (const job of jobsNeedingApify) {
       try {
         console.log(`[recover-stale] Checking job ${job.id} (run: ${job.actor_run_id})`);
 
@@ -228,9 +303,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      message: `Procesados ${userJobs.length} jobs`,
+      message: `Procesados ${allJobsToProcess} jobs (${linked} vinculados, ${recovered} recuperados, ${failed} fallidos)`,
       recovered,
       failed,
+      linked,
       results,
     });
   } catch (error) {
@@ -252,21 +328,63 @@ async function fetchAndSaveResults(
   datasetId: string,
   apifyToken: string
 ): Promise<number> {
+  // Check if document already exists (maybe webhook/poll saved it in the meantime)
+  const { data: existingDoc } = await supabase
+    .from('knowledge_base_docs')
+    .select('id')
+    .eq('source_job_id', job.id)
+    .maybeSingle();
+
+  if (existingDoc) {
+    console.log(`[recover-stale] Document already exists for job ${job.id} (id: ${existingDoc.id})`);
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        provider_metadata: {
+          ...((job.provider_metadata as Record<string, unknown>) || {}),
+          document_id: existingDoc.id,
+        },
+      })
+      .eq('id', job.id);
+    return 0;
+  }
+
   // Update status to processing
   await supabase.from('scraper_jobs').update({ status: 'processing' }).eq('id', job.id);
 
-  // Fetch dataset items
+  // Fetch dataset items (paginated)
   console.log(`[recover-stale] Fetching dataset ${datasetId}...`);
-  const datasetResponse = await fetch(
-    `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apifyToken}&limit=5000`
-  );
+  let items: ApifyDatasetItem[] = [];
+  let offset = 0;
+  const fetchLimit = 1000;
 
-  if (!datasetResponse.ok) {
-    throw new Error(`Failed to fetch dataset: ${datasetResponse.status}`);
+  while (true) {
+    const datasetResponse = await fetch(
+      `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apifyToken}&limit=${fetchLimit}&offset=${offset}`
+    );
+
+    if (!datasetResponse.ok) {
+      throw new Error(`Failed to fetch dataset: ${datasetResponse.status}`);
+    }
+
+    const batch = (await datasetResponse.json()) as ApifyDatasetItem[];
+
+    if (!batch || batch.length === 0) {
+      break;
+    }
+
+    items = items.concat(batch);
+    offset += batch.length;
+
+    if (items.length >= 10000) {
+      console.warn('[recover-stale] Reached 10000 items limit');
+      break;
+    }
   }
 
-  const items = (await datasetResponse.json()) as ApifyDatasetItem[];
-  console.log(`[recover-stale] Fetched ${items?.length || 0} items`);
+  console.log(`[recover-stale] Fetched ${items.length} items`);
 
   if (!items || items.length === 0) {
     await supabase
@@ -357,7 +475,7 @@ async function fetchAndSaveResults(
     });
   }
 
-  // Update job as completed
+  // Update job as completed with document_id
   await supabase
     .from('scraper_jobs')
     .update({
@@ -365,6 +483,10 @@ async function fetchAndSaveResults(
       result_count: items.length,
       result_preview: items.slice(0, 5),
       completed_at: new Date().toISOString(),
+      provider_metadata: {
+        ...((job.provider_metadata as Record<string, unknown>) || {}),
+        document_id: insertedDoc?.id,
+      },
     })
     .eq('id', job.id);
 

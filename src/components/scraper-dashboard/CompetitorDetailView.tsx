@@ -1901,15 +1901,14 @@ export default function CompetitorDetailView({
         </div>
 
         {!isProfilesSectionCollapsed && (
-          <div className="p-4 space-y-4">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="px-5 py-3">
+            <div className="divide-y divide-gray-100">
               {SOCIAL_PLATFORMS.map(platform => {
               const urlKey = `${platform.key}_url`
               const usernameKey = `${platform.key}_username`
               const currentUrl = editingProfiles[urlKey] || ''
               const currentUsername = editingProfiles[usernameKey] || ''
               const hasSomeValue = !!(currentUrl.trim() || currentUsername.trim())
-              // Check if this specific platform was auto-discovered
               let discoveredPlatformsForProfile: string[] = []
               try {
                 const raw = campaign.custom_variables?.discovered_platforms
@@ -1918,36 +1917,32 @@ export default function CompetitorDetailView({
               const wasDiscovered = discoveredPlatformsForProfile.includes(platform.key) && hasSomeValue
 
               return (
-                <div key={platform.key} className={`flex items-start gap-2.5 p-2.5 border rounded-lg transition-colors ${hasSomeValue ? 'border-indigo-200 bg-indigo-50/30' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <span className="text-xl mt-1 shrink-0">{platform.icon}</span>
-                  <div className="flex-1 min-w-0 space-y-1.5">
-                    <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
-                      {platform.name}
-                      {wasDiscovered && (
-                        <span className="text-[10px] px-1.5 py-px bg-emerald-100 text-emerald-700 rounded-full">
-                          auto
-                        </span>
-                      )}
-                    </label>
-
-                    {/* Username field for Instagram and TikTok */}
+                <div key={platform.key} className="flex items-center gap-3 py-2.5 group">
+                  <span className="text-lg shrink-0 w-6 flex justify-center">{platform.icon}</span>
+                  <span className={`text-sm font-medium w-24 shrink-0 ${hasSomeValue ? 'text-gray-900' : 'text-gray-400'}`}>
+                    {platform.name}
+                    {wasDiscovered && (
+                      <span className="ml-1.5 text-[10px] px-1.5 py-px bg-emerald-100 text-emerald-700 rounded-full align-middle">
+                        auto
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex-1 flex items-center gap-2 min-w-0">
                     {platform.needsUsername && (
                       <input
                         type="text"
                         value={currentUsername}
                         onChange={(e) => handleProfileChange(usernameKey, e.target.value)}
-                        placeholder="Username (sin @)"
-                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                        placeholder="@username"
+                        className={`w-36 shrink-0 px-2.5 py-1 border rounded-md text-sm transition-colors focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${hasSomeValue ? 'border-indigo-300 bg-indigo-50/40' : 'border-gray-200 bg-gray-50 group-hover:border-gray-300'}`}
                       />
                     )}
-
-                    {/* URL field for all platforms */}
                     <input
                       type="text"
                       value={currentUrl}
                       onChange={(e) => handleProfileChange(urlKey, e.target.value)}
-                      placeholder={platform.needsUsername ? 'URL (opcional)' : `URL o identificador`}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                      placeholder={platform.needsUsername ? 'URL (opcional)' : 'URL o identificador'}
+                      className={`flex-1 min-w-0 px-2.5 py-1 border rounded-md text-sm transition-colors focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${hasSomeValue ? 'border-indigo-300 bg-indigo-50/40' : 'border-gray-200 bg-gray-50 group-hover:border-gray-300'}`}
                     />
                   </div>
                 </div>
@@ -1956,14 +1951,11 @@ export default function CompetitorDetailView({
           </div>
 
           {campaign.custom_variables?.discovery_completed !== 'true' && (
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
-              <Loader2 size={16} className="text-blue-600 animate-spin mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm text-blue-800 font-medium">Descubriendo perfiles...</p>
-                <p className="text-xs text-blue-600 mt-1">
-                  El sistema está buscando perfiles de redes sociales. Puedes continuar trabajando y los resultados se mostrarán aquí cuando estén listos.
-                </p>
-              </div>
+            <div className="mx-5 mb-3 p-2.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2">
+              <Loader2 size={14} className="text-blue-600 animate-spin shrink-0" />
+              <p className="text-xs text-blue-700">
+                Buscando perfiles de redes sociales... Los resultados aparecerán automáticamente.
+              </p>
             </div>
           )}
           </div>
