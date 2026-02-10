@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Trash2, Link2, Search, Filter, FolderOpen, X, Edit2, Check, Loader2, Tag, ChevronDown, ChevronRight, Maximize2, History, FolderInput, Plus } from 'lucide-react'
+import { Trash2, Link2, Search, Filter, FolderOpen, X, Edit2, Check, Loader2, Tag, ChevronDown, ChevronRight, Maximize2, History, FolderInput, Plus, Users } from 'lucide-react'
 import { DocCategory } from '@/types/database.types'
 import { formatTokenCount } from '@/lib/supabase'
 import { useModal } from '@/components/ui'
@@ -49,6 +49,7 @@ interface DocumentListProps {
   onMoveToFolder?: (docId: string, folder: string | null) => Promise<void>
   availableFolders?: string[]
   showContextLakeFilters?: boolean
+  groupByCompetitor?: boolean
 }
 
 const CATEGORY_STYLES: Record<string, { bg: string; text: string; icon: string }> = {
@@ -86,6 +87,7 @@ export default function DocumentList({
   onMoveToFolder,
   availableFolders = [],
   showContextLakeFilters = false,
+  groupByCompetitor = false,
 }: DocumentListProps) {
   const modal = useModal()
 
@@ -122,6 +124,18 @@ export default function DocumentList({
   const [movingToFolder, setMovingToFolder] = useState(false)
   const [newFolderInput, setNewFolderInput] = useState('')
   const [showNewFolderInput, setShowNewFolderInput] = useState(false)
+
+  // State for competitor group expansion
+  const [expandedCompetitors, setExpandedCompetitors] = useState<Set<string>>(new Set())
+
+  const toggleCompetitorGroup = (name: string) => {
+    setExpandedCompetitors(prev => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
 
   // Get unique categories
   const categories = useMemo(() => {
@@ -200,6 +214,19 @@ export default function DocumentList({
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
   }, [documents, searchQuery, searchInContent, categoryFilter, tagFilter, assignmentFilter, sourceTypeFilter, tierFilter, sharedFilter])
+
+  // Group documents by competitor name (tags[0]) when groupByCompetitor is enabled
+  const competitorGroups = useMemo(() => {
+    if (!groupByCompetitor) return null
+    const groups: Record<string, typeof filteredDocs> = {}
+    filteredDocs.forEach(doc => {
+      const name = doc.tags?.[0] || 'Sin competidor'
+      if (!groups[name]) groups[name] = []
+      groups[name].push(doc)
+    })
+    // Sort group keys alphabetically
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
+  }, [groupByCompetitor, filteredDocs])
 
   // Get content match snippet
   const getContentMatchSnippet = (content: string | null | undefined, query: string): string | null => {
@@ -436,6 +463,155 @@ export default function DocumentList({
       </div>
     )
   }
+
+  // Render document row inner content (shared between flat and grouped views)
+  const renderDocRow = (doc: Document, isExpanded: boolean, contentType: string | null) => (
+    <>
+      {/* Main row - single line layout */}
+      <div
+        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer"
+        onClick={() => toggleExpand(doc.id)}
+      >
+        <input type="checkbox" checked={selectedDocs.has(doc.id)} onChange={() => {}} onClick={(e) => toggleDocSelection(doc.id, e)} className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 flex-shrink-0 cursor-pointer" />
+        <div className="flex-shrink-0 text-gray-400">{isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</div>
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          {editingDocId === doc.id ? (
+            <div className="flex items-center gap-2 flex-1" onClick={(e) => e.stopPropagation()}>
+              <input type="text" value={editingName} onChange={(e) => setEditingName(e.target.value)} onKeyDown={(e) => handleEditKeyDown(e, doc.id)} className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900" autoFocus disabled={savingName} />
+              <button onClick={() => handleSaveName(doc.id)} disabled={savingName || !editingName.trim()} className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50 disabled:cursor-not-allowed" title="Guardar">{savingName ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}</button>
+              <button onClick={handleCancelEdit} disabled={savingName} className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50" title="Cancelar"><X size={14} /></button>
+            </div>
+          ) : (
+            <>
+              <h3 className="font-medium text-sm text-gray-900 truncate group-hover:text-blue-600 transition-colors">{doc.filename}</h3>
+              <DocumentNameValidationBadge filename={doc.filename} size="xs" />
+              {onRename && <button onClick={(e) => { e.stopPropagation(); handleStartEdit(doc) }} className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded opacity-0 group-hover:opacity-100 transition-all flex-shrink-0" title="Editar nombre"><Edit2 size={12} /></button>}
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {doc.isShared && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-600" title="Documento compartido del cliente">🔗</span>}
+          {doc.tier && onTierChange ? (
+            <select value={doc.tier} onChange={async (e) => { e.stopPropagation(); await onTierChange(doc.id, e.target.value as DocumentTier) }} onClick={(e) => e.stopPropagation()} className={`px-1.5 py-0.5 rounded text-[10px] font-medium border-0 cursor-pointer ${TIER_STYLES[doc.tier as DocumentTier]?.bg || 'bg-gray-50'} ${TIER_STYLES[doc.tier as DocumentTier]?.text || 'text-gray-600'}`} title={TIER_STYLES[doc.tier as DocumentTier]?.description}>
+              <option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option>
+            </select>
+          ) : doc.tier ? (
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${TIER_STYLES[doc.tier as DocumentTier]?.bg || 'bg-gray-50'} ${TIER_STYLES[doc.tier as DocumentTier]?.text || 'text-gray-600'}`} title={TIER_STYLES[doc.tier as DocumentTier]?.description}>{doc.tier}</span>
+          ) : null}
+          <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.bg || 'bg-gray-50') : 'bg-gray-50'} ${doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.text || 'text-gray-600') : 'text-gray-600'}`} title={`Origen: ${doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.label || doc.source_type) : 'Importado'}`}>
+            <span>{doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.icon || '📥') : '📥'}</span>
+            {doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.label || doc.source_type) : 'Importado'}
+          </span>
+          {doc.version_count && doc.version_count > 1 && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700" title={`${doc.version_count} versiones disponibles`}><History size={10} />v{doc.version_count}</span>}
+          {getCategoryBadge(doc.category)}
+          {doc.token_count && <span className="text-xs text-gray-400 whitespace-nowrap">{formatTokenCount(doc.token_count)}</span>}
+        </div>
+        {doc.tags && doc.tags.length > 0 && (
+          <div className="hidden sm:flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            {doc.tags.slice(0, 3).map((tag, idx) => (<button key={idx} onClick={() => setTagFilter(tag)} className={`px-1.5 py-0.5 text-[10px] rounded-full transition-colors ${tagFilter === tag ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'}`} title={`Filtrar por "${tag}"`}>{tag}</button>))}
+            {doc.tags.length > 3 && <span className="text-[10px] text-gray-400">+{doc.tags.length - 3}</span>}
+          </div>
+        )}
+        {campaigns.length > 0 && onCampaignChange && (
+          <div className="hidden md:flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            <Link2 size={12} className="text-gray-300" />
+            <select value={doc.campaign_id || ''} onChange={(e) => handleCampaignChange(doc.id, e.target.value)} disabled={updatingDoc === doc.id} className="text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 bg-white focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 max-w-[180px] truncate">
+              <option value="">Documento global (todas las campañas)</option>
+              {campaigns.map(campaign => (<option key={campaign.id} value={campaign.id}>{campaign.ecp_name}</option>))}
+            </select>
+            {updatingDoc === doc.id && <Loader2 size={12} className="text-gray-400 animate-spin" />}
+          </div>
+        )}
+        <div className="flex items-center gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+          {onMoveToFolder && (
+            <div className="relative">
+              <button onClick={() => setFolderMenuDocId(folderMenuDocId === doc.id ? null : doc.id)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Mover a carpeta"><FolderInput size={16} /></button>
+              {folderMenuDocId === doc.id && (
+                <div className="absolute right-0 top-8 z-50 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2">
+                  <div className="px-3 py-1.5 text-xs font-medium text-gray-500 border-b border-gray-100 mb-1">Mover a carpeta</div>
+                  {doc.folder && <div className="px-3 py-1 text-xs text-gray-400 italic">Actual: {doc.folder}</div>}
+                  {doc.folder && <button onClick={() => handleMoveToFolder(doc.id, null)} disabled={movingToFolder} className="w-full px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"><X size={14} className="text-gray-400" /> Sin carpeta</button>}
+                  {availableFolders.filter(f => f !== doc.folder).map(folder => (<button key={folder} onClick={() => handleMoveToFolder(doc.id, folder)} disabled={movingToFolder} className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 flex items-center gap-2 disabled:opacity-50"><FolderOpen size={14} className="text-indigo-500" /> {folder}</button>))}
+                  {showNewFolderInput ? (
+                    <div className="px-2 py-2 border-t border-gray-100 mt-1">
+                      <input type="text" value={newFolderInput} onChange={(e) => setNewFolderInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFolderAndMove(doc.id); if (e.key === 'Escape') { setShowNewFolderInput(false); setNewFolderInput('') } }} placeholder="Nombre de carpeta..." className="w-full px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" autoFocus />
+                      <div className="flex gap-1 mt-1.5">
+                        <button onClick={() => handleCreateFolderAndMove(doc.id)} disabled={!newFolderInput.trim() || movingToFolder} className="flex-1 px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">{movingToFolder ? 'Moviendo...' : 'Crear y mover'}</button>
+                        <button onClick={() => { setShowNewFolderInput(false); setNewFolderInput('') }} className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded">Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => setShowNewFolderInput(true)} className="w-full px-3 py-2 text-left text-sm text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 border-t border-gray-100 mt-1"><Plus size={14} /> Nueva carpeta...</button>
+                  )}
+                  <button onClick={() => { setFolderMenuDocId(null); setShowNewFolderInput(false); setNewFolderInput('') }} className="w-full px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-100 mt-1">Cerrar</button>
+                </div>
+              )}
+            </div>
+          )}
+          <button onClick={() => onView(doc)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Abrir en pantalla completa"><Maximize2 size={16} /></button>
+          <button onClick={async () => { const confirmed = await modal.confirm({ title: 'Eliminar documento', message: `¿Eliminar "${doc.filename}"? Esta acción no se puede deshacer.`, confirmText: 'Eliminar', cancelText: 'Cancelar', variant: 'danger' }); if (confirmed) onDelete(doc.id) }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar"><Trash2 size={16} /></button>
+        </div>
+      </div>
+      {/* Description row */}
+      {editingDescDocId === doc.id ? (
+        <div className="mt-2 ml-8 px-3 pb-3 space-y-1.5">
+          <textarea value={editingDescription} onChange={(e) => setEditingDescription(e.target.value)} onKeyDown={(e) => handleDescKeyDown(e, doc.id)} placeholder="Describe el contenido del documento..." rows={2} className="w-full px-2 py-1.5 text-xs border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 resize-none" autoFocus disabled={savingDescription} />
+          <div className="flex items-center gap-2">
+            <button onClick={() => handleSaveDescription(doc.id)} disabled={savingDescription} className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1">{savingDescription ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Guardar</button>
+            <button onClick={handleCancelDescEdit} disabled={savingDescription} className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded disabled:opacity-50">Cancelar</button>
+          </div>
+        </div>
+      ) : doc.description && !isExpanded ? (
+        <div className="ml-8 px-3 pb-2 group/desc">
+          <p className="text-xs text-gray-500 truncate max-w-2xl">
+            {doc.description}
+            {onUpdateDescription && <button onClick={() => handleStartDescEdit(doc)} className="ml-1.5 text-gray-400 hover:text-blue-600 opacity-0 group-hover/desc:opacity-100 transition-opacity" title="Editar descripcion"><Edit2 size={10} className="inline" /></button>}
+          </p>
+        </div>
+      ) : onUpdateDescription && !isExpanded ? (
+        <button onClick={() => handleStartDescEdit(doc)} className="ml-8 px-3 pb-2 text-[10px] text-gray-400 hover:text-blue-600">+ Descripción</button>
+      ) : null}
+      {/* Content match snippet */}
+      {searchInContent && searchQuery && !isExpanded && (() => {
+        const snippet = getContentMatchSnippet(doc.extracted_content, searchQuery)
+        if (!snippet) return null
+        const parts = snippet.split(new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
+        return (
+          <div className="mx-3 mb-2 ml-8 p-1.5 bg-yellow-50 border border-yellow-100 rounded-lg text-xs text-gray-600">
+            <span className="text-yellow-600 font-medium mr-1">Coincidencia:</span>
+            {parts.map((part, i) => part.toLowerCase() === searchQuery.toLowerCase() ? <mark key={i} className="bg-yellow-200 px-0.5 rounded">{part}</mark> : <span key={i}>{part}</span>)}
+          </div>
+        )
+      })()}
+      {/* Mobile: Tags & Campaign */}
+      {!isExpanded && (
+        <>
+          <div className="sm:hidden px-3 pb-2 ml-5 flex flex-wrap items-center gap-1.5">
+            {doc.tags && doc.tags.length > 0 && doc.tags.map((tag, idx) => (<button key={idx} onClick={() => setTagFilter(tag)} className={`px-1.5 py-0.5 text-[10px] rounded-full ${tagFilter === tag ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-600'}`}>{tag}</button>))}
+          </div>
+          {campaigns.length > 0 && onCampaignChange && (
+            <div className="md:hidden px-3 pb-2 ml-5 flex items-center gap-1.5">
+              <Link2 size={11} className="text-gray-300" />
+              <select value={doc.campaign_id || ''} onChange={(e) => handleCampaignChange(doc.id, e.target.value)} disabled={updatingDoc === doc.id} className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 text-gray-600 bg-white">
+                <option value="">Global (todas las campañas)</option>
+                {campaigns.map(campaign => (<option key={campaign.id} value={campaign.id}>{campaign.ecp_name}</option>))}
+              </select>
+            </div>
+          )}
+        </>
+      )}
+      {/* Expanded content */}
+      {isExpanded && doc.extracted_content && (
+        <div className="border-t border-gray-100 bg-gray-50 rounded-b-xl">
+          <div className="p-3 max-h-[500px] overflow-hidden flex flex-col">
+            {contentType === 'json' ? <JSONViewer content={doc.extracted_content} filename={doc.filename} />
+              : contentType === 'csv' ? <CSVTableViewer content={doc.extracted_content} filename={doc.filename} />
+              : <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono bg-white p-3 rounded-lg border border-gray-200 overflow-auto max-h-[450px]">{doc.extracted_content}</pre>}
+          </div>
+        </div>
+      )}
+    </>
+  )
 
   return (
     <div className="space-y-4">
@@ -706,455 +882,59 @@ export default function DocumentList({
             Limpiar filtros
           </button>
         </div>
+      ) : groupByCompetitor && competitorGroups ? (
+        <div className="space-y-3">
+          {competitorGroups.map(([competitorName, docs]) => {
+            const isGroupExpanded = expandedCompetitors.has(competitorName)
+            const groupTokens = docs.reduce((sum, d) => sum + (d.token_count || 0), 0)
+            return (
+              <div key={competitorName} className="border border-gray-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => toggleCompetitorGroup(competitorName)}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <span className="text-gray-400">
+                    {isGroupExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                  </span>
+                  <Users size={18} className="text-purple-500" />
+                  <span className="font-medium text-sm text-gray-800">{competitorName}</span>
+                  <span className="text-xs text-gray-400">
+                    {docs.length} doc{docs.length !== 1 ? 's' : ''}
+                  </span>
+                  <span className="text-xs text-gray-400 ml-auto">
+                    {formatTokenCount(groupTokens)} tokens
+                  </span>
+                </button>
+                {isGroupExpanded && (
+                  <div className="space-y-2 p-2">
+                    {docs.map((doc) => {
+                      const isExpanded = expandedDocId === doc.id
+                      const contentType = getContentType(doc.extracted_content)
+                      return (
+                        <div
+                          key={doc.id}
+                          className={`group bg-white border rounded-xl transition-all ${
+                            isExpanded ? 'border-blue-200 shadow-sm' : 'border-gray-100 hover:border-blue-200 hover:shadow-sm'
+                          }`}
+                        >
+                          {renderDocRow(doc, isExpanded, contentType)}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
       ) : (
         <div className="space-y-2">
           {filteredDocs.map((doc) => {
             const isExpanded = expandedDocId === doc.id
             const contentType = getContentType(doc.extracted_content)
-
             return (
-              <div
-                key={doc.id}
-                className={`group bg-white border rounded-xl transition-all ${
-                  isExpanded ? 'border-blue-200 shadow-sm' : 'border-gray-100 hover:border-blue-200 hover:shadow-sm'
-                }`}
-              >
-                {/* Main row - single line layout */}
-                <div
-                  className="flex items-center gap-3 px-3 py-2.5 cursor-pointer"
-                  onClick={() => toggleExpand(doc.id)}
-                >
-                  {/* Selection checkbox */}
-                  <input
-                    type="checkbox"
-                    checked={selectedDocs.has(doc.id)}
-                    onChange={() => {}}
-                    onClick={(e) => toggleDocSelection(doc.id, e)}
-                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 flex-shrink-0 cursor-pointer"
-                  />
-
-                  {/* Expand chevron */}
-                  <div className="flex-shrink-0 text-gray-400">
-                    {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  </div>
-
-                  {/* Title & Badges */}
-                  <div className="flex-1 min-w-0 flex items-center gap-2">
-                    {editingDocId === doc.id ? (
-                      <div className="flex items-center gap-2 flex-1" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="text"
-                          value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
-                          onKeyDown={(e) => handleEditKeyDown(e, doc.id)}
-                          className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                          autoFocus
-                          disabled={savingName}
-                        />
-                        <button
-                          onClick={() => handleSaveName(doc.id)}
-                          disabled={savingName || !editingName.trim()}
-                          className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Guardar"
-                        >
-                          {savingName ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                        </button>
-                        <button
-                          onClick={handleCancelEdit}
-                          disabled={savingName}
-                          className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50"
-                          title="Cancelar"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <h3 className="font-medium text-sm text-gray-900 truncate group-hover:text-blue-600 transition-colors">
-                          {doc.filename}
-                        </h3>
-                        <DocumentNameValidationBadge filename={doc.filename} size="xs" />
-                        {onRename && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleStartEdit(doc) }}
-                            className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                            title="Editar nombre"
-                          >
-                            <Edit2 size={12} />
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {/* Inline badges */}
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {/* Shared badge */}
-                    {doc.isShared && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-600" title="Documento compartido del cliente">
-                        🔗
-                      </span>
-                    )}
-                    {/* Tier badge */}
-                    {doc.tier && onTierChange ? (
-                      <select
-                        value={doc.tier}
-                        onChange={async (e) => {
-                          e.stopPropagation()
-                          await onTierChange(doc.id, e.target.value as DocumentTier)
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium border-0 cursor-pointer ${TIER_STYLES[doc.tier as DocumentTier]?.bg || 'bg-gray-50'} ${TIER_STYLES[doc.tier as DocumentTier]?.text || 'text-gray-600'}`}
-                        title={TIER_STYLES[doc.tier as DocumentTier]?.description}
-                      >
-                        <option value="T1">T1</option>
-                        <option value="T2">T2</option>
-                        <option value="T3">T3</option>
-                      </select>
-                    ) : doc.tier && (
-                      <span
-                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${TIER_STYLES[doc.tier as DocumentTier]?.bg || 'bg-gray-50'} ${TIER_STYLES[doc.tier as DocumentTier]?.text || 'text-gray-600'}`}
-                        title={TIER_STYLES[doc.tier as DocumentTier]?.description}
-                      >
-                        {doc.tier}
-                      </span>
-                    )}
-                    {/* Source type badge - ALWAYS shown */}
-                    <span
-                      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        doc.source_type
-                          ? (SOURCE_TYPE_STYLES[doc.source_type]?.bg || 'bg-gray-50')
-                          : 'bg-gray-50'
-                      } ${
-                        doc.source_type
-                          ? (SOURCE_TYPE_STYLES[doc.source_type]?.text || 'text-gray-600')
-                          : 'text-gray-600'
-                      }`}
-                      title={`Origen: ${doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.label || doc.source_type) : 'Importado'}`}
-                    >
-                      <span>{doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.icon || '📥') : '📥'}</span>
-                      {doc.source_type ? (SOURCE_TYPE_STYLES[doc.source_type]?.label || doc.source_type) : 'Importado'}
-                    </span>
-                    {/* Version indicator */}
-                    {doc.version_count && doc.version_count > 1 && (
-                      <span
-                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700"
-                        title={`${doc.version_count} versiones disponibles`}
-                      >
-                        <History size={10} />
-                        v{doc.version_count}
-                      </span>
-                    )}
-                    {getCategoryBadge(doc.category)}
-                    {doc.token_count && (
-                      <span className="text-xs text-gray-400 whitespace-nowrap">
-                        {formatTokenCount(doc.token_count)}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Tags inline */}
-                  {doc.tags && doc.tags.length > 0 && (
-                    <div className="hidden sm:flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                      {doc.tags.slice(0, 3).map((tag, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setTagFilter(tag)}
-                          className={`px-1.5 py-0.5 text-[10px] rounded-full transition-colors ${
-                            tagFilter === tag
-                              ? 'bg-purple-600 text-white'
-                              : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
-                          }`}
-                          title={`Filtrar por "${tag}"`}
-                        >
-                          {tag}
-                        </button>
-                      ))}
-                      {doc.tags.length > 3 && (
-                        <span className="text-[10px] text-gray-400">+{doc.tags.length - 3}</span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Campaign dropdown - compact */}
-                  {campaigns.length > 0 && onCampaignChange && (
-                    <div className="hidden md:flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                      <Link2 size={12} className="text-gray-300" />
-                      <select
-                        value={doc.campaign_id || ''}
-                        onChange={(e) => handleCampaignChange(doc.id, e.target.value)}
-                        disabled={updatingDoc === doc.id}
-                        className="text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 bg-white focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 max-w-[180px] truncate"
-                      >
-                        <option value="">Documento global (todas las campañas)</option>
-                        {campaigns.map(campaign => (
-                          <option key={campaign.id} value={campaign.id}>
-                            {campaign.ecp_name}
-                          </option>
-                        ))}
-                      </select>
-                      {updatingDoc === doc.id && <Loader2 size={12} className="text-gray-400 animate-spin" />}
-                    </div>
-                  )}
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                    {/* Move to folder */}
-                    {onMoveToFolder && (
-                      <div className="relative">
-                        <button
-                          onClick={() => setFolderMenuDocId(folderMenuDocId === doc.id ? null : doc.id)}
-                          className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                          title="Mover a carpeta"
-                        >
-                          <FolderInput size={16} />
-                        </button>
-                        {folderMenuDocId === doc.id && (
-                          <div className="absolute right-0 top-8 z-50 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2">
-                            <div className="px-3 py-1.5 text-xs font-medium text-gray-500 border-b border-gray-100 mb-1">
-                              Mover a carpeta
-                            </div>
-                            {/* Current folder indicator */}
-                            {doc.folder && (
-                              <div className="px-3 py-1 text-xs text-gray-400 italic">
-                                Actual: {doc.folder}
-                              </div>
-                            )}
-                            {/* Remove from folder option */}
-                            {doc.folder && (
-                              <button
-                                onClick={() => handleMoveToFolder(doc.id, null)}
-                                disabled={movingToFolder}
-                                className="w-full px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
-                              >
-                                <X size={14} className="text-gray-400" />
-                                Sin carpeta
-                              </button>
-                            )}
-                            {/* Existing folders */}
-                            {availableFolders.filter(f => f !== doc.folder).map(folder => (
-                              <button
-                                key={folder}
-                                onClick={() => handleMoveToFolder(doc.id, folder)}
-                                disabled={movingToFolder}
-                                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 flex items-center gap-2 disabled:opacity-50"
-                              >
-                                <FolderOpen size={14} className="text-indigo-500" />
-                                {folder}
-                              </button>
-                            ))}
-                            {/* New folder input */}
-                            {showNewFolderInput ? (
-                              <div className="px-2 py-2 border-t border-gray-100 mt-1">
-                                <input
-                                  type="text"
-                                  value={newFolderInput}
-                                  onChange={(e) => setNewFolderInput(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleCreateFolderAndMove(doc.id)
-                                    if (e.key === 'Escape') {
-                                      setShowNewFolderInput(false)
-                                      setNewFolderInput('')
-                                    }
-                                  }}
-                                  placeholder="Nombre de carpeta..."
-                                  className="w-full px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                  autoFocus
-                                />
-                                <div className="flex gap-1 mt-1.5">
-                                  <button
-                                    onClick={() => handleCreateFolderAndMove(doc.id)}
-                                    disabled={!newFolderInput.trim() || movingToFolder}
-                                    className="flex-1 px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
-                                  >
-                                    {movingToFolder ? 'Moviendo...' : 'Crear y mover'}
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setShowNewFolderInput(false)
-                                      setNewFolderInput('')
-                                    }}
-                                    className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded"
-                                  >
-                                    Cancelar
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => setShowNewFolderInput(true)}
-                                className="w-full px-3 py-2 text-left text-sm text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 border-t border-gray-100 mt-1"
-                              >
-                                <Plus size={14} />
-                                Nueva carpeta...
-                              </button>
-                            )}
-                            {/* Close button */}
-                            <button
-                              onClick={() => {
-                                setFolderMenuDocId(null)
-                                setShowNewFolderInput(false)
-                                setNewFolderInput('')
-                              }}
-                              className="w-full px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-100 mt-1"
-                            >
-                              Cerrar
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <button
-                      onClick={() => onView(doc)}
-                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      title="Abrir en pantalla completa"
-                    >
-                      <Maximize2 size={16} />
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const confirmed = await modal.confirm({
-                          title: 'Eliminar documento',
-                          message: `¿Eliminar "${doc.filename}"? Esta acción no se puede deshacer.`,
-                          confirmText: 'Eliminar',
-                          cancelText: 'Cancelar',
-                          variant: 'danger',
-                        })
-                        if (confirmed) {
-                          onDelete(doc.id)
-                        }
-                      }}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Eliminar"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Description row - only when exists, compact */}
-                {editingDescDocId === doc.id ? (
-                  <div className="mt-2 ml-8 px-3 pb-3 space-y-1.5">
-                    <textarea
-                      value={editingDescription}
-                      onChange={(e) => setEditingDescription(e.target.value)}
-                      onKeyDown={(e) => handleDescKeyDown(e, doc.id)}
-                      placeholder="Describe el contenido del documento..."
-                      rows={2}
-                      className="w-full px-2 py-1.5 text-xs border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400 resize-none"
-                      autoFocus
-                      disabled={savingDescription}
-                    />
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleSaveDescription(doc.id)}
-                        disabled={savingDescription}
-                        className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1"
-                      >
-                        {savingDescription ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
-                        Guardar
-                      </button>
-                      <button
-                        onClick={handleCancelDescEdit}
-                        disabled={savingDescription}
-                        className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded disabled:opacity-50"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                ) : doc.description && !isExpanded ? (
-                  <div className="ml-8 px-3 pb-2 group/desc">
-                    <p className="text-xs text-gray-500 truncate max-w-2xl">
-                      {doc.description}
-                      {onUpdateDescription && (
-                        <button
-                          onClick={() => handleStartDescEdit(doc)}
-                          className="ml-1.5 text-gray-400 hover:text-blue-600 opacity-0 group-hover/desc:opacity-100 transition-opacity"
-                          title="Editar descripcion"
-                        >
-                          <Edit2 size={10} className="inline" />
-                        </button>
-                      )}
-                    </p>
-                  </div>
-                ) : onUpdateDescription && !isExpanded ? (
-                  <button
-                    onClick={() => handleStartDescEdit(doc)}
-                    className="ml-8 px-3 pb-2 text-[10px] text-gray-400 hover:text-blue-600"
-                  >
-                    + Descripción
-                  </button>
-                ) : null}
-
-                {/* Content match snippet - only when searching */}
-                {searchInContent && searchQuery && !isExpanded && (() => {
-                  const snippet = getContentMatchSnippet(doc.extracted_content, searchQuery)
-                  if (!snippet) return null
-                  const parts = snippet.split(new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
-                  return (
-                    <div className="mx-3 mb-2 ml-8 p-1.5 bg-yellow-50 border border-yellow-100 rounded-lg text-xs text-gray-600">
-                      <span className="text-yellow-600 font-medium mr-1">Coincidencia:</span>
-                      {parts.map((part, i) =>
-                        part.toLowerCase() === searchQuery.toLowerCase()
-                          ? <mark key={i} className="bg-yellow-200 px-0.5 rounded">{part}</mark>
-                          : <span key={i}>{part}</span>
-                      )}
-                    </div>
-                  )
-                })()}
-
-                {/* Mobile: Tags & Campaign on second row */}
-                {!isExpanded && (
-                  <>
-                    <div className="sm:hidden px-3 pb-2 ml-5 flex flex-wrap items-center gap-1.5">
-                      {doc.tags && doc.tags.length > 0 && doc.tags.map((tag, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setTagFilter(tag)}
-                          className={`px-1.5 py-0.5 text-[10px] rounded-full ${
-                            tagFilter === tag ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-600'
-                          }`}
-                        >
-                          {tag}
-                        </button>
-                      ))}
-                    </div>
-                    {campaigns.length > 0 && onCampaignChange && (
-                      <div className="md:hidden px-3 pb-2 ml-5 flex items-center gap-1.5">
-                        <Link2 size={11} className="text-gray-300" />
-                        <select
-                          value={doc.campaign_id || ''}
-                          onChange={(e) => handleCampaignChange(doc.id, e.target.value)}
-                          disabled={updatingDoc === doc.id}
-                          className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 text-gray-600 bg-white"
-                        >
-                          <option value="">Global (todas las campañas)</option>
-                          {campaigns.map(campaign => (
-                            <option key={campaign.id} value={campaign.id}>{campaign.ecp_name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Expanded content */}
-                {isExpanded && doc.extracted_content && (
-                  <div className="border-t border-gray-100 bg-gray-50 rounded-b-xl">
-                    <div className="p-3 max-h-[500px] overflow-hidden flex flex-col">
-                      {contentType === 'json' ? (
-                        <JSONViewer content={doc.extracted_content} filename={doc.filename} />
-                      ) : contentType === 'csv' ? (
-                        <CSVTableViewer content={doc.extracted_content} filename={doc.filename} />
-                      ) : (
-                        <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono bg-white p-3 rounded-lg border border-gray-200 overflow-auto max-h-[450px]">
-                          {doc.extracted_content}
-                        </pre>
-                      )}
-                    </div>
-                  </div>
-                )}
+              <div key={doc.id} className={`group bg-white border rounded-xl transition-all ${isExpanded ? 'border-blue-200 shadow-sm' : 'border-gray-100 hover:border-blue-200 hover:shadow-sm'}`}>
+                {renderDocRow(doc, isExpanded, contentType)}
               </div>
             )
           })}
