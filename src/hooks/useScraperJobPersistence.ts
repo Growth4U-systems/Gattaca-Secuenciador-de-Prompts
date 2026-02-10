@@ -69,6 +69,41 @@ const JOB_TTL_MS = 2 * 60 * 60 * 1000 // 2 hours
 const POLL_INTERVAL_MS = 5000 // 5 seconds
 
 // ============================================
+// DB RECOVERY HELPER
+// ============================================
+
+async function fetchStuckJobsFromDB(projectId: string): Promise<PersistedJob[]> {
+  try {
+    // Fetch running/processing Apify jobs from the DB
+    const response = await fetch('/api/scraper/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: projectId, status: 'running', limit: 20 }),
+    })
+    if (!response.ok) return []
+
+    const data = await response.json()
+    const jobs = data.jobs || []
+
+    // Convert DB jobs to PersistedJob format
+    return jobs
+      .filter((job: Record<string, unknown>) => job.provider === 'apify' && job.actor_run_id)
+      .map((job: Record<string, unknown>): PersistedJob => ({
+        jobId: job.id as string,
+        scraperId: job.scraper_type as string,
+        scraperName: job.name as string || (job.scraper_type as string),
+        sourceType: job.scraper_type as string,
+        projectId: job.project_id as string,
+        startedAt: (job.started_at || job.created_at) as string,
+        status: 'running',
+      }))
+  } catch (err) {
+    console.warn('[useScraperJobPersistence] Error fetching stuck jobs from DB:', err)
+    return []
+  }
+}
+
+// ============================================
 // HOOK
 // ============================================
 
@@ -380,7 +415,20 @@ export function useScraperJobPersistence({
 
       setJobHistory(storedHistory)
 
-      if (storedJobs.length === 0) {
+      // Also check DB for stuck running/processing jobs (covers cases where
+      // localStorage was cleared or the user navigated away before jobs were tracked)
+      const dbStuckJobs = await fetchStuckJobsFromDB(projectId)
+      const storedJobIds = new Set(storedJobs.map(j => j.jobId))
+
+      // Merge DB stuck jobs that aren't already in localStorage
+      const allJobsToRecover = [...storedJobs]
+      for (const dbJob of dbStuckJobs) {
+        if (!storedJobIds.has(dbJob.jobId)) {
+          allJobsToRecover.push(dbJob)
+        }
+      }
+
+      if (allJobsToRecover.length === 0) {
         setIsRecovering(false)
         return
       }
@@ -390,7 +438,7 @@ export function useScraperJobPersistence({
       const completedSinceAway: PersistedJob[] = []
       const failedSinceAway: PersistedJob[] = []
 
-      for (const job of storedJobs) {
+      for (const job of allJobsToRecover) {
         try {
           const isDeepResearch = job.sourceType === 'deep_research'
           const endpoint = isDeepResearch
