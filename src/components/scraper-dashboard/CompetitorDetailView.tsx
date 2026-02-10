@@ -15,6 +15,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   Globe,
+  Building2,
   Settings,
   Play,
   Loader2,
@@ -65,6 +66,10 @@ import { useScraperJobPersistence, PersistedJob } from '@/hooks/useScraperJobPer
 import type { SourceType } from '@/lib/playbooks/competitor-analysis/types'
 import type { FlowStep } from '@/types/flow.types'
 import { COMPETITOR_FLOW_STEPS } from '@/lib/playbooks/competitor-analysis/config'
+import {
+  organizeBatchesWithDependencies,
+  getScraperDependency,
+} from '@/lib/playbooks/competitor-analysis/scraperDependencies'
 import ScraperConfigModal from './ScraperConfigModal'
 import StepOutputEditor from '@/components/campaign/StepOutputEditor'
 import StepEditor from '@/components/flow/StepEditor'
@@ -109,9 +114,100 @@ interface CompetitorDetailViewProps {
   documents: Document[]
   projectId: string
   clientId?: string
+  clientName?: string
   onBack: () => void
   onRefresh: () => void
 }
+
+// ============================================
+// SCRAPER DEFAULTS
+// ============================================
+
+/**
+ * Default configuration values for all scrapers.
+ * These ensure every scraper has sensible defaults even if user hasn't configured them.
+ */
+const SCRAPER_DEFAULTS: Record<string, Record<string, string>> = {
+  // Posts & Comments - 90 days, max 50 items
+  'instagram_posts_comments': {
+    max_posts: '50',
+    max_comments_per_post: '50',
+    date_from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    output_format: 'text_structured',
+  },
+  'tiktok_posts': {
+    max_posts: '50',
+    date_from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    output_format: 'text_structured',
+  },
+  'tiktok_comments': {
+    max_comments_per_post: '50',
+    output_format: 'text_structured',
+  },
+  'linkedin_company_posts': {
+    max_posts: '50',
+    date_from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    output_format: 'text_structured',
+  },
+  'linkedin_comments': {
+    max_comments_per_post: '50',
+    output_format: 'text_structured',
+  },
+  'youtube_channel_videos': {
+    max_videos: '50',
+    date_from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    output_format: 'text_structured',
+  },
+  'youtube_comments': {
+    max_comments_per_video: '50',
+    output_format: 'text_structured',
+  },
+  'facebook_posts': {
+    max_posts: '50',
+    date_from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    output_format: 'text_structured',
+  },
+  'facebook_comments': {
+    max_comments_per_post: '50',
+    output_format: 'text_structured',
+  },
+
+  // Reviews - 180 days, max 1000 items
+  'trustpilot_reviews': {
+    max_reviews: '1000',
+    date_from: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    output_format: 'text_structured',
+  },
+  'g2_reviews': {
+    max_reviews: '1000',
+    date_from: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    output_format: 'text_structured',
+  },
+  'capterra_reviews': {
+    max_reviews: '1000',
+    date_from: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    output_format: 'text_structured',
+  },
+  'appstore_reviews': {
+    max_reviews: '1000',
+    date_from: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    output_format: 'text_structured',
+  },
+  'playstore_reviews': {
+    max_reviews: '1000',
+    date_from: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    output_format: 'text_structured',
+  },
+  'google_maps_reviews': {
+    max_reviews: '1000',
+    date_from: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    output_format: 'text_structured',
+  },
+}
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
 
 // Helper function for time ago
 function formatTimeAgo(date: Date): string {
@@ -245,6 +341,7 @@ export default function CompetitorDetailView({
   documents,
   projectId,
   clientId = '',
+  clientName,
   onBack,
   onRefresh,
 }: CompetitorDetailViewProps) {
@@ -456,6 +553,8 @@ export default function CompetitorDetailView({
 
   // Track running deep research (separate from scraper jobs since it's synchronous)
   const [runningDeepResearch, setRunningDeepResearch] = useState(false)
+  // Track when running all scrapers at once
+  const [runningAllScrapers, setRunningAllScrapers] = useState(false)
 
   // Show confirmation modal before running scraper - with full configuration
   const handleRunScraper = useCallback((sourceType: string) => {
@@ -872,6 +971,251 @@ export default function CompetitorDetailView({
     }
   }, [scrapersByStep, handleRunScraper, toast])
 
+  // Handle run ALL scrapers across all steps
+  const handleRunAllScrapers = useCallback(async () => {
+    if (runningAllScrapers) return
+
+    // Count total pending scrapers
+    const allPendingScrapers = Object.values(scrapersByStep).flatMap(stepData =>
+      stepData.scrapers.filter(s => !s.isCompleted)
+    )
+
+    if (allPendingScrapers.length === 0) {
+      toast.success('Completado', 'Todos los scrapers ya están completados')
+      return
+    }
+
+    // Check which scrapers don't have inputs (and don't have defaults either)
+    const scrapersWithoutInputs = allPendingScrapers.filter(s => {
+      const hasInput = !!s.inputValue
+      const hasDefaults = !!SCRAPER_DEFAULTS[s.sourceType]
+      return s.inputKey && !hasInput && !hasDefaults
+    })
+
+    // If there are scrapers without configuration, open modal
+    if (scrapersWithoutInputs.length > 0) {
+      toast.info(
+        'Configuración necesaria',
+        `${scrapersWithoutInputs.length} scraper(s) necesitan configuración`
+      )
+      setShowConfigModal(true)
+      return
+    }
+
+    // All configured → execute in batches with dependency handling
+    await executeScrapersInBatches(allPendingScrapers)
+  }, [runningAllScrapers, scrapersByStep, toast])
+
+  // Wait for scrapers in a batch to complete (polling)
+  const waitForScrapersToComplete = useCallback(async (batch: Array<{ sourceType: string }>) => {
+    const MAX_WAIT_TIME = 10 * 60 * 1000 // 10 minutes maximum
+    const POLL_INTERVAL = 6000 // 6 seconds (greater than hook's 5s to ensure sync)
+    const startTime = Date.now()
+
+    // Get source types from batch
+    const sourceTypes = new Set(batch.map(s => s.sourceType))
+
+    while (true) {
+      // Check if timeout exceeded
+      if (Date.now() - startTime > MAX_WAIT_TIME) {
+        console.warn('[waitForScrapers] Max wait time exceeded')
+        return
+      }
+
+      // Check how many scrapers are still running
+      const stillRunning = Array.from(sourceTypes).filter(sourceType =>
+        runningScrapers.has(sourceType)
+      )
+
+      // If none running, all completed
+      if (stillRunning.length === 0) {
+        return
+      }
+
+      // Wait before checking again
+      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
+    }
+  }, [runningScrapers])
+
+  // Execute scrapers in batches with dependency handling
+  const executeScrapersInBatches = useCallback(async (scrapers: Array<{ sourceType: string; name: string; isCompleted: boolean; inputValue?: string }>) => {
+    setRunningAllScrapers(true)
+
+    try {
+      // Organize scrapers into batches considering dependencies
+      // Batch 1: Independent (posts, videos, reviews)
+      // Batch 2: Dependent (comments that need post URLs)
+      const dependencyBatches = organizeBatchesWithDependencies(scrapers)
+
+      toast.info(
+        'Iniciando...',
+        `Ejecutando ${scrapers.length} scrapers en ${dependencyBatches.length} fases`
+      )
+
+      for (let phaseIdx = 0; phaseIdx < dependencyBatches.length; phaseIdx++) {
+        const phase = dependencyBatches[phaseIdx]
+        const phaseName = phaseIdx === 0 ? 'Posts/Videos/Reviews' : 'Comentarios'
+
+        // Within each phase, divide into sub-batches of 3
+        const BATCH_SIZE = 3
+        const subBatches: typeof phase[] = []
+        for (let i = 0; i < phase.length; i += BATCH_SIZE) {
+          subBatches.push(phase.slice(i, i + BATCH_SIZE))
+        }
+
+        toast.info(
+          `Fase ${phaseIdx + 1}: ${phaseName}`,
+          `${phase.length} scrapers en ${subBatches.length} batches`
+        )
+
+        for (let i = 0; i < subBatches.length; i++) {
+          const batch = subBatches[i]
+          const batchNum = i + 1
+
+          toast.info(
+            `Batch ${batchNum}/${subBatches.length}`,
+            `Ejecutando ${batch.length} scrapers...`
+          )
+
+          // For dependent scrapers, check if parent needs to run first
+          for (const scraper of batch) {
+            const dependency = getScraperDependency(scraper.sourceType)
+
+            if (dependency) {
+              // Check if parent document already exists
+              const parentDoc = documents.find(d =>
+                d.source_metadata?.source_type === dependency.dependsOn
+              )
+
+              if (!parentDoc) {
+                // Parent doesn't exist, execute it first
+                toast.info(
+                  'Dependencia detectada',
+                  `Ejecutando ${dependency.dependsOn} antes de ${scraper.name}`
+                )
+
+                // Execute parent
+                await handleRunScraper(dependency.dependsOn)
+                // Wait for it to complete
+                await waitForScrapersToComplete([{ sourceType: dependency.dependsOn }])
+
+                // Reload documents to get the new document
+                onRefresh()
+                // Small delay for state to update
+                await new Promise(resolve => setTimeout(resolve, 1000))
+              }
+
+              // Now extract URLs from parent document (existing or newly created)
+              const updatedParentDoc = documents.find(d =>
+                d.source_metadata?.source_type === dependency.dependsOn
+              )
+
+              if (updatedParentDoc) {
+                const urls = dependency.urlExtractor(updatedParentDoc)
+                if (urls.length > 0) {
+                  // Store URLs in custom_variables for this scraper
+                  console.log(`[executeScrapersInBatches] Extracted ${urls.length} URLs for ${scraper.sourceType}`)
+                  // These URLs will be picked up by the scraper when it runs
+                  // TODO: Implement updateCampaignVariable if needed
+                }
+              }
+            }
+          }
+
+          // Launch all scrapers in the batch
+          const launchPromises = batch.map(scraper =>
+            handleRunScraper(scraper.sourceType)
+          )
+          await Promise.all(launchPromises)
+
+          // Wait for all to complete before continuing
+          await waitForScrapersToComplete(batch)
+
+          // Small delay between batches
+          if (i < subBatches.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          }
+        }
+      }
+
+      toast.success('Completado', `${scrapers.length} scrapers ejecutados exitosamente`)
+    } catch (error) {
+      console.error('Error executing scrapers in batches:', error)
+      toast.error('Error', 'Hubo un problema ejecutando los scrapers')
+    } finally {
+      setRunningAllScrapers(false)
+    }
+  }, [handleRunScraper, documents, onRefresh, toast, runningScrapers, waitForScrapersToComplete])
+
+  // Get scraper status for visual indicators
+  const getScraperStatus = useCallback((scraper: { sourceType: string; inputValue?: string; isCompleted: boolean }) => {
+    const hasInput = !!scraper.inputValue
+    const hasDefaults = !!SCRAPER_DEFAULTS[scraper.sourceType]
+
+    // Check if this specific platform was auto-discovered
+    let discoveredPlatforms: string[] = []
+    try {
+      const raw = campaign.custom_variables?.discovered_platforms
+      if (raw) discoveredPlatforms = JSON.parse(raw)
+    } catch { /* ignore */ }
+    // Map source_type to platform name for discovery check
+    const platformFromSource = scraper.sourceType.replace(/_posts|_comments|_videos|_reviews|_insights/, '')
+    const wasDiscovered = discoveredPlatforms.includes(platformFromSource) && hasInput
+
+    if (scraper.isCompleted) {
+      return {
+        status: 'verified' as const,
+        badge: {
+          text: 'Completado',
+          color: 'green',
+          icon: <CheckCircle size={12} />
+        }
+      }
+    }
+
+    if (wasDiscovered && hasInput) {
+      return {
+        status: 'auto-completed' as const,
+        badge: {
+          text: 'Auto-detectado',
+          color: 'emerald',
+          icon: <Sparkles size={12} />
+        }
+      }
+    }
+
+    if (hasInput) {
+      return {
+        status: 'configured' as const,
+        badge: {
+          text: 'Configurado',
+          color: 'blue',
+          icon: <CheckCircle size={12} />
+        }
+      }
+    }
+
+    if (hasDefaults && !hasInput) {
+      return {
+        status: 'default' as const,
+        badge: {
+          text: 'Valores por defecto',
+          color: 'yellow',
+          icon: <Settings size={12} />
+        }
+      }
+    }
+
+    return {
+      status: 'unconfigured' as const,
+      badge: {
+        text: 'Sin configurar',
+        color: 'red',
+        icon: <AlertCircle size={12} />
+      }
+    }
+  }, [campaign.custom_variables])
+
   // Handle run analysis step - calls actual API
   const handleRunAnalysisStep = useCallback(async (stepId: string) => {
     if (runningSteps.has(stepId)) return
@@ -928,12 +1272,186 @@ export default function CompetitorDetailView({
     }
   }, [runningSteps, toast, onRefresh, campaign.id])
 
-  // Handle config saved
-  const handleConfigSaved = () => {
+  // Handle config saved - auto-execute scrapers after saving
+  const handleConfigSaved = useCallback(() => {
     setShowConfigModal(false)
+
+    toast.success(
+      'Configuración guardada',
+      'Variables actualizadas correctamente'
+    )
+
+    // Refresh data to reflect saved values
     onRefresh()
-    toast.success('Guardado', 'Configuración actualizada')
-  }
+  }, [onRefresh, toast])
+
+  // ============================================
+  // PROFILE MANAGEMENT
+  // ============================================
+
+  // Social platforms for discovery
+  const SOCIAL_PLATFORMS = [
+    { key: 'instagram', name: 'Instagram', icon: '📸', needsUsername: true },
+    { key: 'facebook', name: 'Facebook', icon: '📘', needsUsername: false },
+    { key: 'linkedin', name: 'LinkedIn', icon: '💼', needsUsername: false },
+    { key: 'youtube', name: 'YouTube', icon: '🎬', needsUsername: false },
+    { key: 'tiktok', name: 'TikTok', icon: '🎵', needsUsername: true },
+    { key: 'twitter', name: 'Twitter/X', icon: '🐦', needsUsername: false },
+    { key: 'appstore', name: 'App Store', icon: '📱', needsUsername: false },
+    { key: 'playstore', name: 'Play Store', icon: '🤖', needsUsername: false },
+    { key: 'trustpilot', name: 'Trustpilot', icon: '⭐', needsUsername: false },
+    { key: 'g2', name: 'G2', icon: '🏆', needsUsername: false },
+    { key: 'capterra', name: 'Capterra', icon: '📊', needsUsername: false },
+  ]
+
+  // State for editing profiles
+  const [editingProfiles, setEditingProfiles] = useState<Record<string, string>>({})
+  const [savingProfiles, setSavingProfiles] = useState(false)
+  const [isProfilesSectionCollapsed, setIsProfilesSectionCollapsed] = useState(false)
+  const [reRunningDiscovery, setReRunningDiscovery] = useState(false)
+  const [extractingMetadata, setExtractingMetadata] = useState(false)
+
+  // Auto-poll for discovery completion
+  useEffect(() => {
+    const discoveryCompleted = campaign.custom_variables?.discovery_completed
+    const isDiscoveryRunning = discoveryCompleted === 'false' || (reRunningDiscovery && !discoveryCompleted)
+
+    if (!isDiscoveryRunning) {
+      setReRunningDiscovery(false)
+      return
+    }
+
+    console.log('[Discovery Polling] Discovery is running, starting auto-refresh...')
+
+    // Poll every 5 seconds while discovery is running
+    const pollInterval = setInterval(() => {
+      console.log('[Discovery Polling] Refreshing campaign data...')
+      onRefresh()
+    }, 5000)
+
+    return () => {
+      console.log('[Discovery Polling] Stopping poll interval')
+      clearInterval(pollInterval)
+    }
+  }, [campaign.custom_variables?.discovery_completed, reRunningDiscovery, onRefresh])
+
+  // Initialize editing state from custom_variables
+  useEffect(() => {
+    const profiles: Record<string, string> = {}
+
+    // Load social platform profiles
+    SOCIAL_PLATFORMS.forEach(platform => {
+      const urlKey = `${platform.key}_url`
+      profiles[urlKey] = campaign.custom_variables?.[urlKey] as string || ''
+
+      // Also load username for platforms that need it
+      if (platform.needsUsername) {
+        const usernameKey = `${platform.key}_username`
+        profiles[usernameKey] = campaign.custom_variables?.[usernameKey] as string || ''
+      }
+    })
+    setEditingProfiles(profiles)
+  }, [campaign.custom_variables])
+
+  // Handle profile URL change
+  const handleProfileChange = useCallback((key: string, value: string) => {
+    setEditingProfiles(prev => ({
+      ...prev,
+      [key]: value
+    }))
+  }, [])
+
+  // Save all profiles to campaign.custom_variables
+  const handleSaveProfiles = useCallback(async () => {
+    setSavingProfiles(true)
+    try {
+      const response = await fetch(`/api/campaign/${campaign.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          custom_variables: {
+            ...campaign.custom_variables,
+            ...editingProfiles,
+          },
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Error al guardar perfiles')
+      }
+
+      toast.success('Perfiles actualizados', 'Los cambios se guardaron correctamente')
+      onRefresh() // Reload campaign data
+    } catch (error) {
+      console.error('Error saving profiles:', error)
+      toast.error('Error', 'No se pudieron guardar los perfiles')
+    } finally {
+      setSavingProfiles(false)
+    }
+  }, [campaign.id, campaign.custom_variables, editingProfiles, toast, onRefresh])
+
+  // Re-run profile discovery
+  const handleReRunDiscovery = useCallback(async () => {
+    console.log('[DEBUG] Campaign ID:', campaign.id)
+    console.log('[DEBUG] Competitor Name:', competitorName)
+    console.log('[DEBUG] Campaign object:', campaign)
+
+    const websiteUrl = campaign.custom_variables?.competitor_website
+    if (!websiteUrl) {
+      toast.error('Falta URL', 'Configura primero el sitio web del competidor')
+      return
+    }
+
+    setReRunningDiscovery(true)
+    try {
+      // Reset discovery status first
+      await fetch(`/api/campaign/${campaign.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          custom_variables: {
+            ...campaign.custom_variables,
+            discovery_completed: 'false',
+            discovery_error: null,
+            discovery_found_count: null,
+          },
+        }),
+      })
+
+      // Launch discovery
+      const response = await fetch('/api/profile-discovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store', // Prevent browser caching
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          competitorName: competitorName,
+          websiteUrl,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error('[Re-run Discovery] Error response:', errorData)
+        throw new Error(errorData.error || `HTTP ${response.status}`)
+      }
+
+      const result = await response.json()
+      console.log('[Re-run Discovery] Success:', result)
+      toast.success('Discovery iniciado', 'Buscando perfiles en segundo plano...')
+      onRefresh() // Reload to show "Buscando..." status
+    } catch (error) {
+      console.error('Error re-running discovery:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error('Error', errorMessage)
+    } finally {
+      setReRunningDiscovery(false)
+    }
+  }, [campaign.id, campaign.custom_variables, competitorName, toast, onRefresh])
+
+  // ============================================
+  // STEP EDITING
+  // ============================================
 
   // Start editing a step's configuration
   const startEditingStep = useCallback((stepId: string) => {
@@ -1100,8 +1618,8 @@ export default function CompetitorDetailView({
             onClick={() => setShowConfigModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium"
           >
-            <Settings size={18} />
-            Configurar
+            <Variable size={18} />
+            Editar Variables
           </button>
         </div>
       </div>
@@ -1217,6 +1735,153 @@ export default function CompetitorDetailView({
         </div>
       )}
 
+      {/* Perfiles Descubiertos Section */}
+      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <button
+            onClick={() => setIsProfilesSectionCollapsed(!isProfilesSectionCollapsed)}
+            className="flex items-center gap-3 hover:bg-gray-50 rounded-lg px-2 py-1 -ml-2 transition-colors"
+          >
+            <Sparkles size={20} className="text-purple-600" />
+            <div className="text-left">
+              <h3 className="font-semibold text-gray-900">Perfiles Descubiertos</h3>
+              <p className="text-sm text-gray-500">
+                {campaign.custom_variables?.discovery_error ? (
+                  <span className="flex items-center gap-1.5 text-red-600">
+                    <XCircle size={14} />
+                    <span>Error: {campaign.custom_variables.discovery_error}</span>
+                    <span className="text-xs text-gray-400">(presiona Re-ejecutar)</span>
+                  </span>
+                ) : campaign.custom_variables?.discovery_completed === 'true'
+                  ? `${campaign.custom_variables?.discovery_found_count || '0'} perfiles encontrados`
+                  : campaign.custom_variables?.discovery_completed === 'false'
+                  ? (
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 size={14} className="animate-spin text-purple-600" />
+                      <span>Buscando perfiles... ⏳</span>
+                      <span className="text-xs text-gray-400">(se actualiza automáticamente)</span>
+                    </span>
+                  )
+                  : 'Listo para buscar perfiles'}
+              </p>
+            </div>
+            <ChevronDown
+              size={20}
+              className={`text-gray-400 transition-transform ${isProfilesSectionCollapsed ? '-rotate-90' : ''}`}
+            />
+          </button>
+
+          {!isProfilesSectionCollapsed && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleReRunDiscovery}
+                disabled={reRunningDiscovery}
+                className="flex items-center gap-2 px-4 py-2 border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50 transition-colors disabled:opacity-50 text-sm font-medium"
+                title="Re-ejecutar el descubrimiento automático de perfiles"
+              >
+                {reRunningDiscovery ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Re-ejecutando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={16} />
+                    Re-ejecutar Discovery
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={handleSaveProfiles}
+                disabled={savingProfiles}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 text-sm font-medium"
+              >
+                {savingProfiles ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save size={16} />
+                    Guardar cambios
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {!isProfilesSectionCollapsed && (
+          <div className="p-5 space-y-6">
+            <div className="grid md:grid-cols-2 gap-4">
+              {SOCIAL_PLATFORMS.map(platform => {
+              const urlKey = `${platform.key}_url`
+              const usernameKey = `${platform.key}_username`
+              const currentUrl = editingProfiles[urlKey] || ''
+              const currentUsername = editingProfiles[usernameKey] || ''
+              // Check if this specific platform was auto-discovered
+              let discoveredPlatformsForProfile: string[] = []
+              try {
+                const raw = campaign.custom_variables?.discovered_platforms
+                if (raw) discoveredPlatformsForProfile = JSON.parse(raw as string)
+              } catch { /* ignore */ }
+              const wasDiscovered = discoveredPlatformsForProfile.includes(platform.key) && (currentUrl || currentUsername)
+
+              return (
+                <div key={platform.key} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:border-indigo-300 transition-colors">
+                  <span className="text-2xl mt-1">{platform.icon}</span>
+                  <div className="flex-1 space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      {platform.name}
+                      {wasDiscovered && (
+                        <span className="ml-2 text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">
+                          Auto-detectado
+                        </span>
+                      )}
+                    </label>
+
+                    {/* Username field for Instagram and TikTok */}
+                    {platform.needsUsername && (
+                      <input
+                        type="text"
+                        value={currentUsername}
+                        onChange={(e) => handleProfileChange(usernameKey, e.target.value)}
+                        placeholder={`Username (sin @)`}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                      />
+                    )}
+
+                    {/* URL field for all platforms */}
+                    <input
+                      type="text"
+                      value={currentUrl}
+                      onChange={(e) => handleProfileChange(urlKey, e.target.value)}
+                      placeholder={`URL de ${platform.name} (opcional)`}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {campaign.custom_variables?.discovery_completed !== 'true' && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
+              <Loader2 size={16} className="text-blue-600 animate-spin mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-blue-800 font-medium">Descubriendo perfiles...</p>
+                <p className="text-xs text-blue-600 mt-1">
+                  El sistema está buscando perfiles de redes sociales. Puedes continuar trabajando y los resultados se mostrarán aquí cuando estén listos.
+                </p>
+              </div>
+            </div>
+          )}
+          </div>
+        )}
+      </div>
+
       {/* Two-column layout */}
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Left: Scrapers */}
@@ -1231,6 +1896,29 @@ export default function CompetitorDetailView({
                 </p>
               </div>
             </div>
+            {totalScraperProgress.completed < totalScraperProgress.total && (
+              <button
+                onClick={handleRunAllScrapers}
+                disabled={runningAllScrapers}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                  runningAllScrapers
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                }`}
+              >
+                {runningAllScrapers ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Ejecutando...
+                  </>
+                ) : (
+                  <>
+                    <Play size={16} />
+                    Ejecutar todos
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           <div className="p-4 space-y-4 max-h-[500px] overflow-y-auto">
@@ -1292,13 +1980,27 @@ export default function CompetitorDetailView({
                             }`}>
                               {scraper.name}
                             </span>
-                            {!scraper.isCompleted && !hasInput && (
-                              <span className="text-xs text-gray-400">(sin configurar)</span>
-                            )}
+
+                            {/* Status Badge */}
+                            {(() => {
+                              const status = getScraperStatus(scraper)
+                              return (
+                                <span className={`
+                                  flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+                                  ${status.badge.color === 'green' ? 'bg-green-100 text-green-700' : ''}
+                                  ${status.badge.color === 'emerald' ? 'bg-emerald-100 text-emerald-700' : ''}
+                                  ${status.badge.color === 'blue' ? 'bg-blue-100 text-blue-700' : ''}
+                                  ${status.badge.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' : ''}
+                                  ${status.badge.color === 'red' ? 'bg-red-100 text-red-700' : ''}
+                                `}>
+                                  {status.badge.icon}
+                                  <span>{status.badge.text}</span>
+                                </span>
+                              )
+                            })()}
                           </div>
 
-                          {!scraper.isCompleted && (
-                            <div className="flex items-center gap-0.5">
+                          <div className="flex items-center gap-0.5">
                               <button
                                 onClick={() => handleRunScraper(scraper.sourceType)}
                                 disabled={isRunning}
@@ -1319,12 +2021,11 @@ export default function CompetitorDetailView({
                                     ? 'text-gray-300 cursor-not-allowed'
                                     : 'text-indigo-600 hover:bg-indigo-100'
                                 }`}
-                                title="Ejecutar scraper"
+                                title={scraper.isCompleted ? 'Re-ejecutar scraper' : 'Ejecutar scraper'}
                               >
                                 <Play size={14} />
                               </button>
-                            </div>
-                          )}
+                          </div>
                         </div>
                       )
                     })}
@@ -1348,6 +2049,22 @@ export default function CompetitorDetailView({
           </div>
 
           <div className="p-4 space-y-3">
+            {/* Variable status warning */}
+            {COMPETITOR_VARIABLE_DEFINITIONS.some(v => v.required && !campaign.custom_variables?.[v.name]) && (
+              <button
+                onClick={() => setShowConfigModal(true)}
+                className="w-full p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 hover:bg-amber-100 transition-colors text-left"
+              >
+                <AlertCircle size={14} className="text-amber-600 flex-shrink-0" />
+                <span className="text-xs text-amber-800">
+                  <span className="font-medium">Variables incompletas</span> &mdash;{' '}
+                  {COMPETITOR_VARIABLE_DEFINITIONS.filter(v => v.required && campaign.custom_variables?.[v.name]).length}/
+                  {COMPETITOR_VARIABLE_DEFINITIONS.filter(v => v.required).length} requeridas.
+                  Click para editar.
+                </span>
+              </button>
+            )}
+
             {ANALYSIS_STEPS.map((step, index) => {
               const status = analysisStepStatus[step.id]
               const StepIcon = step.icon
@@ -1365,7 +2082,11 @@ export default function CompetitorDetailView({
               // DEBUG: Log prompt resolution
               console.log(`[PREVIEW DEBUG] Step ${step.id}:`, {
                 configKey,
+                flowStepId,
                 hasSavedConfig: !!savedStepConfig,
+                hasFlowConfig: !!campaign.flow_config,
+                flowConfigStepsCount: campaign.flow_config?.steps?.length || 0,
+                flowConfigStepIds: campaign.flow_config?.steps?.map((s: {id: string}) => s.id) || [],
                 flowStepFound: !!flowStep,
                 flowStepPromptLength: flowStep?.prompt?.length,
                 usingSource: savedStepConfig?.prompt ? 'campaign_edit' : flowStep?.prompt ? 'playbook_custom' : 'base_template'
@@ -1377,15 +2098,16 @@ export default function CompetitorDetailView({
                 || ALL_PROMPTS[step.promptKey]
               const promptVariables = extractPromptVariables(promptText)
 
-              // Get matching documents for this step's required sources
+              // Get matching documents for this step's required sources (filtered by current competitor)
               const matchingDocs = documents.filter(doc =>
-                step.requiredSources.includes(doc.source_metadata?.source_type || '')
+                step.requiredSources.includes(doc.source_metadata?.source_type || '') &&
+                doc.source_metadata?.competitor?.toLowerCase() === normalizedName
               )
 
               return (
                 <div
                   key={step.id}
-                  className={`rounded-xl border transition-colors overflow-hidden ${
+                  className={`rounded-xl border transition-colors ${
                     status?.isCompleted
                       ? 'bg-green-50 border-green-200'
                       : status?.canRun
@@ -1522,9 +2244,9 @@ export default function CompetitorDetailView({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                const flowStep = getFlowStepForAnalysis(step.id)
-                                if (flowStep) {
-                                  // Load saved config from custom_variables (not step_outputs!)
+                                const baseFlowStep = getFlowStepForAnalysis(step.id)
+                                if (baseFlowStep) {
+                                  // Load saved config from custom_variables (campaign-specific edits)
                                   const savedConfig = campaign.custom_variables?.[`${step.id}_config`] as {
                                     prompt?: string
                                     model?: string
@@ -1535,16 +2257,22 @@ export default function CompetitorDetailView({
                                     base_doc_ids?: string[]
                                   } | undefined
 
+                                  // Get playbook-customized step from flow_config (if exists)
+                                  const flowStepId = STEP_ID_MAPPING[step.id]
+                                  const playbookStep = campaign.flow_config?.steps?.find(
+                                    (s: { id: string; prompt?: string }) => s.id === flowStepId
+                                  )
+
+                                  // Priority: campaign edit > playbook customization > base template
                                   setEditingFlowStep({
-                                    ...flowStep,
-                                    // Apply all saved config values, falling back to defaults
-                                    prompt: savedConfig?.prompt || flowStep.prompt,
-                                    model: savedConfig?.model || flowStep.model,
-                                    temperature: savedConfig?.temperature ?? flowStep.temperature,
-                                    max_tokens: savedConfig?.max_tokens ?? flowStep.max_tokens,
-                                    output_format: savedConfig?.output_format || flowStep.output_format,
-                                    retrieval_mode: savedConfig?.retrieval_mode || flowStep.retrieval_mode,
-                                    base_doc_ids: savedConfig?.base_doc_ids || flowStep.base_doc_ids || [],
+                                    ...baseFlowStep,
+                                    prompt: savedConfig?.prompt || playbookStep?.prompt || baseFlowStep.prompt,
+                                    model: savedConfig?.model || playbookStep?.model || baseFlowStep.model,
+                                    temperature: savedConfig?.temperature ?? playbookStep?.temperature ?? baseFlowStep.temperature,
+                                    max_tokens: savedConfig?.max_tokens ?? playbookStep?.max_tokens ?? baseFlowStep.max_tokens,
+                                    output_format: savedConfig?.output_format || playbookStep?.output_format || baseFlowStep.output_format,
+                                    retrieval_mode: savedConfig?.retrieval_mode || playbookStep?.retrieval_mode || baseFlowStep.retrieval_mode,
+                                    base_doc_ids: savedConfig?.base_doc_ids || playbookStep?.base_doc_ids || baseFlowStep.base_doc_ids || [],
                                   } as FlowStep)
                                 } else {
                                   toast.error('Error', 'No se encontró la configuración del paso')
@@ -1638,10 +2366,52 @@ export default function CompetitorDetailView({
                         </div>
                         <div className="space-y-2">
                           {step.requiredSources.map(source => {
-                            // Find ALL documents matching this source type
-                            const matchingDocsForSource = documents.filter(d =>
-                              d.source_metadata?.source_type === source
+                            // Platform keywords for fuzzy matching by name/tags
+                            const platformKeywords: Record<string, string[]> = {
+                              'instagram_posts': ['instagram', 'ig', 'insta'],
+                              'instagram_comments': ['instagram', 'ig', 'insta', 'comment'],
+                              'facebook_posts': ['facebook', 'fb', 'meta'],
+                              'facebook_comments': ['facebook', 'fb', 'meta', 'comment'],
+                              'linkedin_posts': ['linkedin', 'li'],
+                              'linkedin_comments': ['linkedin', 'li', 'comment'],
+                              'linkedin_insights': ['linkedin', 'li', 'insight', 'analytics'],
+                              'youtube_videos': ['youtube', 'yt', 'video'],
+                              'youtube_comments': ['youtube', 'yt', 'comment'],
+                              'tiktok_posts': ['tiktok', 'tt'],
+                              'tiktok_comments': ['tiktok', 'tt', 'comment'],
+                              'twitter_posts': ['twitter', 'x', 'tweet'],
+                              'trustpilot_reviews': ['trustpilot', 'review'],
+                              'g2_reviews': ['g2', 'review'],
+                              'capterra_reviews': ['capterra', 'review'],
+                              'playstore_reviews': ['play store', 'playstore', 'google play', 'android', 'review'],
+                              'appstore_reviews': ['app store', 'appstore', 'ios', 'apple', 'review'],
+                              'website': ['website', 'web', 'crawl', 'sitio'],
+                              'deep_research': ['deep research', 'research', 'investigación'],
+                              'seo_serp': ['seo', 'serp', 'search'],
+                              'news_corpus': ['news', 'noticias', 'prensa', 'media'],
+                            }
+
+                            const keywords = platformKeywords[source] || [source.replace(/_/g, ' ')]
+
+                            // Helper to check if doc matches platform by name/tags
+                            const matchesPlatformByName = (doc: Document) => {
+                              const docName = (doc.name || doc.filename || '').toLowerCase()
+                              const docTags = (doc.tags || []).map((t: string) => t.toLowerCase())
+                              return keywords.some(kw =>
+                                docName.includes(kw) || docTags.some(tag => tag.includes(kw))
+                              )
+                            }
+
+                            // Filter documents for current competitor only
+                            const competitorDocs = documents.filter(d =>
+                              d.source_metadata?.competitor?.toLowerCase() === normalizedName
                             )
+
+                            // Match by source_type OR by platform keywords in name/tags
+                            const matchingDocsForSource = competitorDocs.filter(d =>
+                              d.source_metadata?.source_type === source || matchesPlatformByName(d)
+                            )
+
                             const hasDoc = matchingDocsForSource.length > 0
                             const selectedDocId = selectedDocs[step.id]?.has(matchingDocsForSource[0]?.id || '')
                               ? matchingDocsForSource[0]?.id
@@ -1675,49 +2445,34 @@ export default function CompetitorDetailView({
                                   </div>
 
                                   <div className="flex items-center gap-1">
-                                    {/* Document selector dropdown */}
-                                    {(editingStepId === step.id || hasDoc) && (
-                                      <select
-                                        value={selectedDocId || ''}
-                                        onChange={(e) => {
-                                          e.stopPropagation()
-                                          const newDocId = e.target.value
-                                          setSelectedDocs(prev => {
-                                            const stepDocs = new Set(prev[step.id] || [])
-                                            // Remove old selection for this source
-                                            matchingDocsForSource.forEach(d => stepDocs.delete(d.id))
-                                            // Add new selection
-                                            if (newDocId) {
-                                              stepDocs.add(newDocId)
-                                            }
-                                            return { ...prev, [step.id]: stepDocs }
-                                          })
-                                        }}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="text-xs px-2 py-1 border border-gray-200 rounded bg-white text-gray-700 max-w-[180px] truncate"
-                                        disabled={editingStepId !== step.id && matchingDocsForSource.length <= 1}
-                                      >
-                                        {!hasDoc && <option value="">Sin documento</option>}
-                                        {matchingDocsForSource.map(doc => (
-                                          <option key={doc.id} value={doc.id}>
-                                            {doc.name || doc.filename || `Doc ${doc.id.slice(0, 8)}`}
-                                          </option>
-                                        ))}
-                                        {/* Option to assign from all project docs */}
-                                        {editingStepId === step.id && !hasDoc && documents.length > 0 && (
-                                          <optgroup label="─ Otros documentos ─">
-                                            {documents
-                                              .filter(d => !matchingDocsForSource.includes(d))
-                                              .slice(0, 10)
-                                              .map(doc => (
-                                                <option key={doc.id} value={doc.id}>
-                                                  {doc.name || doc.filename || `Doc ${doc.id.slice(0, 8)}`}
-                                                </option>
-                                              ))}
-                                          </optgroup>
-                                        )}
-                                      </select>
-                                    )}
+                                    {/* Document selector dropdown - always visible and enabled */}
+                                    <select
+                                      value={selectedDocId || ''}
+                                      onChange={(e) => {
+                                        e.stopPropagation()
+                                        const newDocId = e.target.value
+                                        setSelectedDocs(prev => {
+                                          const stepDocs = new Set(prev[step.id] || [])
+                                          // Remove old selection for this source
+                                          matchingDocsForSource.forEach(d => stepDocs.delete(d.id))
+                                          // Add new selection
+                                          if (newDocId) {
+                                            stepDocs.add(newDocId)
+                                          }
+                                          return { ...prev, [step.id]: stepDocs }
+                                        })
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="text-xs px-2 py-1 border border-gray-200 rounded bg-white text-gray-700 max-w-[200px] hover:border-indigo-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                                    >
+                                      <option value="">Sin documento</option>
+                                      {/* Only docs for current competitor matching this platform */}
+                                      {matchingDocsForSource.map(doc => (
+                                        <option key={doc.id} value={doc.id}>
+                                          {doc.name || doc.filename || `Doc ${doc.id.slice(0, 8)}`}
+                                        </option>
+                                      ))}
+                                    </select>
 
                                     {/* View button */}
                                     {selectedDoc && (
@@ -2030,6 +2785,7 @@ export default function CompetitorDetailView({
         <ScraperConfigModal
           campaign={campaign}
           projectId={projectId}
+          clientName={clientName}
           onClose={() => setShowConfigModal(false)}
           onSaved={handleConfigSaved}
         />
