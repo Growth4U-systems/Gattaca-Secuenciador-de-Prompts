@@ -10,7 +10,7 @@
  * Both sections are integrated in one view.
  */
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
@@ -103,10 +103,76 @@ interface Document {
   filename?: string
   extracted_content?: string
   created_at?: string
+  tags?: string[]
   source_metadata?: {
     source_type?: string
     competitor?: string
   }
+}
+
+// Custom dropdown that survives parent re-renders (unlike native <select>)
+function DocumentDropdown({
+  docs,
+  selectedDocId,
+  onSelect,
+}: {
+  docs: Document[]
+  selectedDocId: string | undefined
+  onSelect: (docId: string) => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Close on outside click
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [isOpen])
+
+  const selectedDoc = docs.find(d => d.id === selectedDocId)
+  const label = selectedDoc
+    ? (selectedDoc.name || selectedDoc.filename || `Doc ${selectedDoc.id.slice(0, 8)}`)
+    : 'Sin documento'
+
+  return (
+    <div ref={ref} className="relative" onClick={e => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(prev => !prev)}
+        className="text-xs px-2 py-1 border border-gray-200 rounded bg-white text-gray-700 max-w-[200px] truncate hover:border-indigo-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer flex items-center gap-1"
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDown size={10} className={`flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[220px] max-h-[200px] overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => { onSelect(''); setIsOpen(false) }}
+            className={`w-full text-left text-xs px-3 py-2 hover:bg-gray-100 ${!selectedDocId ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-600'}`}
+          >
+            Sin documento
+          </button>
+          {docs.map(doc => (
+            <button
+              key={doc.id}
+              type="button"
+              onClick={() => { onSelect(doc.id); setIsOpen(false) }}
+              className={`w-full text-left text-xs px-3 py-2 hover:bg-gray-100 ${doc.id === selectedDocId ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700'}`}
+            >
+              {doc.name || doc.filename || `Doc ${doc.id.slice(0, 8)}`}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 interface CompetitorDetailViewProps {
@@ -1335,6 +1401,31 @@ export default function CompetitorDetailView({
     }
   }, [campaign.custom_variables?.discovery_completed, reRunningDiscovery, onRefresh])
 
+  // Auto-initialize selectedDocs when steps are expanded or documents change
+  useEffect(() => {
+    if (expandedSteps.size === 0) return
+    const competitorDocs = documents.filter(d =>
+      d.source_metadata?.competitor?.toLowerCase() === normalizedName
+    )
+    setSelectedDocs(prev => {
+      const next = { ...prev }
+      expandedSteps.forEach(stepId => {
+        // Skip if already initialized for this step
+        if (next[stepId] && next[stepId].size > 0) return
+        const step = ANALYSIS_STEPS.find(s => s.id === stepId)
+        if (!step) return
+        const docsForStep = new Set<string>()
+        competitorDocs.forEach(doc => {
+          if (step.requiredSources.includes(doc.source_metadata?.source_type || '')) {
+            docsForStep.add(doc.id)
+          }
+        })
+        next[stepId] = docsForStep
+      })
+      return next
+    })
+  }, [expandedSteps, documents, normalizedName])
+
   // Initialize editing state from custom_variables
   useEffect(() => {
     const profiles: Record<string, string> = {}
@@ -1465,16 +1556,19 @@ export default function CompetitorDetailView({
       const defaultPrompt = ALL_PROMPTS[step.promptKey]
       setStepPrompts(prev => ({ ...prev, [stepId]: savedPrompt || defaultPrompt }))
 
-      // Initialize selected documents for this step
+      // Initialize selected documents for this step (filtered by competitor)
       const docsForStep = new Set<string>()
       documents.forEach(doc => {
-        if (step.requiredSources.includes(doc.source_metadata?.source_type || '')) {
+        if (
+          doc.source_metadata?.competitor?.toLowerCase() === normalizedName &&
+          step.requiredSources.includes(doc.source_metadata?.source_type || '')
+        ) {
           docsForStep.add(doc.id)
         }
       })
       setSelectedDocs(prev => ({ ...prev, [stepId]: docsForStep }))
     }
-  }, [campaign.custom_variables, documents])
+  }, [campaign.custom_variables, documents, normalizedName])
 
   // Save step configuration
   const saveStepConfig = useCallback(async () => {
@@ -2445,12 +2539,10 @@ export default function CompetitorDetailView({
                                   </div>
 
                                   <div className="flex items-center gap-1">
-                                    {/* Document selector dropdown - always visible and enabled */}
-                                    <select
-                                      value={selectedDocId || ''}
-                                      onChange={(e) => {
-                                        e.stopPropagation()
-                                        const newDocId = e.target.value
+                                    <DocumentDropdown
+                                      docs={competitorDocs}
+                                      selectedDocId={selectedDocId}
+                                      onSelect={(newDocId) => {
                                         setSelectedDocs(prev => {
                                           const stepDocs = new Set(prev[step.id] || [])
                                           // Remove old selection for this source
@@ -2462,17 +2554,7 @@ export default function CompetitorDetailView({
                                           return { ...prev, [step.id]: stepDocs }
                                         })
                                       }}
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="text-xs px-2 py-1 border border-gray-200 rounded bg-white text-gray-700 max-w-[200px] hover:border-indigo-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-                                    >
-                                      <option value="">Sin documento</option>
-                                      {/* Only docs for current competitor matching this platform */}
-                                      {matchingDocsForSource.map(doc => (
-                                        <option key={doc.id} value={doc.id}>
-                                          {doc.name || doc.filename || `Doc ${doc.id.slice(0, 8)}`}
-                                        </option>
-                                      ))}
-                                    </select>
+                                    />
 
                                     {/* View button */}
                                     {selectedDoc && (
