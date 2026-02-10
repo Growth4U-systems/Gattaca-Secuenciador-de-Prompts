@@ -44,6 +44,7 @@ import {
   Save,
   Edit3,
   Eye,
+  Copy,
 } from 'lucide-react'
 import { useToast } from '@/components/ui'
 import {
@@ -201,6 +202,7 @@ function DocumentDropdown({
 
 interface CompetitorDetailViewProps {
   campaign: CompetitorCampaign
+  campaigns: CompetitorCampaign[]
   documents: Document[]
   projectId: string
   clientId?: string
@@ -428,6 +430,7 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
 
 export default function CompetitorDetailView({
   campaign,
+  campaigns,
   documents,
   projectId,
   clientId = '',
@@ -452,6 +455,8 @@ export default function CompetitorDetailView({
   const [isSavingStep, setIsSavingStep] = useState(false)
   // State for full StepEditor modal
   const [editingFlowStep, setEditingFlowStep] = useState<FlowStep | null>(null)
+  // State for applying config to all competitors
+  const [applyingToAll, setApplyingToAll] = useState<string | null>(null)
   // Document viewer modal state
   const [viewingDoc, setViewingDoc] = useState<Document | null>(null)
   // Step output viewer modal state
@@ -1695,6 +1700,58 @@ export default function CompetitorDetailView({
     }
   }, [campaign.id, toast, onRefresh])
 
+  // Apply step config from this competitor to all other competitors
+  const handleApplyConfigToAll = useCallback(async (analysisStepId: string) => {
+    const siblingCampaigns = campaigns.filter(c => c.id !== campaign.id)
+    if (siblingCampaigns.length === 0) {
+      toast.error('Sin competidores', 'No hay otros competidores a los que aplicar la configuración')
+      return
+    }
+
+    const savedConfig = campaign.custom_variables?.[`${analysisStepId}_config`]
+    if (!savedConfig) {
+      toast.error('Sin configuración', 'Primero edita y guarda la configuración de este paso')
+      return
+    }
+
+    setApplyingToAll(analysisStepId)
+    try {
+      const results = await Promise.allSettled(
+        siblingCampaigns.map(sibling =>
+          fetch(`/api/campaign/${sibling.id}/update-variables`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              custom_variables: {
+                [`${analysisStepId}_config`]: savedConfig,
+              },
+            }),
+          })
+        )
+      )
+
+      const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok))
+      if (failed.length === 0) {
+        toast.success(
+          'Aplicado a todos',
+          `Configuración copiada a ${siblingCampaigns.length} competidor${siblingCampaigns.length > 1 ? 'es' : ''}`
+        )
+      } else {
+        toast.error(
+          'Parcialmente aplicado',
+          `${siblingCampaigns.length - failed.length} de ${siblingCampaigns.length} actualizados`
+        )
+      }
+
+      await onRefresh()
+    } catch (error) {
+      console.error('Error applying config to all:', error)
+      toast.error('Error', 'No se pudo aplicar la configuración')
+    } finally {
+      setApplyingToAll(null)
+    }
+  }, [campaign.id, campaign.custom_variables, campaigns, toast, onRefresh])
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -2360,10 +2417,29 @@ export default function CompetitorDetailView({
                         ) : (
                           <>
                             <span className="text-sm text-gray-500">Configuración del paso</span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                const baseFlowStep = getFlowStepForAnalysis(step.id)
+                            <div className="flex items-center gap-2">
+                              {campaign.custom_variables?.[`${step.id}_config`] && campaigns.length > 1 && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleApplyConfigToAll(step.id)
+                                  }}
+                                  disabled={applyingToAll === step.id}
+                                  className="px-3 py-1.5 border border-indigo-200 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors flex items-center gap-1.5 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title={`Copiar esta configuración a los otros ${campaigns.length - 1} competidor${campaigns.length - 1 > 1 ? 'es' : ''}`}
+                                >
+                                  {applyingToAll === step.id ? (
+                                    <Loader2 size={14} className="animate-spin" />
+                                  ) : (
+                                    <Copy size={14} />
+                                  )}
+                                  Aplicar a todos
+                                </button>
+                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const baseFlowStep = getFlowStepForAnalysis(step.id)
                                 if (baseFlowStep) {
                                   // Load saved config from custom_variables (campaign-specific edits)
                                   const savedConfig = campaign.custom_variables?.[`${step.id}_config`] as {
@@ -2401,7 +2477,8 @@ export default function CompetitorDetailView({
                             >
                               <Edit3 size={14} />
                               Editar Configuración
-                            </button>
+                              </button>
+                            </div>
                           </>
                         )}
                       </div>
