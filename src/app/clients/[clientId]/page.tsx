@@ -509,6 +509,7 @@ function ContextLakeTab({
           onDocumentClick={(doc) => {
             // Could open document viewer
           }}
+          onDelete={handleDelete}
           onMoveToFolder={handleMoveToFolder}
           showCreateFolder={false}
           emptyMessage="No hay documentos en el Context Lake"
