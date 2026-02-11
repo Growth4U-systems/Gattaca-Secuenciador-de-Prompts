@@ -718,7 +718,7 @@ export default function CompetitorDetailView({
       // Website & SEO
       website: { varKey: 'competitor_website', apifyKey: 'url', isArray: false },
       seo_serp: { varKey: 'competitor_website', apifyKey: 'queries', isArray: true },
-      news_corpus: { varKey: 'competitor_name', apifyKey: 'searchQuery', isArray: false },
+      news_corpus: { varKey: 'competitor_name', apifyKey: 'queries', isArray: true },
       // Deep Research
       deep_research: { varKey: 'competitor_name', apifyKey: 'query', isArray: false },
     }
