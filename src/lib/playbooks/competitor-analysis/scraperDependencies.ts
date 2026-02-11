@@ -48,15 +48,24 @@ export const SCRAPER_DEPENDENCIES: ScraperDependency[] = [
     urlExtractor: (doc: Document) => {
       if (!doc.extracted_content) return []
 
-      // Extract YouTube video URLs from content
-      // Matches: https://www.youtube.com/watch?v=ABC123
-      // Or: https://youtube.com/watch?v=ABC123
-      const urlRegex = /https:\/\/(?:www\.)?youtube\.com\/watch\?v=[\w-]+/g
-      const matches = Array.from(doc.extracted_content.matchAll(urlRegex))
-      const urls = matches.map(m => m[0])
+      // Try JSON field extraction first (most reliable for Apify output)
+      const jsonUrls = extractUrlsFromJson(
+        doc.extracted_content,
+        ['url', 'videoUrl', 'link', 'videoLink'],
+        /youtube\.com|youtu\.be/
+      )
+      if (jsonUrls.length > 0) return Array.from(new Set(jsonUrls))
 
-      // Deduplicate
-      return Array.from(new Set(urls))
+      // Fallback: regex extraction from text content
+      const watchRegex = /https:\/\/(?:www\.)?youtube\.com\/watch\?v=[\w-]+/g
+      const shortsRegex = /https:\/\/(?:www\.)?youtube\.com\/shorts\/[\w-]+/g
+      const shortUrlRegex = /https:\/\/youtu\.be\/[\w-]+/g
+
+      const watchMatches = Array.from(doc.extracted_content.matchAll(watchRegex)).map(m => m[0])
+      const shortsMatches = Array.from(doc.extracted_content.matchAll(shortsRegex)).map(m => m[0])
+      const shortUrlMatches = Array.from(doc.extracted_content.matchAll(shortUrlRegex)).map(m => m[0])
+
+      return Array.from(new Set([...watchMatches, ...shortsMatches, ...shortUrlMatches]))
     }
   },
 
@@ -68,14 +77,22 @@ export const SCRAPER_DEPENDENCIES: ScraperDependency[] = [
     urlExtractor: (doc: Document) => {
       if (!doc.extracted_content) return []
 
-      // Extract LinkedIn post URLs from content
-      // Matches: https://www.linkedin.com/posts/username-12345
-      // Or: https://linkedin.com/feed/update/urn:li:activity:1234567890
-      const urlRegex = /https:\/\/(?:www\.)?linkedin\.com\/(?:posts\/[\w-]+|feed\/update\/urn:li:activity:\d+)/g
-      const matches = Array.from(doc.extracted_content.matchAll(urlRegex))
-      const urls = matches.map(m => m[0])
+      // Try JSON field extraction first (most reliable for Apify output)
+      const jsonUrls = extractUrlsFromJson(
+        doc.extracted_content,
+        ['url', 'postUrl', 'link', 'shareUrl'],
+        /linkedin\.com/
+      )
+      if (jsonUrls.length > 0) return Array.from(new Set(jsonUrls))
 
-      return Array.from(new Set(urls))
+      // Fallback: regex extraction from text content
+      const postsRegex = /https:\/\/(?:www\.)?linkedin\.com\/posts\/[\w-]+/g
+      const feedRegex = /https:\/\/(?:www\.)?linkedin\.com\/feed\/update\/urn:li:(?:activity|share|ugcPost):\d+/g
+
+      const postsMatches = Array.from(doc.extracted_content.matchAll(postsRegex)).map(m => m[0])
+      const feedMatches = Array.from(doc.extracted_content.matchAll(feedRegex)).map(m => m[0])
+
+      return Array.from(new Set([...postsMatches, ...feedMatches]))
     }
   },
 
@@ -99,14 +116,22 @@ export const SCRAPER_DEPENDENCIES: ScraperDependency[] = [
     urlExtractor: (doc: Document) => {
       if (!doc.extracted_content) return []
 
-      // Extract TikTok video URLs from content
-      // Matches: https://www.tiktok.com/@username/video/1234567890
-      // Or: https://tiktok.com/@username/video/1234567890
-      const urlRegex = /https:\/\/(?:www\.)?tiktok\.com\/@[\w.-]+\/video\/\d+/g
-      const matches = Array.from(doc.extracted_content.matchAll(urlRegex))
-      const urls = matches.map(m => m[0])
+      // Try JSON field extraction first (most reliable for Apify output)
+      const jsonUrls = extractUrlsFromJson(
+        doc.extracted_content,
+        ['webVideoUrl', 'videoUrl', 'url', 'link', 'video_url'],
+        /tiktok\.com/
+      )
+      if (jsonUrls.length > 0) return Array.from(new Set(jsonUrls))
 
-      return Array.from(new Set(urls))
+      // Fallback: regex extraction from text content
+      const videoRegex = /https:\/\/(?:www\.)?tiktok\.com\/@[\w.-]+\/video\/\d+/g
+      const shortRegex = /https:\/\/vm\.tiktok\.com\/[\w]+\/?/g
+
+      const videoMatches = Array.from(doc.extracted_content.matchAll(videoRegex)).map(m => m[0])
+      const shortMatches = Array.from(doc.extracted_content.matchAll(shortRegex)).map(m => m[0])
+
+      return Array.from(new Set([...videoMatches, ...shortMatches]))
     }
   },
 
@@ -118,17 +143,61 @@ export const SCRAPER_DEPENDENCIES: ScraperDependency[] = [
     urlExtractor: (doc: Document) => {
       if (!doc.extracted_content) return []
 
-      // Extract Facebook post URLs from content
-      // Matches: https://www.facebook.com/username/posts/123456
-      // Or: https://facebook.com/permalink.php?story_fbid=123&id=456
-      const urlRegex = /https:\/\/(?:www\.)?facebook\.com\/(?:[\w.-]+\/posts\/\d+|permalink\.php\?[^"'\s]+)/g
-      const matches = Array.from(doc.extracted_content.matchAll(urlRegex))
-      const urls = matches.map(m => m[0])
+      // Try JSON field extraction first (most reliable for Apify output)
+      const jsonUrls = extractUrlsFromJson(
+        doc.extracted_content,
+        ['postUrl', 'url', 'link', 'postLink'],
+        /facebook\.com/
+      )
+      if (jsonUrls.length > 0) return Array.from(new Set(jsonUrls))
 
-      return Array.from(new Set(urls))
+      // Fallback: regex extraction from text content
+      const postsRegex = /https:\/\/(?:www\.)?facebook\.com\/[\w.-]+\/posts\/[\w]+/g
+      const permalinkRegex = /https:\/\/(?:www\.)?facebook\.com\/(?:permalink|story)\.php\?[^"'\s}]+/g
+      const photoRegex = /https:\/\/(?:www\.)?facebook\.com\/photo\/?\?fbid=\d+/g
+      const watchRegex = /https:\/\/(?:www\.)?facebook\.com\/watch\/?\?v=\d+/g
+
+      const postsMatches = Array.from(doc.extracted_content.matchAll(postsRegex)).map(m => m[0])
+      const permalinkMatches = Array.from(doc.extracted_content.matchAll(permalinkRegex)).map(m => m[0])
+      const photoMatches = Array.from(doc.extracted_content.matchAll(photoRegex)).map(m => m[0])
+      const watchMatches = Array.from(doc.extracted_content.matchAll(watchRegex)).map(m => m[0])
+
+      return Array.from(new Set([...postsMatches, ...permalinkMatches, ...photoMatches, ...watchMatches]))
     }
   }
 ]
+
+// ============================================
+// JSON URL EXTRACTION HELPER
+// ============================================
+
+/**
+ * Extract URLs from JSON-formatted document content by checking known fields.
+ * Apify scrapers store output as JSON arrays - this extracts URLs from common field names.
+ */
+function extractUrlsFromJson(content: string, urlFields: string[], urlPattern?: RegExp): string[] {
+  try {
+    const parsed = JSON.parse(content)
+    const items = Array.isArray(parsed) ? parsed : [parsed]
+    const urls: string[] = []
+
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue
+      for (const field of urlFields) {
+        const value = item[field]
+        if (typeof value === 'string' && value.startsWith('http')) {
+          if (!urlPattern || urlPattern.test(value)) {
+            urls.push(value)
+          }
+        }
+      }
+    }
+
+    return urls
+  } catch {
+    return []
+  }
+}
 
 // ============================================
 // HELPER FUNCTIONS

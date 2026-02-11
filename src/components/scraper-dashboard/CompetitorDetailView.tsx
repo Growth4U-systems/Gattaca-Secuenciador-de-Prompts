@@ -758,6 +758,16 @@ export default function CompetitorDetailView({
         d.source_metadata?.competitor?.toLowerCase() === normalizedName
       )
 
+      console.log(`[handleRunScraper] Dependency lookup for ${sourceType}: dependsOn=${dependency.dependsOn}, competitor=${normalizedName}, matching docs=${parentDocs.length}, total docs=${documents.length}`)
+
+      if (parentDocs.length === 0) {
+        // Debug: show what source_types and competitors exist in documents
+        const availableTypes = [...new Set(documents.map(d => d.source_metadata?.source_type).filter(Boolean))]
+        const availableCompetitors = [...new Set(documents.map(d => d.source_metadata?.competitor?.toLowerCase()).filter(Boolean))]
+        console.log(`[handleRunScraper] Available source_types: ${availableTypes.join(', ')}`)
+        console.log(`[handleRunScraper] Available competitors: ${availableCompetitors.join(', ')}`)
+      }
+
       if (parentDocs.length > 0) {
         // Extract URLs from all documents and deduplicate
         const allUrls = parentDocs.flatMap(doc => dependency.urlExtractor(doc))
@@ -772,6 +782,7 @@ export default function CompetitorDetailView({
           }
           console.log(`[handleRunScraper] Auto-injected ${extractedUrls.length} URLs from ${parentDocs.length} ${dependency.dependsOn} doc(s) into ${dependency.targetInputField}`)
         } else {
+          console.log(`[handleRunScraper] Found ${parentDocs.length} parent docs but urlExtractor returned 0 URLs. Content preview: ${parentDocs[0]?.extracted_content?.slice(0, 200)}`)
           toast.warning(
             'Sin URLs de posts',
             `Los documentos de ${dependency.dependsOn} existen pero no se pudieron extraer URLs. Revisa el contenido.`
