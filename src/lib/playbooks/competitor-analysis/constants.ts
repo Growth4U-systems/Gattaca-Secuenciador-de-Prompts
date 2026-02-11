@@ -612,7 +612,7 @@ export const SOURCE_TYPE_TO_SCRAPER_TYPE: Record<SourceType, string | null> = {
   // Website & SEO
   website: 'website',
   seo_serp: 'seo_competitor_keywords',
-  news_corpus: 'google_news',
+  news_corpus: 'news_bing',
 
   // Social Posts
   instagram_posts: 'instagram_posts_comments',
@@ -671,8 +671,8 @@ const STORAGE_TO_APIFY_KEY_MAP: Record<string, string> = {
   app_store_app_id: 'startUrls',
   // Website
   competitor_website: 'url',
-  // News uses query
-  competitor_name: 'query',
+  // News uses queries (array for news_bing)
+  competitor_name: 'queries',
 }
 
 /**
@@ -684,6 +684,11 @@ function transformInputValue(
   value: string,
   sourceType: SourceType
 ): unknown {
+  // Handle news_corpus: competitor_name → queries array for news_bing
+  if (storageKey === 'competitor_name' && sourceType === 'news_corpus') {
+    return [value]
+  }
+
   // Handle URL-to-array transformations
   if (['facebook_url', 'youtube_url', 'capterra_url'].includes(storageKey)) {
     return [value] // Apify expects array of URLs
@@ -808,7 +813,7 @@ export function buildScraperInputConfig(
     playstore_reviews: { maxItems: 100, language: 'es', country: 'ES', sort: 'NEWEST' },
     appstore_reviews: { maxItems: 100, country: 'us' },
     // SEO & News
-    news_corpus: { maxItems: 50, language: 'es', country: 'ES' },
+    news_corpus: { country: 'es-ES', maxPages: 10, maxArticles: 50, extractContent: true },
     seo_serp: {},
     website: {},
   }

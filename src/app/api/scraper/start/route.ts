@@ -13,6 +13,7 @@ import {
 import { getScraperTemplate, buildScraperInput, SCRAPER_TEMPLATES } from '@/lib/scraperTemplates';
 import { getUserApiKey } from '@/lib/getUserApiKey';
 import { triggerEmbeddingGeneration } from '@/lib/embeddings';
+import { scrapeNews, type NewsScraperResult } from '@/lib/scrapers/newsScraper';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120; // 2 minutes for sync scrapers like Firecrawl
@@ -1043,22 +1044,49 @@ async function executeCustomScraper(
     .eq('id', job.id);
 
   try {
-    // Call the Edge Function
-    const response = await fetch(`${supabaseUrl}/functions/v1/${job.actor_id}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseAnonKey}`,
-      },
-      body: JSON.stringify(input),
-    });
+    let result: Record<string, unknown>;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Edge Function error: ${response.status} - ${errorText}`);
+    if (job.scraper_type === 'news_bing') {
+      // Execute Bing News scraper directly (no Edge Function needed)
+      const queries = (input.queries as string[]) || [];
+      const country = (input.country as string) || 'es-ES';
+      const maxPages = (input.maxPages as number) || 10;
+      const maxArticles = (input.maxArticles as number) || 50;
+
+      const allArticles: NewsScraperResult['articles'] = [];
+      for (const query of queries) {
+        const scraperResult = await scrapeNews({ query, country, maxPages, maxArticles });
+        if (scraperResult.success) {
+          allArticles.push(...scraperResult.articles);
+        } else {
+          console.warn(`[scraper/start] Bing News failed for query "${query}": ${scraperResult.error}`);
+        }
+      }
+
+      result = {
+        articles: allArticles,
+        query: queries.join(', '),
+        country,
+        totalFound: allArticles.length,
+      };
+    } else {
+      // Call the Edge Function for other custom scrapers
+      const response = await fetch(`${supabaseUrl}/functions/v1/${job.actor_id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify(input),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Edge Function error: ${response.status} - ${errorText}`);
+      }
+
+      result = await response.json();
     }
-
-    const result = await response.json();
 
     // Format results based on scraper type
     let documentContent: string;
