@@ -1060,6 +1060,7 @@ function DocumentsTab({
         <DocumentFolderView
           documents={documents}
           onDocumentClick={setViewingDoc}
+          onDelete={handleDelete}
           onMoveToFolder={handleMoveToFolder}
           showCreateFolder={false}
           emptyMessage="No hay documentos en este playbook"

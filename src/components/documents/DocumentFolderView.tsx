@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { ChevronDown, ChevronRight, FolderOpen, Folder, Plus, X, Link2, FolderInput } from 'lucide-react'
+import { ChevronDown, ChevronRight, FolderOpen, Folder, Plus, X, Link2, FolderInput, Trash2 } from 'lucide-react'
 import { Document, groupByFolder, getFolderDisplayName, getFolders } from '@/hooks/useDocuments'
+import { useModal } from '@/components/ui'
 
 interface DocumentFolderViewProps {
   documents: Document[]
   onFolderClick?: (folder: string | null) => void
   onDocumentClick?: (doc: Document) => void
+  onDelete?: (docId: string) => void
   onCreateFolder?: (folderName: string) => void
   onMoveToFolder?: (docId: string, folder: string | null) => Promise<void>
   selectedDocIds?: Set<string>
@@ -22,6 +24,7 @@ export default function DocumentFolderView({
   documents,
   onFolderClick,
   onDocumentClick,
+  onDelete,
   onCreateFolder,
   onMoveToFolder,
   selectedDocIds,
@@ -185,6 +188,7 @@ export default function DocumentFolderView({
                     key={doc.id}
                     doc={doc}
                     onClick={onDocumentClick}
+                    onDelete={onDelete}
                     isSelected={selectedDocIds?.has(doc.id)}
                     onToggleSelect={onToggleDocSelection}
                     onMoveToFolder={onMoveToFolder}
@@ -221,13 +225,15 @@ export default function DocumentFolderView({
 interface DocumentRowProps {
   doc: Document
   onClick?: (doc: Document) => void
+  onDelete?: (docId: string) => void
   isSelected?: boolean
   onToggleSelect?: (docId: string) => void
   onMoveToFolder?: (docId: string, folder: string | null) => Promise<void>
   availableFolders?: string[]
 }
 
-function DocumentRow({ doc, onClick, isSelected, onToggleSelect, onMoveToFolder, availableFolders = [] }: DocumentRowProps) {
+function DocumentRow({ doc, onClick, onDelete, isSelected, onToggleSelect, onMoveToFolder, availableFolders = [] }: DocumentRowProps) {
+  const modal = useModal()
   const [showFolderMenu, setShowFolderMenu] = useState(false)
   const [moving, setMoving] = useState(false)
   const [newFolderInput, setNewFolderInput] = useState('')
@@ -315,9 +321,11 @@ function DocumentRow({ doc, onClick, isSelected, onToggleSelect, onMoveToFolder,
         )}
       </div>
 
+      {/* Actions */}
+      <div className="flex items-center gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
       {/* Move to folder button */}
       {onMoveToFolder && (
-        <div className="relative flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="relative">
           <button
             onClick={() => setShowFolderMenu(!showFolderMenu)}
             className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
@@ -414,6 +422,26 @@ function DocumentRow({ doc, onClick, isSelected, onToggleSelect, onMoveToFolder,
           )}
         </div>
       )}
+      {/* Delete button */}
+      {onDelete && (
+        <button
+          onClick={async () => {
+            const confirmed = await modal.confirm({
+              title: 'Eliminar documento',
+              message: `¿Eliminar "${doc.filename}"? Esta acción no se puede deshacer.`,
+              confirmText: 'Eliminar',
+              cancelText: 'Cancelar',
+              variant: 'danger',
+            })
+            if (confirmed) onDelete(doc.id)
+          }}
+          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+          title="Eliminar"
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
+      </div>
     </div>
   )
 }

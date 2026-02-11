@@ -1048,7 +1048,13 @@ async function executeCustomScraper(
 
     if (job.scraper_type === 'news_bing') {
       // Execute Bing News scraper directly (no Edge Function needed)
-      const queries = (input.queries as string[]) || [];
+      // Normalize queries: accept string or string[]
+      const rawQueries = input.queries;
+      const queries: string[] = Array.isArray(rawQueries)
+        ? rawQueries.map(q => String(q).trim()).filter(Boolean)
+        : typeof rawQueries === 'string' && rawQueries.trim()
+          ? [rawQueries.trim()]
+          : [];
       const country = (input.country as string) || 'es-ES';
       const maxPages = (input.maxPages as number) || 10;
       const maxArticles = (input.maxArticles as number) || 50;

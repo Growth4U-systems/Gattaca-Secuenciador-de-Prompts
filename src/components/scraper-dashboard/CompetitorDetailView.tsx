@@ -2848,8 +2848,12 @@ export default function CompetitorDetailView({
                           <textarea
                             value={arrayValue}
                             onChange={(e) => {
-                              const values = e.target.value.split('\n').map(s => s.trim()).filter(Boolean)
-                              handleModalFieldChange(field.key, values.length > 0 ? values : e.target.value)
+                              // Store raw text while typing - only split into array on lines that are complete
+                              // This preserves spaces within lines (e.g. "Getnet España")
+                              const raw = e.target.value
+                              const lines = raw.split('\n')
+                              // Keep as raw string to preserve spaces; convert to array on submit
+                              handleModalFieldChange(field.key, lines.length > 1 ? lines.filter(s => s.trim()) : raw)
                             }}
                             rows={3}
                             placeholder={field.placeholder}
