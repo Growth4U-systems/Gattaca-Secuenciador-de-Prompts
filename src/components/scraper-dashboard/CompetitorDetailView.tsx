@@ -156,7 +156,10 @@ function DocumentDropdown({
       ) return
       setIsOpen(false)
     }
-    const handleScroll = () => setIsOpen(false)
+    const handleScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return
+      setIsOpen(false)
+    }
     document.addEventListener('mousedown', handleClose)
     window.addEventListener('scroll', handleScroll, true)
     return () => {
@@ -2837,7 +2840,9 @@ export default function CompetitorDetailView({
 
                     case 'url-array':
                     case 'text-array':
-                      const arrayValue = Array.isArray(value) ? value.join('\n') : (typeof value === 'string' ? value : '')
+                      const arrayValue = Array.isArray(value)
+                        ? value.map(item => typeof item === 'object' && item !== null && 'url' in item ? (item as {url: string}).url : String(item)).join('\n')
+                        : (typeof value === 'string' ? value : '')
                       return (
                         <div key={field.key}>
                           <label className="block text-sm font-medium text-gray-700 mb-1.5">
