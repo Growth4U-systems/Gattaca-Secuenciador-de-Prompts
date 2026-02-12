@@ -28,7 +28,8 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const projectId = formData.get('projectId') as string
+    const projectId = formData.get('projectId') as string | null
+    const clientId = formData.get('clientId') as string | null
     const category = formData.get('category') as string
     const description = formData.get('description') as string || ''
 
@@ -37,13 +38,14 @@ export async function POST(request: NextRequest) {
       size: file?.size,
       type: file?.type,
       projectId,
+      clientId,
       category,
       description: description.substring(0, 50) + (description.length > 50 ? '...' : '')
     })
 
-    if (!file || !projectId || !category) {
+    if (!file || !category || (!projectId && !clientId)) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields (file, category, and either projectId or clientId)' },
         { status: 400 }
       )
     }
@@ -121,13 +123,15 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('knowledge_base_docs')
       .insert({
-        project_id: projectId,
+        project_id: projectId || null,
+        client_id: clientId || null,
         filename: file.name,
         category: category,
         description: description.trim(),
         extracted_content: extractedContent,
         file_size_bytes: file.size,
         mime_type: file.type,
+        source_type: 'import',
       })
       .select()
       .single()

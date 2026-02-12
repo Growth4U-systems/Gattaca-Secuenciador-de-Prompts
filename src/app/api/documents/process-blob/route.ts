@@ -12,13 +12,13 @@ export const maxDuration = 300 // 5 minutes for large files
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { blobUrl, filename, projectId, category, description, fileSize, mimeType } = body
+    const { blobUrl, filename, projectId, clientId, category, description, fileSize, mimeType } = body
 
-    console.log('Processing blob:', { blobUrl, filename, fileSize, projectId, category, description: description?.substring(0, 50) })
+    console.log('Processing blob:', { blobUrl, filename, fileSize, projectId, clientId, category, description: description?.substring(0, 50) })
 
-    if (!blobUrl || !filename || !projectId || !category) {
+    if (!blobUrl || !filename || !category || (!projectId && !clientId)) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields (blobUrl, filename, category, and either projectId or clientId)' },
         { status: 400 }
       )
     }
@@ -84,13 +84,15 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('knowledge_base_docs')
       .insert({
-        project_id: projectId,
+        project_id: projectId || null,
+        client_id: clientId || null,
         filename: filename,
         category: category,
         description: description?.trim() || '',
         extracted_content: extractedContent,
         file_size_bytes: fileSize,
         mime_type: mimeType,
+        source_type: 'import',
       })
       .select()
       .single()

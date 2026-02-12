@@ -755,12 +755,12 @@ export async function getDocumentReferences(sourceDocId: string): Promise<Docume
   const supabase = createClient()
   const { data, error } = await supabase
     .from('knowledge_base_docs')
-    .select('*, projects(name)')
+    .select('id, filename, project_id')
     .eq('source_doc_id', sourceDocId)
     .or('is_deleted.is.null,is_deleted.eq.false')
 
   if (error) throw error
-  return data || []
+  return (data || []) as unknown as Document[]
 }
 
 /** Check if a document can be deleted (has no active references) */
@@ -770,13 +770,10 @@ export async function canDeleteDocument(docId: string): Promise<{
   referencingProjects: string[]
 }> {
   const refs = await getDocumentReferences(docId)
-  const projectNames = refs
-    .map(r => (r as Document & { projects?: { name: string } }).projects?.name)
-    .filter((name): name is string => !!name)
 
   return {
     canDelete: refs.length === 0,
     referenceCount: refs.length,
-    referencingProjects: [...new Set(projectNames)]
+    referencingProjects: []
   }
 }

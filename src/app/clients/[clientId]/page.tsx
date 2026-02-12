@@ -29,9 +29,11 @@ import {
   getFolderDisplayName,
   updateDocumentFolder,
   canDeleteDocument,
+  hardDeleteDocument,
 } from '@/hooks/useDocuments'
 import DocumentList from '@/components/documents/DocumentList'
 import DocumentFolderView from '@/components/documents/DocumentFolderView'
+import DocumentUpload from '@/components/documents/DocumentUpload'
 import { useToast } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import ClientSidebar from '@/components/layout/ClientSidebar'
@@ -163,6 +165,7 @@ export default function ClientPage({
           )}
           {activeTab === 'context-lake' && (
             <ContextLakeTab
+              clientId={params.clientId}
               documents={documents}
               loading={docsLoading}
               onReload={reloadDocs}
@@ -282,11 +285,13 @@ function OverviewTab({
 
 // Context Lake Tab
 function ContextLakeTab({
+  clientId,
   documents,
   loading,
   onReload,
   projectsMap,
 }: {
+  clientId: string
   documents: Document[]
   loading: boolean
   onReload: () => void
@@ -303,24 +308,22 @@ function ContextLakeTab({
   const handleDelete = async (docId: string) => {
     try {
       // Check for references first
-      const { canDelete, referenceCount, referencingProjects } = await canDeleteDocument(docId)
+      const { canDelete, referenceCount } = await canDeleteDocument(docId)
       if (!canDelete) {
         toast.error(
           'No se puede eliminar',
-          `Este documento tiene ${referenceCount} referencia(s) en: ${referencingProjects.join(', ')}`
+          `Este documento tiene ${referenceCount} referencia(s) activa(s)`
         )
         return
       }
 
-      const { error } = await supabase
-        .from('knowledge_base_docs')
-        .delete()
-        .eq('id', docId)
-      if (error) throw error
+      await hardDeleteDocument(docId)
       toast.success('Eliminado', 'Documento eliminado del Context Lake')
       onReload()
     } catch (err) {
-      toast.error('Error', 'No se pudo eliminar el documento')
+      console.error('Error deleting document:', err)
+      const msg = err instanceof Error ? err.message : 'Error desconocido'
+      toast.error('Error al eliminar', msg)
     }
   }
 
@@ -382,8 +385,11 @@ function ContextLakeTab({
           </p>
         </div>
 
-        {/* View Mode Toggle */}
-        <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
+        <div className="flex items-center gap-3">
+          <DocumentUpload clientId={clientId} onUploadComplete={onReload} />
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
           <button
             onClick={() => setViewMode('folders')}
             className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
@@ -406,6 +412,7 @@ function ContextLakeTab({
             <FileText size={16} className="inline mr-1.5" />
             Lista
           </button>
+          </div>
         </div>
       </div>
 
