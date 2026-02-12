@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
       ) {
         console.log('Extracting DOCX...')
         extractedContent = await extractDOCX(buffer)
-      } else if (file.type === 'text/plain') {
-        console.log('Extracting TXT...')
+      } else if (file.type === 'text/plain' || file.type === 'text/csv' || file.name.endsWith('.csv')) {
+        console.log('Extracting TXT/CSV...')
         const decoder = new TextDecoder()
         extractedContent = decoder.decode(buffer)
       } else {
