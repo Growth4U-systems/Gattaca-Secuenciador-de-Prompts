@@ -573,6 +573,9 @@ export default function CompetitorDetailView({
       total: number
     }> = {}
 
+    // Sources that use ecp_name instead of custom_variables for their input
+    const ecpNameSources = new Set(['news_corpus', 'deep_research'])
+
     STEP_DOCUMENT_REQUIREMENTS.forEach(step => {
       const stepInfo = ANALYSIS_STEPS.find(s => s.id === step.stepId)
       const scrapers = step.source_types.map(sourceType => {
@@ -582,12 +585,21 @@ export default function CompetitorDetailView({
           doc.source_metadata?.source_type === sourceType &&
           doc.source_metadata?.competitor?.toLowerCase() === normalizedName
         )
+
+        // Resolve inputValue: some sources use ecp_name, others use custom_variables
+        let inputValue: string | undefined
+        if (ecpNameSources.has(sourceType)) {
+          inputValue = competitorName || undefined
+        } else if (inputMapping?.inputKey) {
+          inputValue = campaign.custom_variables?.[inputMapping.inputKey]
+        }
+
         return {
           sourceType,
           name: req?.name || sourceType,
           isCompleted,
           inputKey: inputMapping?.inputKey,
-          inputValue: inputMapping?.inputKey ? campaign.custom_variables?.[inputMapping.inputKey] : undefined,
+          inputValue,
         }
       })
 
@@ -600,7 +612,7 @@ export default function CompetitorDetailView({
     })
 
     return result
-  }, [documents, normalizedName, campaign.custom_variables])
+  }, [documents, normalizedName, campaign.custom_variables, competitorName])
 
   // Total scraper progress
   const totalScraperProgress = useMemo(() => {
@@ -700,46 +712,81 @@ export default function CompetitorDetailView({
     // Pre-fill the main input from custom_variables using explicit mapping
     const vars = campaign.custom_variables || {}
 
-    // Explicit mapping: source_type -> { varKey: campaign variable key, apifyKey: Apify field name, isArray: boolean }
-    // Note: Comment scrapers (tiktok_comments, facebook_comments, etc.) are NOT mapped here
-    // because they get their input from post URLs extracted from parent scraper documents.
-    const sourceToApifyMapping: Record<string, { varKey: string; apifyKey: string; isArray: boolean }> = {
+    // Maps source_type -> { varKey, schemaKey, isArray, transform? }
+    // schemaKey must match the field key in SCRAPER_FIELD_SCHEMAS (what the modal displays)
+    // and SCRAPER_TEMPLATES inputSchema (what Apify expects).
+    // Comment scrapers are NOT mapped here - they get input from parent scraper documents.
+    const sourceToSchemaMapping: Record<string, {
+      varKey: string; schemaKey: string; isArray: boolean;
+      transform?: (v: string) => string
+    }> = {
       // Social posts
-      instagram_posts: { varKey: 'instagram_username', apifyKey: 'username', isArray: false },
-      instagram_comments: { varKey: 'instagram_username', apifyKey: 'username', isArray: false },
-      facebook_posts: { varKey: 'facebook_url', apifyKey: 'startUrls', isArray: true },
-      linkedin_posts: { varKey: 'linkedin_url', apifyKey: 'companyUrls', isArray: true },
-      linkedin_insights: { varKey: 'linkedin_url', apifyKey: 'companyUrls', isArray: true },
-      youtube_videos: { varKey: 'youtube_url', apifyKey: 'startUrls', isArray: true },
-      tiktok_posts: { varKey: 'tiktok_username', apifyKey: 'profiles', isArray: true },
+      instagram_posts: { varKey: 'instagram_username', schemaKey: 'username', isArray: false },
+      instagram_comments: { varKey: 'instagram_username', schemaKey: 'username', isArray: false },
+      facebook_posts: { varKey: 'facebook_url', schemaKey: 'startUrls', isArray: true },
+      linkedin_posts: { varKey: 'linkedin_url', schemaKey: 'company_name', isArray: false },
+      linkedin_insights: { varKey: 'linkedin_url', schemaKey: 'urls', isArray: true },
+      youtube_videos: { varKey: 'youtube_url', schemaKey: 'startUrls', isArray: true },
+      tiktok_posts: { varKey: 'tiktok_username', schemaKey: 'profiles', isArray: true },
       // Reviews
-      trustpilot_reviews: { varKey: 'trustpilot_url', apifyKey: 'startUrls', isArray: true },
-      g2_reviews: { varKey: 'g2_url', apifyKey: 'startUrls', isArray: true },
-      capterra_reviews: { varKey: 'capterra_url', apifyKey: 'startUrls', isArray: true },
-      playstore_reviews: { varKey: 'play_store_app_id', apifyKey: 'appId', isArray: false },
-      appstore_reviews: { varKey: 'app_store_app_id', apifyKey: 'appId', isArray: false },
+      trustpilot_reviews: {
+        varKey: 'trustpilot_url', schemaKey: 'companyDomain', isArray: false,
+        transform: (url) => {
+          const match = url.match(/trustpilot\.com\/review\/([^/?]+)/)
+          return match ? match[1] : url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]
+        },
+      },
+      g2_reviews: {
+        varKey: 'g2_url', schemaKey: 'product', isArray: false,
+        transform: (url) => {
+          const match = url.match(/g2\.com\/products\/([^/?]+)/)
+          return match ? match[1] : url
+        },
+      },
+      capterra_reviews: { varKey: 'capterra_url', schemaKey: 'startUrls', isArray: true },
+      playstore_reviews: {
+        varKey: 'play_store_app_id', schemaKey: 'startUrls', isArray: true,
+        transform: (appId) => appId.startsWith('http')
+          ? appId
+          : `https://play.google.com/store/apps/details?id=${appId}`,
+      },
+      appstore_reviews: {
+        varKey: 'app_store_app_id', schemaKey: 'startUrls', isArray: true,
+        transform: (appId) => appId.startsWith('http')
+          ? appId
+          : `https://apps.apple.com/us/app/app/id${appId}`,
+      },
       // Website & SEO
-      website: { varKey: 'competitor_website', apifyKey: 'url', isArray: false },
-      seo_serp: { varKey: 'competitor_website', apifyKey: 'queries', isArray: true },
-      news_corpus: { varKey: 'competitor_name', apifyKey: 'queries', isArray: true },
-      // Deep Research
-      deep_research: { varKey: 'competitor_name', apifyKey: 'query', isArray: false },
+      website: { varKey: 'competitor_website', schemaKey: 'url', isArray: false },
+      seo_serp: { varKey: 'competitor_website', schemaKey: 'url', isArray: false },
+      // News & Research - use competitor name (from ecp_name, not custom_variables)
+      news_corpus: { varKey: '_ecp_name', schemaKey: 'queries', isArray: true },
+      deep_research: { varKey: '_ecp_name', schemaKey: 'query', isArray: false },
     }
 
-    const mapping = sourceToApifyMapping[sourceType]
+    const mapping = sourceToSchemaMapping[sourceType]
     if (mapping) {
-      const storedValue = vars[mapping.varKey]
+      // Special handling: _ecp_name reads from campaign.ecp_name instead of custom_variables
+      const storedValue = mapping.varKey === '_ecp_name'
+        ? competitorName
+        : vars[mapping.varKey]
+
       if (storedValue) {
         // Clean up the value (remove @ for usernames)
-        const cleanValue = mapping.varKey.includes('username')
+        let cleanValue = mapping.varKey.includes('username')
           ? storedValue.replace('@', '')
           : storedValue
 
+        // Apply transform if defined (e.g., URL → domain, app ID → URL)
+        if (mapping.transform) {
+          cleanValue = mapping.transform(cleanValue)
+        }
+
         // Set as array or single value based on mapping
         if (mapping.isArray) {
-          initialConfig[mapping.apifyKey] = [cleanValue]
+          initialConfig[mapping.schemaKey] = [cleanValue]
         } else {
-          initialConfig[mapping.apifyKey] = cleanValue
+          initialConfig[mapping.schemaKey] = cleanValue
         }
       }
     }
