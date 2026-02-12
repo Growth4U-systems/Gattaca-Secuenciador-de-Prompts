@@ -7,7 +7,8 @@ import { formatTokenCount } from '@/lib/supabase'
 import { DocumentNameValidationBadge } from './DocumentNameInput'
 
 interface DocumentUploadProps {
-  projectId: string
+  projectId?: string
+  clientId?: string
   onUploadComplete: () => void
 }
 
@@ -22,6 +23,7 @@ const CATEGORIES = [
 
 export default function DocumentUpload({
   projectId,
+  clientId,
   onUploadComplete,
 }: DocumentUploadProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -132,7 +134,8 @@ export default function DocumentUpload({
           body: JSON.stringify({
             blobUrl: blob.url,
             filename: selectedFile.name,
-            projectId: projectId,
+            projectId: projectId || null,
+            clientId: clientId || null,
             category: effectiveCategory,
             description: description.trim(),
             fileSize: selectedFile.size,
@@ -153,7 +156,8 @@ export default function DocumentUpload({
 
         const formData = new FormData()
         formData.append('file', selectedFile)
-        formData.append('projectId', projectId)
+        if (projectId) formData.append('projectId', projectId)
+        if (clientId) formData.append('clientId', clientId)
         formData.append('category', effectiveCategory)
         formData.append('description', description.trim())
 
