@@ -122,7 +122,7 @@ interface Document {
 }
 
 // Custom dropdown using fixed positioning to escape overflow-hidden ancestors
-function DocumentDropdown({
+function DocumentSelect({
   docs,
   selectedDocId,
   onSelect,
@@ -131,79 +131,20 @@ function DocumentDropdown({
   selectedDocId: string | undefined
   onSelect: (docId: string) => void
 }) {
-  const [isOpen, setIsOpen] = useState(false)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 })
-
-  // Calculate menu position from button's viewport coords
-  useEffect(() => {
-    if (!isOpen || !buttonRef.current) return
-    const rect = buttonRef.current.getBoundingClientRect()
-    setMenuPos({
-      top: rect.bottom + 4,
-      left: Math.max(8, rect.right - 240),
-    })
-  }, [isOpen])
-
-  // Close on outside click
-  useEffect(() => {
-    if (!isOpen) return
-    const handleClose = (e: MouseEvent) => {
-      if (
-        buttonRef.current?.contains(e.target as Node) ||
-        menuRef.current?.contains(e.target as Node)
-      ) return
-      setIsOpen(false)
-    }
-    document.addEventListener('mousedown', handleClose)
-    return () => {
-      document.removeEventListener('mousedown', handleClose)
-    }
-  }, [isOpen])
-
-  const selectedDoc = docs.find(d => d.id === selectedDocId)
-  const label = selectedDoc
-    ? (selectedDoc.name || selectedDoc.filename || `Doc ${selectedDoc.id.slice(0, 8)}`)
-    : 'Sin documento'
-
   return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={(e) => { e.stopPropagation(); setIsOpen(prev => !prev) }}
-        className="text-xs px-2 py-1 border border-gray-200 rounded bg-white text-gray-700 max-w-[200px] hover:border-indigo-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer flex items-center gap-1"
-      >
-        <span className="truncate">{label}</span>
-        <ChevronDown size={10} className={`flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-      {isOpen && (
-        <div
-          ref={menuRef}
-          className="fixed z-[9999] bg-white border border-gray-200 rounded-lg shadow-xl min-w-[240px] max-h-[300px] overflow-y-auto overscroll-contain"
-          style={{ top: menuPos.top, left: menuPos.left }}
-        >
-          <button
-            type="button"
-            onClick={() => { onSelect(''); setIsOpen(false) }}
-            className={`w-full text-left text-xs px-3 py-2 hover:bg-gray-100 ${!selectedDocId ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-600'}`}
-          >
-            Sin documento
-          </button>
-          {docs.map(doc => (
-            <button
-              key={doc.id}
-              type="button"
-              onClick={() => { onSelect(doc.id); setIsOpen(false) }}
-              className={`w-full text-left text-xs px-3 py-2 hover:bg-gray-100 ${doc.id === selectedDocId ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700'}`}
-            >
-              {doc.name || doc.filename || `Doc ${doc.id.slice(0, 8)}`}
-            </button>
-          ))}
-        </div>
-      )}
-    </>
+    <select
+      value={selectedDocId || ''}
+      onChange={(e) => { e.stopPropagation(); onSelect(e.target.value) }}
+      onClick={(e) => e.stopPropagation()}
+      className="text-xs px-2 py-1 border border-gray-200 rounded bg-white text-gray-700 max-w-[200px] hover:border-indigo-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+    >
+      <option value="">Sin documento</option>
+      {docs.map(doc => (
+        <option key={doc.id} value={doc.id}>
+          {doc.name || doc.filename || `Doc ${doc.id.slice(0, 8)}`}
+        </option>
+      ))}
+    </select>
   )
 }
 
@@ -458,7 +399,7 @@ export default function CompetitorDetailView({
   // State for step configuration editing (inline - deprecated)
   const [editingStepId, setEditingStepId] = useState<string | null>(null)
   const [stepVariables, setStepVariables] = useState<Record<string, string>>({})
-  const [selectedDocs, setSelectedDocs] = useState<Record<string, Set<string>>>({})
+  const [selectedDocs, setSelectedDocs] = useState<Record<string, Record<string, string>>>({})
   const [stepPrompts, setStepPrompts] = useState<Record<string, string>>({})
   const [isSavingStep, setIsSavingStep] = useState(false)
   // State for full StepEditor modal
@@ -1502,13 +1443,14 @@ export default function CompetitorDetailView({
       const next = { ...prev }
       expandedSteps.forEach(stepId => {
         // Skip if already initialized for this step
-        if (next[stepId] && next[stepId].size > 0) return
+        if (next[stepId] && Object.keys(next[stepId]).length > 0) return
         const step = ANALYSIS_STEPS.find(s => s.id === stepId)
         if (!step) return
-        const docsForStep = new Set<string>()
+        const docsForStep: Record<string, string> = {}
         competitorDocs.forEach(doc => {
-          if (step.requiredSources.includes(doc.source_metadata?.source_type || '')) {
-            docsForStep.add(doc.id)
+          const sourceType = doc.source_metadata?.source_type || ''
+          if (step.requiredSources.includes(sourceType) && !docsForStep[sourceType]) {
+            docsForStep[sourceType] = doc.id
           }
         })
         next[stepId] = docsForStep
@@ -1648,13 +1590,15 @@ export default function CompetitorDetailView({
       setStepPrompts(prev => ({ ...prev, [stepId]: savedPrompt || defaultPrompt }))
 
       // Initialize selected documents for this step (filtered by competitor)
-      const docsForStep = new Set<string>()
+      const docsForStep: Record<string, string> = {}
       documents.forEach(doc => {
+        const sourceType = doc.source_metadata?.source_type || ''
         if (
           doc.source_metadata?.competitor?.toLowerCase() === normalizedName &&
-          step.requiredSources.includes(doc.source_metadata?.source_type || '')
+          step.requiredSources.includes(sourceType) &&
+          !docsForStep[sourceType]
         ) {
-          docsForStep.add(doc.id)
+          docsForStep[sourceType] = doc.id
         }
       })
       setSelectedDocs(prev => ({ ...prev, [stepId]: docsForStep }))
@@ -2637,12 +2581,8 @@ export default function CompetitorDetailView({
                             )
 
                             const hasDoc = matchingDocsForSource.length > 0
-                            const selectedDocId = selectedDocs[step.id]?.has(matchingDocsForSource[0]?.id || '')
-                              ? matchingDocsForSource[0]?.id
-                              : Array.from(selectedDocs[step.id] || []).find(id =>
-                                  matchingDocsForSource.some(d => d.id === id)
-                                )
-                            const selectedDoc = matchingDocsForSource.find(d => d.id === selectedDocId) || matchingDocsForSource[0]
+                            const selectedDocId = selectedDocs[step.id]?.[source] || (matchingDocsForSource[0]?.id || '')
+                            const selectedDoc = competitorDocs.find(d => d.id === selectedDocId) || matchingDocsForSource[0]
 
                             return (
                               <div
@@ -2669,20 +2609,14 @@ export default function CompetitorDetailView({
                                   </div>
 
                                   <div className="flex items-center gap-1">
-                                    <DocumentDropdown
+                                    <DocumentSelect
                                       docs={competitorDocs}
                                       selectedDocId={selectedDocId}
                                       onSelect={(newDocId) => {
-                                        setSelectedDocs(prev => {
-                                          const stepDocs = new Set(prev[step.id] || [])
-                                          // Remove old selection for this source
-                                          matchingDocsForSource.forEach(d => stepDocs.delete(d.id))
-                                          // Add new selection
-                                          if (newDocId) {
-                                            stepDocs.add(newDocId)
-                                          }
-                                          return { ...prev, [step.id]: stepDocs }
-                                        })
+                                        setSelectedDocs(prev => ({
+                                          ...prev,
+                                          [step.id]: { ...prev[step.id], [source]: newDocId }
+                                        }))
                                       }}
                                     />
 
