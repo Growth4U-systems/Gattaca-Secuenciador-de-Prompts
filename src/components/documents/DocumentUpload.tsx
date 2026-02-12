@@ -71,10 +71,12 @@ export default function DocumentUpload({
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/msword',
       'text/plain',
+      'text/csv',
+      'application/vnd.ms-excel',
     ]
 
-    if (!validTypes.includes(file.type)) {
-      setError('Tipo de archivo no soportado. Usa PDF, DOCX o TXT.')
+    if (!validTypes.includes(file.type) && !file.name.endsWith('.csv')) {
+      setError('Tipo de archivo no soportado. Usa PDF, DOCX, TXT o CSV.')
       return
     }
 
@@ -253,7 +255,7 @@ export default function DocumentUpload({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf,.doc,.docx,.txt"
+                    accept=".pdf,.doc,.docx,.txt,.csv"
                     onChange={handleInputChange}
                     className="hidden"
                   />
@@ -276,7 +278,7 @@ export default function DocumentUpload({
                       Seleccionar archivo
                     </button>
                     <p className="text-xs text-gray-400 mt-4">
-                      PDF, DOCX o TXT (archivos grandes usan Blob Storage)
+                      PDF, DOCX, TXT o CSV (archivos grandes usan Blob Storage)
                     </p>
                   </div>
                 </div>
@@ -469,7 +471,7 @@ export default function DocumentUpload({
 
 // Simple text extraction for demo (will be replaced with server-side extraction)
 async function extractTextPreview(file: File): Promise<string> {
-  if (file.type === 'text/plain') {
+  if (file.type === 'text/plain' || file.type === 'text/csv' || file.name.endsWith('.csv')) {
     return await file.text()
   }
 
