@@ -12,7 +12,7 @@ export const maxDuration = 300 // 5 minutes for large files
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { blobUrl, filename, projectId, clientId, category, description, fileSize, mimeType } = body
+    const { blobUrl, filename, projectId, clientId, category, description, fileSize, mimeType, competitorName } = body
 
     console.log('Processing blob:', { blobUrl, filename, fileSize, projectId, clientId, category, description: description?.substring(0, 50) })
 
@@ -81,19 +81,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const insertData: Record<string, unknown> = {
+      project_id: projectId || null,
+      client_id: clientId || null,
+      filename: filename,
+      category: category,
+      description: description?.trim() || '',
+      extracted_content: extractedContent,
+      file_size_bytes: fileSize,
+      mime_type: mimeType,
+      source_type: 'import',
+    }
+
+    // Tag with competitor if provided
+    if (competitorName) {
+      insertData.tags = [competitorName, 'Importado', new Date().toISOString().split('T')[0]]
+      insertData.source_metadata = { competitor: competitorName, source_type: 'import' }
+    }
+
     const { data, error } = await supabase
       .from('knowledge_base_docs')
-      .insert({
-        project_id: projectId || null,
-        client_id: clientId || null,
-        filename: filename,
-        category: category,
-        description: description?.trim() || '',
-        extracted_content: extractedContent,
-        file_size_bytes: fileSize,
-        mime_type: mimeType,
-        source_type: 'import',
-      })
+      .insert(insertData)
       .select()
       .single()
 

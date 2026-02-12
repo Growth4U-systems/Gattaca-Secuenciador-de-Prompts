@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { Upload, FileText, X, AlertCircle, Loader2, FileUp, Check } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Upload, FileText, X, AlertCircle, Loader2, FileUp, Check, Users } from 'lucide-react'
 import { DocCategory } from '@/types/database.types'
-import { formatTokenCount } from '@/lib/supabase'
+import { formatTokenCount, supabase } from '@/lib/supabase'
 import { DocumentNameValidationBadge } from './DocumentNameInput'
 
 interface DocumentUploadProps {
@@ -39,10 +39,50 @@ export default function DocumentUpload({
   } | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [competitorName, setCompetitorName] = useState('')
+  const [competitors, setCompetitors] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // The actual category to use (custom or selected)
   const effectiveCategory = useCustomCategory ? customCategory.trim() : category
+
+  // Fetch competitors list from campaigns
+  useEffect(() => {
+    const fetchCompetitors = async () => {
+      try {
+        if (projectId) {
+          // Direct: fetch campaigns for this project
+          const res = await fetch(`/api/campaign/list?projectId=${projectId}&playbookType=competitor_analysis`)
+          const data = await res.json()
+          if (data.success && data.campaigns) {
+            setCompetitors(data.campaigns.map((c: { ecp_name: string }) => c.ecp_name).filter(Boolean))
+          }
+        } else if (clientId) {
+          // Indirect: fetch client's projects, then campaigns for each
+          const { data: projects } = await supabase
+            .from('projects')
+            .select('id')
+            .eq('client_id', clientId)
+          if (!projects?.length) return
+
+          const allNames: string[] = []
+          for (const project of projects) {
+            const res = await fetch(`/api/campaign/list?projectId=${project.id}&playbookType=competitor_analysis`)
+            const data = await res.json()
+            if (data.success && data.campaigns) {
+              for (const c of data.campaigns) {
+                if (c.ecp_name && !allNames.includes(c.ecp_name)) {
+                  allNames.push(c.ecp_name)
+                }
+              }
+            }
+          }
+          setCompetitors(allNames)
+        }
+      } catch { /* ignore - competitors dropdown won't show */ }
+    }
+    fetchCompetitors()
+  }, [projectId, clientId])
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
@@ -140,6 +180,7 @@ export default function DocumentUpload({
             description: description.trim(),
             fileSize: selectedFile.size,
             mimeType: selectedFile.type,
+            competitorName: competitorName || null,
           }),
         })
 
@@ -160,6 +201,7 @@ export default function DocumentUpload({
         if (clientId) formData.append('clientId', clientId)
         formData.append('category', effectiveCategory)
         formData.append('description', description.trim())
+        if (competitorName) formData.append('competitorName', competitorName)
 
         const response = await fetch('/api/documents/upload', {
           method: 'POST',
@@ -204,6 +246,7 @@ export default function DocumentUpload({
     setCustomCategory('')
     setCategory('product')
     setDescription('')
+    setCompetitorName('')
     setError(null)
     setDragActive(false)
   }
@@ -398,6 +441,31 @@ export default function DocumentUpload({
                   />
                 )}
               </div>
+
+              {/* Competitor Assignment - show when there are competitors available */}
+              {competitors.length > 0 && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Asignar a competidor <span className="text-gray-400 font-normal">(opcional)</span>
+                  </label>
+                  <div className="relative">
+                    <Users size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <select
+                      value={competitorName}
+                      onChange={(e) => setCompetitorName(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white appearance-none text-sm"
+                    >
+                      <option value="">Documento global (sin competidor)</option>
+                      {competitors.map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Asigna este documento a un competidor para agruparlo en el Context Lake.
+                  </p>
+                </div>
+              )}
 
               {/* Document Description */}
               <div>
