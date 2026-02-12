@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
     const clientId = formData.get('clientId') as string | null
     const category = formData.get('category') as string
     const description = formData.get('description') as string || ''
+    const competitorName = formData.get('competitorName') as string | null
 
     console.log('File info:', {
       name: file?.name,
@@ -120,19 +121,27 @@ export async function POST(request: NextRequest) {
 
     // Insert document into database
     console.log('Saving to database...')
+    const insertData: Record<string, unknown> = {
+      project_id: projectId || null,
+      client_id: clientId || null,
+      filename: file.name,
+      category: category,
+      description: description.trim(),
+      extracted_content: extractedContent,
+      file_size_bytes: file.size,
+      mime_type: file.type,
+      source_type: 'import',
+    }
+
+    // Tag with competitor if provided
+    if (competitorName) {
+      insertData.tags = [competitorName, 'Importado', new Date().toISOString().split('T')[0]]
+      insertData.source_metadata = { competitor: competitorName, source_type: 'import' }
+    }
+
     const { data, error } = await supabase
       .from('knowledge_base_docs')
-      .insert({
-        project_id: projectId || null,
-        client_id: clientId || null,
-        filename: file.name,
-        category: category,
-        description: description.trim(),
-        extracted_content: extractedContent,
-        file_size_bytes: file.size,
-        mime_type: file.type,
-        source_type: 'import',
-      })
+      .insert(insertData)
       .select()
       .single()
 
