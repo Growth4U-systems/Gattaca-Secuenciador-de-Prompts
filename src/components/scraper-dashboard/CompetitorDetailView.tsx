@@ -146,7 +146,7 @@ function DocumentDropdown({
     })
   }, [isOpen])
 
-  // Close on outside click or scroll
+  // Close on outside click
   useEffect(() => {
     if (!isOpen) return
     const handleClose = (e: MouseEvent) => {
@@ -156,15 +156,9 @@ function DocumentDropdown({
       ) return
       setIsOpen(false)
     }
-    const handleScroll = (e: Event) => {
-      if (menuRef.current?.contains(e.target as Node)) return
-      setIsOpen(false)
-    }
     document.addEventListener('mousedown', handleClose)
-    window.addEventListener('scroll', handleScroll, true)
     return () => {
       document.removeEventListener('mousedown', handleClose)
-      window.removeEventListener('scroll', handleScroll, true)
     }
   }, [isOpen])
 
@@ -187,7 +181,7 @@ function DocumentDropdown({
       {isOpen && (
         <div
           ref={menuRef}
-          className="fixed z-[9999] bg-white border border-gray-200 rounded-lg shadow-xl min-w-[240px] max-h-[200px] overflow-y-auto"
+          className="fixed z-[9999] bg-white border border-gray-200 rounded-lg shadow-xl min-w-[240px] max-h-[300px] overflow-y-auto overscroll-contain"
           style={{ top: menuPos.top, left: menuPos.left }}
         >
           <button
