@@ -576,18 +576,24 @@ export default function CompetitorDetailView({
       const scrapersReady = !stepScrapers || stepScrapers.completed === stepScrapers.total
       const missingScrapers = stepScrapers ? stepScrapers.total - stepScrapers.completed : 0
 
-      const dependenciesReady = !step.dependsOn || step.dependsOn.every(depId =>
-        campaign.step_outputs?.[depId]
-      )
+      // Use flow step IDs to check step_outputs (edge function saves with flow IDs like "comp-step-1-autopercepcion")
+      const flowStepId = STEP_ID_MAPPING[step.id] || step.id
+      const dependenciesReady = !step.dependsOn || step.dependsOn.every(depId => {
+        const depFlowId = STEP_ID_MAPPING[depId] || depId
+        return campaign.step_outputs?.[depFlowId]
+      })
 
-      const isCompleted = !!campaign.step_outputs?.[step.id]
+      const isCompleted = !!campaign.step_outputs?.[flowStepId]
       const isRunning = runningSteps.has(step.id)
 
       // Only block if dependencies (previous steps) aren't complete
       // Missing scrapers is a warning, not a blocker - user decides when to run
       let blockedReason: string | undefined
       if (!dependenciesReady && step.dependsOn) {
-        const missingDeps = step.dependsOn.filter(depId => !campaign.step_outputs?.[depId])
+        const missingDeps = step.dependsOn.filter(depId => {
+          const depFlowId = STEP_ID_MAPPING[depId] || depId
+          return !campaign.step_outputs?.[depFlowId]
+        })
         blockedReason = `Requiere: ${missingDeps.map(d => ANALYSIS_STEPS.find(s => s.id === d)?.name || d).join(', ')}`
       }
 
@@ -2390,7 +2396,7 @@ export default function CompetitorDetailView({
                           <button
                             onClick={() => {
                               setViewingStepOutput({
-                                stepId: step.id,
+                                stepId: STEP_ID_MAPPING[step.id] || step.id,
                                 stepName: step.name,
                                 stepOrder: index + 1,
                               })

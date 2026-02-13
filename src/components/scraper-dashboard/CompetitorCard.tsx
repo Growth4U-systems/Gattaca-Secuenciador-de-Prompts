@@ -78,6 +78,15 @@ const ANALYSIS_STEPS = [
   { id: 'resumen', name: 'Síntesis Final', icon: FileText, requiredSources: [], dependsOn: ['autopercepcion', 'percepcion-terceros', 'percepcion-rrss', 'percepcion-reviews'] },
 ]
 
+// Mapping from ANALYSIS_STEPS id to flow step IDs (used in step_outputs keys)
+const STEP_ID_MAPPING: Record<string, string> = {
+  'autopercepcion': 'comp-step-1-autopercepcion',
+  'percepcion-terceros': 'comp-step-2-percepcion-terceros',
+  'percepcion-rrss': 'comp-step-3-percepcion-rrss',
+  'percepcion-reviews': 'comp-step-4-percepcion-reviews',
+  'resumen': 'comp-step-5-sintesis',
+}
+
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -162,11 +171,14 @@ export default function CompetitorCard({
           )
         )
 
-      const dependenciesReady = !step.dependsOn || step.dependsOn.every(depId =>
-        campaign.step_outputs?.[depId]
-      )
+      // Use flow step IDs to check step_outputs (edge function saves with flow IDs like "comp-step-1-autopercepcion")
+      const flowStepId = STEP_ID_MAPPING[step.id] || step.id
+      const dependenciesReady = !step.dependsOn || step.dependsOn.every(depId => {
+        const depFlowId = STEP_ID_MAPPING[depId] || depId
+        return campaign.step_outputs?.[depFlowId]
+      })
 
-      const isCompleted = !!campaign.step_outputs?.[step.id]
+      const isCompleted = !!campaign.step_outputs?.[flowStepId]
 
       const blockedBy: string[] = []
       if (!scraperReady) {
@@ -179,7 +191,10 @@ export default function CompetitorCard({
         blockedBy.push(`${missing.length} scraper(s) pendientes`)
       }
       if (!dependenciesReady && step.dependsOn) {
-        const missingDeps = step.dependsOn.filter(depId => !campaign.step_outputs?.[depId])
+        const missingDeps = step.dependsOn.filter(depId => {
+          const depFlowId = STEP_ID_MAPPING[depId] || depId
+          return !campaign.step_outputs?.[depFlowId]
+        })
         blockedBy.push(`Requiere: ${missingDeps.join(', ')}`)
       }
 

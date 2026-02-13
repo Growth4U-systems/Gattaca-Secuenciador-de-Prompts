@@ -18,7 +18,7 @@ export type FlowStepType = 'llm' | 'scraper'
 export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'groq' | 'deep-research'
 
 // Modelos disponibles por proveedor (IDs reales de API)
-export type GeminiModel = 'gemini-3.0-pro-preview' | 'gemini-2.5-pro' | 'gemini-2.5-flash' | 'gemini-2.5-flash-lite'
+export type GeminiModel = 'gemini-3.0-pro-preview' | 'gemini-3-flash-preview' | 'gemini-2.5-pro' | 'gemini-2.5-flash' | 'gemini-2.5-flash-lite'
 export type OpenAIModel = 'gpt-5.2' | 'gpt-5' | 'gpt-5-mini' | 'gpt-4.1' | 'gpt-4.1-mini' | 'gpt-4o' | 'gpt-4o-mini' | 'o1' | 'o1-mini' | 'o3' | 'o3-mini' | 'o3-pro' | 'o4-mini'
 export type AnthropicModel = 'claude-4.5-opus' | 'claude-4.5-sonnet' | 'claude-4.5-haiku'
 export type GroqModel = 'llama-3.3-70b-versatile' | 'llama-3.1-8b-instant' | 'mixtral-8x7b-32768'
@@ -54,6 +54,8 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   'google/gemini-2.5-pro': { input: 1.25, output: 10.0 },
   'google/gemini-2.5-flash': { input: 0.30, output: 2.50 },
   'google/gemini-3-pro-preview': { input: 2.00, output: 12.00 },
+  'google/gemini-3-flash-preview': { input: 0.30, output: 2.50 },
+  'gemini-3-flash-preview': { input: 0.30, output: 2.50 },
   'gpt-4o': { input: 2.50, output: 10.0 },
   'gpt-4o-mini': { input: 0.15, output: 0.60 },
   'claude-4.5-sonnet': { input: 3.00, output: 15.0 },

@@ -27,6 +27,7 @@ import OpenRouterModelSelector from '@/components/openrouter/OpenRouterModelSele
 const LLM_MODELS = [
   // Gemini
   { value: 'gemini-3.0-pro-preview', label: 'Gemini 3.0 Pro', provider: 'Google' },
+  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', provider: 'Google' },
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google' },
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google' },
   { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', provider: 'Google' },

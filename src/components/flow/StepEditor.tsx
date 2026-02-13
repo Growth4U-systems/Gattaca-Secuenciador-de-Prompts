@@ -38,6 +38,7 @@ const OUTPUT_FORMATS: { value: OutputFormat; label: string; description: string 
 const LLM_MODELS: { value: string; label: string; provider: string; context: string; desc: string }[] = [
   // Gemini (Google)
   { value: 'gemini-3.0-pro-preview', label: 'Gemini 3.0 Pro', provider: 'Google', context: '2M tokens', desc: 'Último modelo, máxima capacidad' },
+  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', provider: 'Google', context: '1M tokens', desc: 'Rápido, económico, última generación' },
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google', context: '1M tokens', desc: 'Excelente calidad, estable' },
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google', context: '1M tokens', desc: 'Rápido y económico' },
   { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', provider: 'Google', context: '1M tokens', desc: 'Ultra ligero' },
