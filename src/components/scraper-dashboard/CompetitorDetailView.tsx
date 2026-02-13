@@ -2581,7 +2581,10 @@ export default function CompetitorDetailView({
                             )
 
                             const hasDoc = matchingDocsForSource.length > 0
-                            const selectedDocId = selectedDocs[step.id]?.[source] || (matchingDocsForSource[0]?.id || '')
+                            const hasExplicitSelection = selectedDocs[step.id]?.[source] !== undefined
+                            const selectedDocId = hasExplicitSelection
+                              ? selectedDocs[step.id][source]
+                              : (matchingDocsForSource[0]?.id || '')
                             const selectedDoc = competitorDocs.find(d => d.id === selectedDocId) || matchingDocsForSource[0]
 
                             return (

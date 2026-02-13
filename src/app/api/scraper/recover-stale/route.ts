@@ -414,9 +414,10 @@ async function fetchAndSaveResults(
     (items[0]?.profileUrl as string)?.split('/').pop() ||
     'Unknown';
 
-  // Generate document name
+  // Generate document name: "Source - Target - 2026-02-13"
   const sourceName = SOURCE_NAMES[job.scraper_type] || job.scraper_type.replace(/_/g, ' ');
-  const documentName = `${sourceName} - ${targetName}`;
+  const dateStr = new Date().toISOString().split('T')[0];
+  const documentName = `${sourceName} - ${targetName} - ${dateStr}`;
 
   // Generate tags
   const pendingTags = (providerMeta?.pending_tags as string[]) || [];

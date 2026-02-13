@@ -119,12 +119,19 @@ export async function POST(request: NextRequest) {
     // RLS policies will enforce that user can only upload to their projects
     const supabase = supabaseAuth
 
+    // Auto-format filename: "{Source} - {Target} - {YYYY-MM-DD}"
+    const today = new Date().toISOString().split('T')[0]
+    const baseName = file.name.replace(/\.(pdf|docx?|txt|md|markdown|csv|json|html?)$/i, '').trim()
+    const formattedFilename = competitorName
+      ? `${baseName} - ${competitorName} - ${today}`
+      : `${baseName} - ${today}`
+
     // Insert document into database
     console.log('Saving to database...')
     const insertData: Record<string, unknown> = {
       project_id: projectId || null,
       client_id: clientId || null,
-      filename: file.name,
+      filename: formattedFilename,
       category: category,
       description: description.trim(),
       extracted_content: extractedContent,
@@ -135,7 +142,7 @@ export async function POST(request: NextRequest) {
 
     // Tag with competitor if provided
     if (competitorName) {
-      insertData.tags = [competitorName, 'Importado', new Date().toISOString().split('T')[0]]
+      insertData.tags = [competitorName, 'Importado', today]
       insertData.source_metadata = { competitor: competitorName, source_type: 'import' }
     }
 
