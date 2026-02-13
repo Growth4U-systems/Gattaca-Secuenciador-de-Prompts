@@ -63,13 +63,13 @@ export async function GET(request: NextRequest) {
 
 /**
  * PATCH /api/documents
- * Update document properties (campaign assignment, filename, description)
- * Body: { documentId: string, campaignId?: string | null, filename?: string, description?: string }
+ * Update document properties
+ * Body: { documentId: string, campaignId?, filename?, description?, category?, tags?, source_metadata? }
  */
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { documentId, campaignId, filename, description } = body
+    const { documentId, campaignId, filename, description, category, tags, source_metadata } = body
 
     if (!documentId) {
       return NextResponse.json(
@@ -87,12 +87,10 @@ export async function PATCH(request: NextRequest) {
     // Build update object based on provided fields
     const updateData: Record<string, unknown> = {}
 
-    // Only include campaignId if it was explicitly provided in the request
     if ('campaignId' in body) {
       updateData.campaign_id = campaignId || null
     }
 
-    // Only include filename if provided and not empty
     if (filename !== undefined) {
       const trimmedFilename = filename.trim()
       if (!trimmedFilename) {
@@ -104,12 +102,22 @@ export async function PATCH(request: NextRequest) {
       updateData.filename = trimmedFilename
     }
 
-    // Include description if provided (can be empty string to clear it)
     if (description !== undefined) {
       updateData.description = description.trim()
     }
 
-    // Check if there's anything to update
+    if (category !== undefined) {
+      updateData.category = category
+    }
+
+    if (tags !== undefined) {
+      updateData.tags = Array.isArray(tags) ? tags : []
+    }
+
+    if (source_metadata !== undefined) {
+      updateData.source_metadata = source_metadata
+    }
+
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
         { error: 'No fields to update' },
@@ -136,7 +144,6 @@ export async function PATCH(request: NextRequest) {
           error: 'Failed to update document',
           details: error.message,
           code: error.code,
-          hint: error.hint || 'Make sure the migration 20250123000001_add_campaign_documents.sql has been applied',
         },
         { status: 500 }
       )

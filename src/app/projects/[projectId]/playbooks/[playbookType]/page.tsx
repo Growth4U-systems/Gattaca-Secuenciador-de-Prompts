@@ -15,6 +15,7 @@ import { useDocuments, deleteDocument, canDeleteDocument, updateDocumentFolder, 
 import DocumentUpload from '@/components/documents/DocumentUpload'
 import DocumentBulkUpload from '@/components/documents/DocumentBulkUpload'
 import DocumentList from '@/components/documents/DocumentList'
+import DocumentEditModal, { type DocumentUpdates } from '@/components/documents/DocumentEditModal'
 import DocumentFolderView from '@/components/documents/DocumentFolderView'
 import CSVTableViewer from '@/components/documents/CSVTableViewer'
 import JSONViewer from '@/components/documents/JSONViewer'
@@ -818,6 +819,7 @@ function DocumentsTab({
 }) {
   const toast = useToast()
   const [viewingDoc, setViewingDoc] = useState<any | null>(null)
+  const [editingDoc, setEditingDoc] = useState<any | null>(null)
   const [campaigns, setCampaigns] = useState<Array<{ id: string; ecp_name: string }>>([])
   const [showScraperLauncher, setShowScraperLauncher] = useState(false)
   const isCompetitorPlaybook = ['competitor_analysis', 'competitor-analysis'].includes(playbookType)
@@ -923,6 +925,26 @@ function DocumentsTab({
       }
     } catch (error) {
       toast.error('Error al renombrar', error instanceof Error ? error.message : 'Error desconocido')
+      throw error
+    }
+  }
+
+  const handleEditDocument = async (docId: string, updates: DocumentUpdates) => {
+    try {
+      const response = await fetch('/api/documents', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId: docId, ...updates }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        toast.success('Actualizado', 'Documento actualizado correctamente')
+        onReload()
+      } else {
+        throw new Error(data.error || 'Error al actualizar')
+      }
+    } catch (error) {
+      toast.error('Error', error instanceof Error ? error.message : 'Error desconocido')
       throw error
     }
   }
@@ -1052,6 +1074,7 @@ function DocumentsTab({
           onView={setViewingDoc}
           onCampaignChange={handleCampaignChange}
           onRename={handleRename}
+          onEditDocument={setEditingDoc}
           onMoveToFolder={handleMoveToFolder}
           availableFolders={existingFolders}
           groupByCompetitor
@@ -1074,6 +1097,7 @@ function DocumentsTab({
           onView={setViewingDoc}
           onCampaignChange={handleCampaignChange}
           onRename={handleRename}
+          onEditDocument={setEditingDoc}
           onMoveToFolder={handleMoveToFolder}
           availableFolders={existingFolders}
         />
@@ -1144,6 +1168,16 @@ function DocumentsTab({
           </div>
         )
       })()}
+
+      {/* Document Edit Modal */}
+      {editingDoc && (
+        <DocumentEditModal
+          document={editingDoc}
+          projectId={projectId}
+          onSave={handleEditDocument}
+          onClose={() => setEditingDoc(null)}
+        />
+      )}
 
       {/* Scraper Launcher Modal */}
       {showScraperLauncher && (
