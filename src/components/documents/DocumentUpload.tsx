@@ -114,11 +114,18 @@ export default function DocumentUpload({
       'application/msword',
       'text/plain',
       'text/csv',
+      'text/markdown',
+      'text/html',
+      'text/x-markdown',
+      'application/json',
       'application/vnd.ms-excel',
     ]
 
-    if (!validTypes.includes(file.type) && !file.name.endsWith('.csv')) {
-      setError('Tipo de archivo no soportado. Usa PDF, DOCX, TXT o CSV.')
+    const validExtensions = ['.csv', '.md', '.markdown', '.html', '.htm', '.json', '.txt', '.pdf', '.doc', '.docx']
+    const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+
+    if (!validTypes.includes(file.type) && !hasValidExtension) {
+      setError('Tipo de archivo no soportado. Usa PDF, DOCX, TXT, CSV, Markdown o HTML.')
       return
     }
 
@@ -306,7 +313,7 @@ export default function DocumentUpload({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf,.doc,.docx,.txt,.csv"
+                    accept=".pdf,.doc,.docx,.txt,.csv,.md,.markdown,.html,.htm,.json"
                     onChange={handleInputChange}
                     className="hidden"
                   />
@@ -329,7 +336,7 @@ export default function DocumentUpload({
                       Seleccionar archivo
                     </button>
                     <p className="text-xs text-gray-400 mt-4">
-                      PDF, DOCX, TXT o CSV (archivos grandes usan Blob Storage)
+                      PDF, DOCX, TXT, CSV, Markdown o HTML
                     </p>
                   </div>
                 </div>
@@ -547,7 +554,11 @@ export default function DocumentUpload({
 
 // Simple text extraction for demo (will be replaced with server-side extraction)
 async function extractTextPreview(file: File): Promise<string> {
-  if (file.type === 'text/plain' || file.type === 'text/csv' || file.name.endsWith('.csv')) {
+  const textTypes = ['text/plain', 'text/csv', 'text/markdown', 'text/x-markdown', 'text/html', 'application/json']
+  const textExtensions = ['.csv', '.md', '.markdown', '.html', '.htm', '.json', '.txt']
+  const isTextFile = textTypes.includes(file.type) || textExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+
+  if (isTextFile) {
     return await file.text()
   }
 
