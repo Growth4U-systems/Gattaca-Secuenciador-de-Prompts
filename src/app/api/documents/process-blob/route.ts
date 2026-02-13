@@ -46,8 +46,8 @@ export async function POST(request: NextRequest) {
       ) {
         console.log('Extracting DOCX...')
         extractedContent = await extractDOCX(arrayBuffer)
-      } else if (mimeType === 'text/plain' || mimeType === 'text/csv' || mimeType === 'application/vnd.ms-excel' || filename?.endsWith('.csv')) {
-        console.log('Extracting TXT/CSV...')
+      } else if (isTextBasedMime(mimeType, filename)) {
+        console.log('Extracting text-based file...')
         const decoder = new TextDecoder()
         extractedContent = decoder.decode(arrayBuffer)
       } else {
@@ -155,6 +155,13 @@ async function extractPDF(buffer: ArrayBuffer): Promise<string> {
     console.error('PDF extraction error:', error)
     throw new Error('Failed to extract PDF content')
   }
+}
+
+// Check if file is text-based (markdown, HTML, JSON, plain text, CSV)
+function isTextBasedMime(mimeType: string, filename?: string): boolean {
+  const textTypes = ['text/plain', 'text/csv', 'text/markdown', 'text/x-markdown', 'text/html', 'application/json', 'application/vnd.ms-excel']
+  const textExtensions = ['.csv', '.md', '.markdown', '.html', '.htm', '.json', '.txt']
+  return textTypes.includes(mimeType) || (filename ? textExtensions.some(ext => filename.toLowerCase().endsWith(ext)) : false)
 }
 
 // DOCX extraction

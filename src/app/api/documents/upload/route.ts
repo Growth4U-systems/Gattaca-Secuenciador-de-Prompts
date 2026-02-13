@@ -83,14 +83,14 @@ export async function POST(request: NextRequest) {
       ) {
         console.log('Extracting DOCX...')
         extractedContent = await extractDOCX(buffer)
-      } else if (file.type === 'text/plain' || file.type === 'text/csv' || file.name.endsWith('.csv')) {
-        console.log('Extracting TXT/CSV...')
+      } else if (isTextBasedFile(file)) {
+        console.log('Extracting text-based file...')
         const decoder = new TextDecoder()
         extractedContent = decoder.decode(buffer)
       } else {
-        console.error('Unsupported file type:', file.type)
+        console.error('Unsupported file type:', file.type, file.name)
         return NextResponse.json(
-          { error: 'Unsupported file type', fileType: file.type },
+          { error: 'Unsupported file type', fileType: file.type, fileName: file.name },
           { status: 400 }
         )
       }
@@ -203,6 +203,13 @@ async function extractPDF(buffer: ArrayBuffer): Promise<string> {
     console.error('PDF extraction error:', error)
     throw new Error('Failed to extract PDF content')
   }
+}
+
+// Check if file is a text-based format (markdown, HTML, JSON, plain text, CSV)
+function isTextBasedFile(file: File): boolean {
+  const textTypes = ['text/plain', 'text/csv', 'text/markdown', 'text/x-markdown', 'text/html', 'application/json']
+  const textExtensions = ['.csv', '.md', '.markdown', '.html', '.htm', '.json', '.txt']
+  return textTypes.includes(file.type) || textExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
 }
 
 // DOCX extraction using mammoth
