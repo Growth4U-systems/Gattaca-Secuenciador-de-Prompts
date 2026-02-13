@@ -143,7 +143,11 @@ export default function DocumentUpload({
   }
 
   const handleUpload = async () => {
-    if (!selectedFile || !extractionResult) return
+    if (!selectedFile) return
+    if (!extractionResult) {
+      setError('El contenido del archivo aún no se ha extraído. Intenta seleccionar el archivo de nuevo.')
+      return
+    }
 
     setUploading(true)
     setError(null)
@@ -518,7 +522,7 @@ export default function DocumentUpload({
               </button>
               <button
                 onClick={handleUpload}
-                disabled={!selectedFile || uploading || (useCustomCategory && !customCategory.trim())}
+                disabled={!selectedFile || !extractionResult || uploading || (useCustomCategory && !customCategory.trim())}
                 className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed transition-all inline-flex items-center justify-center gap-2"
               >
                 {uploading ? (

@@ -47,6 +47,7 @@ interface DocumentListProps {
   onUpdateDescription?: (docId: string, description: string) => Promise<void>
   onTierChange?: (docId: string, tier: DocumentTier) => Promise<void>
   onMoveToFolder?: (docId: string, folder: string | null) => Promise<void>
+  onEditDocument?: (doc: Document) => void
   availableFolders?: string[]
   showContextLakeFilters?: boolean
   groupByCompetitor?: boolean
@@ -85,6 +86,7 @@ export default function DocumentList({
   onUpdateDescription,
   onTierChange,
   onMoveToFolder,
+  onEditDocument,
   availableFolders = [],
   showContextLakeFilters = false,
   groupByCompetitor = false,
@@ -548,6 +550,7 @@ export default function DocumentList({
               )}
             </div>
           )}
+          {onEditDocument && <button onClick={() => onEditDocument(doc)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Editar documento"><Edit2 size={16} /></button>}
           <button onClick={() => onView(doc)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Abrir en pantalla completa"><Maximize2 size={16} /></button>
           <button onClick={async () => { const confirmed = await modal.confirm({ title: 'Eliminar documento', message: `¿Eliminar "${doc.filename}"? Esta acción no se puede deshacer.`, confirmText: 'Eliminar', cancelText: 'Cancelar', variant: 'danger' }); if (confirmed) onDelete(doc.id) }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar"><Trash2 size={16} /></button>
         </div>

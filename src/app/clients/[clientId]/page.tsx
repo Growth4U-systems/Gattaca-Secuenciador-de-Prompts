@@ -34,6 +34,7 @@ import {
 import DocumentList from '@/components/documents/DocumentList'
 import DocumentFolderView from '@/components/documents/DocumentFolderView'
 import DocumentUpload from '@/components/documents/DocumentUpload'
+import DocumentEditModal, { type DocumentUpdates } from '@/components/documents/DocumentEditModal'
 import { useToast } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import ClientSidebar from '@/components/layout/ClientSidebar'
@@ -304,6 +305,7 @@ function ContextLakeTab({
   const [newFolderName, setNewFolderName] = useState('')
   const [showNewFolderInput, setShowNewFolderInput] = useState(false)
   const [manualFolders, setManualFolders] = useState<string[]>([])
+  const [editingDoc, setEditingDoc] = useState<any | null>(null)
 
   const handleDelete = async (docId: string) => {
     try {
@@ -337,6 +339,26 @@ function ContextLakeTab({
       toast.error('Error', 'No se pudo mover el documento')
     } finally {
       setMovingToFolder(null)
+    }
+  }
+
+  const handleEditDocument = async (docId: string, updates: DocumentUpdates) => {
+    try {
+      const response = await fetch('/api/documents', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId: docId, ...updates }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        toast.success('Actualizado', 'Documento actualizado correctamente')
+        onReload()
+      } else {
+        throw new Error(data.error || 'Error al actualizar')
+      }
+    } catch (error) {
+      toast.error('Error', error instanceof Error ? error.message : 'Error desconocido')
+      throw error
     }
   }
 
@@ -527,9 +549,20 @@ function ContextLakeTab({
           documents={filteredDocuments as any[]}
           onDelete={handleDelete}
           onView={() => {}}
+          onEditDocument={setEditingDoc}
           showContextLakeFilters={true}
           onMoveToFolder={handleMoveToFolder}
           availableFolders={folders}
+        />
+      )}
+
+      {/* Document Edit Modal */}
+      {editingDoc && (
+        <DocumentEditModal
+          document={editingDoc}
+          clientId={clientId}
+          onSave={handleEditDocument}
+          onClose={() => setEditingDoc(null)}
         />
       )}
     </div>
