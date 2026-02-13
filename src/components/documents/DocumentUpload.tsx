@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react'
 import { Upload, FileText, X, AlertCircle, Loader2, FileUp, Check, Users } from 'lucide-react'
 import { DocCategory } from '@/types/database.types'
 import { formatTokenCount, supabase } from '@/lib/supabase'
-import { DocumentNameValidationBadge } from './DocumentNameInput'
 
 interface DocumentUploadProps {
   projectId?: string
@@ -347,10 +346,7 @@ export default function DocumentUpload({
                     <FileText className="w-6 h-6 text-blue-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-gray-900 truncate">{selectedFile.name}</p>
-                      <DocumentNameValidationBadge filename={selectedFile.name} size="xs" />
-                    </div>
+                    <p className="font-medium text-gray-900 truncate">{selectedFile.name}</p>
                     <p className="text-sm text-gray-500">
                       {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                     </p>
