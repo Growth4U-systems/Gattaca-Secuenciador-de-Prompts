@@ -1346,6 +1346,8 @@ serve(async (req) => {
     let contextString = ''
     let totalTokens = 0
     const retrievalMode = step_config.retrieval_mode || 'full'
+    const inputDocumentsUsed: Array<{ id: string; filename: string; category: string; token_count: number }> = []
+    const previousStepsUsed: Array<{ id: string; name: string }> = []
 
     // 1. Load base documents (either full or via RAG)
     if (step_config.base_doc_ids && step_config.base_doc_ids.length > 0) {
@@ -1418,6 +1420,7 @@ serve(async (req) => {
             contextString += doc.extracted_content
             contextString += `\n--- END DOCUMENT ---\n`
             totalTokens += doc.token_count || 0
+            inputDocumentsUsed.push({ id: doc.id, filename: doc.filename, category: doc.category, token_count: doc.token_count || 0 })
           }
         }
       } else {
@@ -1436,6 +1439,7 @@ serve(async (req) => {
           contextString += doc.extracted_content
           contextString += `\n--- END DOCUMENT ---\n`
           totalTokens += doc.token_count || 0
+          inputDocumentsUsed.push({ id: doc.id, filename: doc.filename, category: doc.category, token_count: doc.token_count || 0 })
         }
       }
     }
@@ -1451,6 +1455,7 @@ serve(async (req) => {
           contextString += prevOutput.output
           contextString += `\n--- END PREVIOUS STEP ---\n`
           totalTokens += prevOutput.tokens || Math.ceil(prevOutput.output.length / 4)
+          previousStepsUsed.push({ id: prevStepId, name: prevOutput.step_name || prevStepId })
         }
       }
     }
@@ -1581,6 +1586,11 @@ serve(async (req) => {
       tokens: outputTokens,
       status: 'completed',
       completed_at: new Date().toISOString(),
+      model_used: modelUsed,
+      input_tokens: usage.promptTokens || totalTokens,
+      output_tokens: outputTokens,
+      input_documents: inputDocumentsUsed,
+      previous_steps: previousStepsUsed,
     }
 
     console.log(`Saving step_outputs for step ${step_config.id}, campaign ${campaign_id}`)
