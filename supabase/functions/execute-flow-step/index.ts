@@ -1630,6 +1630,7 @@ serve(async (req) => {
         'google/gemini-2.5-flash': { input: 0.30, output: 2.50 },
         'google/gemini-2.5-flash-preview': { input: 0.30, output: 2.50 },
         'google/gemini-3-pro-preview': { input: 2.00, output: 12.00 },
+        'google/gemini-3-flash-preview': { input: 0.30, output: 2.50 },
         'gpt-4o': { input: 2.50, output: 10.0 },
         'openai/gpt-4o': { input: 2.50, output: 10.0 },
         'gpt-4o-mini': { input: 0.15, output: 0.60 },
