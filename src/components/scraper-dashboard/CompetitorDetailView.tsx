@@ -1332,17 +1332,66 @@ export default function CompetitorDetailView({
     toast.info('Ejecutando...', `Iniciando ${stepInfo.name}`)
 
     try {
-      // Collect selected document IDs for this step
-      const stepDocSelections = selectedDocs[stepId] || {}
-      const selectedDocIds = Object.values(stepDocSelections).filter(Boolean)
+      // Collect effective document IDs for this step (explicit selections + auto-matched defaults)
+      const competitorDocs = documents.filter(d =>
+        d.source_metadata?.competitor?.toLowerCase() === normalizedName
+      )
+
+      const platformKeywords: Record<string, string[]> = {
+        'instagram_posts': ['instagram', 'ig'],
+        'instagram_comments': ['instagram', 'ig', 'comment'],
+        'facebook_posts': ['facebook', 'fb'],
+        'facebook_comments': ['facebook', 'fb', 'comment'],
+        'linkedin_posts': ['linkedin'],
+        'linkedin_comments': ['linkedin', 'comment'],
+        'linkedin_insights': ['linkedin', 'insight'],
+        'youtube_videos': ['youtube', 'yt'],
+        'youtube_comments': ['youtube', 'yt', 'comment'],
+        'tiktok_posts': ['tiktok'],
+        'tiktok_comments': ['tiktok', 'comment'],
+        'trustpilot_reviews': ['trustpilot', 'review'],
+        'g2_reviews': ['g2', 'review'],
+        'capterra_reviews': ['capterra', 'review'],
+        'playstore_reviews': ['play store', 'playstore', 'android', 'review'],
+        'appstore_reviews': ['app store', 'appstore', 'ios', 'review'],
+        'website': ['website', 'web', 'crawl', 'sitio'],
+        'deep_research': ['deep research', 'research'],
+        'seo_serp': ['seo', 'serp', 'search'],
+        'news_corpus': ['news', 'noticias', 'prensa'],
+      }
+
+      const effectiveDocIds: string[] = []
+      const requiredSources = stepInfo.requiredSources || []
+
+      for (const source of requiredSources) {
+        // Check explicit user selection first
+        const hasExplicit = selectedDocs[stepId]?.[source] !== undefined
+        if (hasExplicit) {
+          const docId = selectedDocs[stepId][source]
+          if (docId) effectiveDocIds.push(docId) // Skip empty = "Sin documento"
+          continue
+        }
+        // Auto-match: find first doc matching this source
+        const keywords = platformKeywords[source] || [source.replace(/_/g, ' ')]
+        const autoMatch = competitorDocs.find(d => {
+          const docName = (d.name || d.filename || '').toLowerCase()
+          const docTags = (d.tags || []).map((t: string) => t.toLowerCase())
+          return d.source_metadata?.source_type === source ||
+            keywords.some(kw => docName.includes(kw) || docTags.some(tag => tag.includes(kw)))
+        })
+        if (autoMatch) effectiveDocIds.push(autoMatch.id)
+      }
+
+      // Deduplicate
+      const uniqueDocIds = [...new Set(effectiveDocIds)]
 
       const response = await fetch('/api/campaign/run-step', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           campaignId: campaign.id,
-          stepId: flowStepId,  // Use the mapped flow step ID
-          documentIds: selectedDocIds.length > 0 ? selectedDocIds : undefined,
+          stepId: flowStepId,
+          documentIds: uniqueDocIds.length > 0 ? uniqueDocIds : undefined,
         }),
       })
 
@@ -1373,7 +1422,7 @@ export default function CompetitorDetailView({
         return next
       })
     }
-  }, [runningSteps, toast, onRefresh, campaign.id])
+  }, [runningSteps, toast, onRefresh, campaign.id, documents, normalizedName, selectedDocs])
 
   // Handle config saved - auto-execute scrapers after saving
   const handleConfigSaved = useCallback(() => {
