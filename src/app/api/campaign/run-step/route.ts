@@ -34,12 +34,13 @@ interface FlowStep {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { campaignId, stepId, overrideModel, overrideTemperature, overrideMaxTokens } = body as {
+    const { campaignId, stepId, overrideModel, overrideTemperature, overrideMaxTokens, documentIds } = body as {
       campaignId: string
       stepId: string
       overrideModel?: string  // Modelo alternativo para retry
       overrideTemperature?: number  // Temperature override
       overrideMaxTokens?: number  // Max tokens override
+      documentIds?: string[]  // Explicit document IDs from UI selection
     }
 
     if (!campaignId || !stepId) {
@@ -126,7 +127,35 @@ export async function POST(request: NextRequest) {
       base_doc_ids: savedConfig.base_doc_ids || step.base_doc_ids,
     } : step
 
-    console.log(`Executing single step: ${step.name}${savedConfig ? ' (with saved config)' : ''}`)
+    // Populate base_doc_ids: use explicit UI selection, saved config, or auto-query competitor docs
+    const configDocIds = stepWithSavedConfig.base_doc_ids || []
+    let resolvedDocIds = documentIds && documentIds.length > 0
+      ? documentIds  // Priority 1: explicit UI selection
+      : configDocIds.length > 0
+        ? configDocIds  // Priority 2: saved config
+        : []  // Will auto-query below
+
+    // Auto-query: if no doc IDs and campaign has a competitor name, fetch all competitor docs
+    if (resolvedDocIds.length === 0 && campaign.ecp_name && campaign.project_id) {
+      console.log(`[run-step] Auto-querying docs for competitor "${campaign.ecp_name}" in project ${campaign.project_id}`)
+      const { data: competitorDocs } = await supabase
+        .from('knowledge_base_docs')
+        .select('id')
+        .eq('project_id', campaign.project_id)
+        .contains('tags', [campaign.ecp_name])
+
+      if (competitorDocs && competitorDocs.length > 0) {
+        resolvedDocIds = competitorDocs.map(d => d.id)
+        console.log(`[run-step] Found ${resolvedDocIds.length} docs for competitor "${campaign.ecp_name}"`)
+      } else {
+        console.warn(`[run-step] No documents found for competitor "${campaign.ecp_name}"`)
+      }
+    }
+
+    // Apply resolved doc IDs to step config
+    stepWithSavedConfig.base_doc_ids = resolvedDocIds
+
+    console.log(`Executing single step: ${step.name}${savedConfig ? ' (with saved config)' : ''} with ${resolvedDocIds.length} docs`)
 
     // Update current step and mark as running if not already
     const updateData: any = {

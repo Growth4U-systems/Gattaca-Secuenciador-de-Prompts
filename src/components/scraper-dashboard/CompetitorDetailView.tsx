@@ -1332,12 +1332,17 @@ export default function CompetitorDetailView({
     toast.info('Ejecutando...', `Iniciando ${stepInfo.name}`)
 
     try {
+      // Collect selected document IDs for this step
+      const stepDocSelections = selectedDocs[stepId] || {}
+      const selectedDocIds = Object.values(stepDocSelections).filter(Boolean)
+
       const response = await fetch('/api/campaign/run-step', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           campaignId: campaign.id,
           stepId: flowStepId,  // Use the mapped flow step ID
+          documentIds: selectedDocIds.length > 0 ? selectedDocIds : undefined,
         }),
       })
 
