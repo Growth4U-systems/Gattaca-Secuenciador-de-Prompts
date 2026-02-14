@@ -741,6 +741,15 @@ export function buildScraperInput(
     });
   }
 
+  // YouTube Transcripts: map startUrls → videoUrls (new actor uses videoUrls as plain string array)
+  if (type === 'youtube_transcripts' && merged.startUrls && !merged.videoUrls) {
+    const urls = merged.startUrls as (string | {url: string})[];
+    merged.videoUrls = urls.map(item =>
+      typeof item === 'object' && item !== null && 'url' in item ? (item as {url: string}).url : String(item)
+    );
+    delete merged.startUrls;
+  }
+
   // Special handling for YouTube scrapers: startUrls needs to be array of {url: string} objects
   if ((type === 'youtube_channel_videos' || type === 'youtube_comments') && merged.startUrls && Array.isArray(merged.startUrls)) {
     merged.startUrls = (merged.startUrls as (string | {url: string})[]).map(item => {
