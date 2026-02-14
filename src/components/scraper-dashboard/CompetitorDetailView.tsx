@@ -2393,19 +2393,28 @@ export default function CompetitorDetailView({
                         {status?.isRunning ? (
                           <Loader2 size={20} className="text-indigo-500 animate-spin" />
                         ) : status?.isCompleted ? (
-                          <button
-                            onClick={() => {
-                              setViewingStepOutput({
-                                stepId: STEP_ID_MAPPING[step.id] || step.id,
-                                stepName: step.name,
-                                stepOrder: index + 1,
-                              })
-                            }}
-                            className="inline-flex items-center gap-1.5 text-sm px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium shadow-sm"
-                          >
-                            <Eye size={14} />
-                            Ver Resultado
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleRunAnalysisStep(step.id)}
+                              className="inline-flex items-center gap-1.5 text-sm px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                              title="Re-ejecutar paso"
+                            >
+                              <RefreshCw size={14} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setViewingStepOutput({
+                                  stepId: STEP_ID_MAPPING[step.id] || step.id,
+                                  stepName: step.name,
+                                  stepOrder: index + 1,
+                                })
+                              }}
+                              className="inline-flex items-center gap-1.5 text-sm px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium shadow-sm"
+                            >
+                              <Eye size={14} />
+                              Ver Resultado
+                            </button>
+                          </div>
                         ) : status?.canRun ? (
                           <button
                             onClick={() => handleRunAnalysisStep(step.id)}
@@ -3083,6 +3092,8 @@ export default function CompetitorDetailView({
             model_provider?: string
             input_tokens?: number
             output_tokens?: number
+            input_documents?: Array<{ id: string; filename: string; category: string; token_count: number }>
+            previous_steps?: Array<{ id: string; name: string }>
           }}
           allStepOutputs={campaign.step_outputs as Record<string, any>}
           onSave={async (updatedStepOutputs) => {

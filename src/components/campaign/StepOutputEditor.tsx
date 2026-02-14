@@ -41,6 +41,8 @@ interface StepOutputEditorProps {
     model_provider?: string
     input_tokens?: number
     output_tokens?: number
+    input_documents?: Array<{ id: string; filename: string; category: string; token_count: number }>
+    previous_steps?: Array<{ id: string; name: string }>
   }
   allStepOutputs: Record<string, any>
   stepDocuments?: StepDocument[]
@@ -462,6 +464,38 @@ export default function StepOutputEditor({
             </div>
           )}
         </div>
+
+        {/* Input Documents Used */}
+        {(currentOutput.input_documents?.length || currentOutput.previous_steps?.length) ? (
+          <div className="px-6 py-3 border-b border-gray-100 bg-gray-50 shrink-0">
+            <div className="flex items-center gap-2 text-gray-600 text-xs font-medium mb-2">
+              <Database size={12} />
+              Documentos de contexto usados
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {currentOutput.input_documents?.map((doc) => (
+                <span
+                  key={doc.id}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-gray-200 rounded-md text-xs text-gray-700"
+                  title={`${doc.category} - ${doc.token_count.toLocaleString()} tokens`}
+                >
+                  <FileOutput size={10} className="text-gray-400" />
+                  {doc.filename}
+                  <span className="text-gray-400 ml-1">{doc.token_count > 0 ? `${Math.round(doc.token_count / 1000)}k tok` : ''}</span>
+                </span>
+              ))}
+              {currentOutput.previous_steps?.map((step) => (
+                <span
+                  key={step.id}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 border border-indigo-200 rounded-md text-xs text-indigo-700"
+                >
+                  <Sparkles size={10} className="text-indigo-400" />
+                  {step.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {/* AI Assistant Bar */}
         <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-indigo-50 shrink-0">
