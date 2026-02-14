@@ -34,7 +34,7 @@ export const APIFY_ACTORS = {
   // YouTube
   YOUTUBE_CHANNEL_VIDEOS: '67Q6fmd8iedTVcCwY',  // streamers/youtube-channel-scraper
   YOUTUBE_COMMENTS: 'p7UMdpQnjKmmpR21D',  // streamers/youtube-comments-scraper
-  YOUTUBE_TRANSCRIPTS: 'CTQcdDtqW5dvELvur',  // topaz_sharingan/youtube-transcript-scraper
+  YOUTUBE_TRANSCRIPTS: 'L57jETyu9qT6J7bs5',  // scrape-creators/best-youtube-transcripts-scraper
 
   // Reviews
   G2_REVIEWS: 'kT2dx4xoOebKw6uQB',
@@ -309,13 +309,11 @@ export const SCRAPER_TEMPLATES: Record<ScraperType, ScraperTemplate> = {
     actorId: APIFY_ACTORS.YOUTUBE_TRANSCRIPTS,
     category: 'youtube',
     inputSchema: {
-      required: ['startUrls'],
-      optional: ['timestamps'],
-      defaults: {
-        timestamps: true,
-      },
+      required: ['videoUrls'],
+      optional: [],
+      defaults: {},
     },
-    outputFields: ['transcript', 'timestamps', 'videoUrl', 'title'],
+    outputFields: ['transcript_only_text', 'transcript', 'url', 'language'],
   },
 
   // ==========================================
@@ -744,7 +742,7 @@ export function buildScraperInput(
   }
 
   // Special handling for YouTube scrapers: startUrls needs to be array of {url: string} objects
-  if ((type === 'youtube_channel_videos' || type === 'youtube_comments' || type === 'youtube_transcripts') && merged.startUrls && Array.isArray(merged.startUrls)) {
+  if ((type === 'youtube_channel_videos' || type === 'youtube_comments') && merged.startUrls && Array.isArray(merged.startUrls)) {
     merged.startUrls = (merged.startUrls as (string | {url: string})[]).map(item => {
       // If already an object with url property, keep it
       if (typeof item === 'object' && item !== null && 'url' in item) {
