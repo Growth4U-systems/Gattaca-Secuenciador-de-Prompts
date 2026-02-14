@@ -349,6 +349,27 @@ async function fetchAndSaveResults(
     return;
   }
 
+  // Check if document already exists for this job (race condition guard: poll may have saved it first)
+  const { data: existingDoc } = await supabase
+    .from('knowledge_base_docs')
+    .select('id')
+    .eq('source_job_id', job.id)
+    .maybeSingle();
+
+  if (existingDoc) {
+    console.log(`[webhook] Document already exists for job ${job.id} (id: ${existingDoc.id}), skipping insert`);
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'completed',
+        result_count: allItems.length,
+        result_preview: allItems.slice(0, 5),
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', job.id);
+    return;
+  }
+
   // Insert ONE consolidated document with retry logic
   console.log(`[webhook] Starting document insert for job ${job.id}: "${documentName}" (${consolidatedContent.length} chars, ${allItems.length} items)`);
 
@@ -390,6 +411,30 @@ async function fetchAndSaveResults(
   }, 3, 1000);
 
   if (!insertResult.success) {
+    // If unique constraint violation, document was likely saved by poll - check and recover
+    const errMsg = insertResult.error?.message || '';
+    if (errMsg.includes('unique_source_job_id') || errMsg.includes('23505')) {
+      console.log(`[webhook] Unique constraint hit for job ${job.id}, checking for existing document...`);
+      const { data: raceDoc } = await supabase
+        .from('knowledge_base_docs')
+        .select('id')
+        .eq('source_job_id', job.id)
+        .maybeSingle();
+      if (raceDoc) {
+        console.log(`[webhook] Found existing document ${raceDoc.id}, recovering...`);
+        await supabase
+          .from('scraper_jobs')
+          .update({
+            status: 'completed',
+            result_count: allItems.length,
+            result_preview: allItems.slice(0, 5),
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', job.id);
+        return;
+      }
+    }
+
     console.error(`[webhook] FAILED to insert document after ${insertResult.attempts} attempts. Error:`, insertResult.error);
     console.error(`[webhook] Error details: ${JSON.stringify(insertResult.error, null, 2)}`);
 

@@ -287,6 +287,28 @@ async function fetchAndSaveApifyResults(
   const customMeta = (providerMeta?.custom_metadata as Record<string, unknown>) || {};
   console.log('[scraper/poll] custom_metadata from job:', JSON.stringify(customMeta, null, 2));
 
+  // Check if document already exists for this job (race condition guard: webhook may have saved it first)
+  const { data: existingDoc } = await supabase
+    .from('knowledge_base_docs')
+    .select('id')
+    .eq('source_job_id', job.id)
+    .maybeSingle();
+
+  if (existingDoc) {
+    console.log(`[scraper/poll] Document already exists for job ${job.id} (id: ${existingDoc.id}), skipping insert`);
+    // Ensure job is marked as completed
+    await supabase
+      .from('scraper_jobs')
+      .update({
+        status: 'completed',
+        result_count: items.length,
+        completed_at: new Date().toISOString(),
+        provider_metadata: { ...(providerMeta || {}), document_id: existingDoc.id },
+      })
+      .eq('id', job.id);
+    return { resultCount: items.length, documentId: existingDoc.id };
+  }
+
   // Insert ONE consolidated document using admin client
   console.log(`[scraper/poll] Inserting document "${documentName}" into knowledge_base_docs...`);
   const { data: insertedDoc, error: docError } = await supabase
@@ -318,6 +340,28 @@ async function fetchAndSaveApifyResults(
     .single();
 
   if (docError) {
+    // If unique constraint violation, document was likely saved by webhook - check and recover
+    if (docError.code === '23505' || docError.message?.includes('unique_source_job_id')) {
+      console.log(`[scraper/poll] Unique constraint hit for job ${job.id}, checking for existing document...`);
+      const { data: raceDoc } = await supabase
+        .from('knowledge_base_docs')
+        .select('id')
+        .eq('source_job_id', job.id)
+        .maybeSingle();
+      if (raceDoc) {
+        console.log(`[scraper/poll] Found existing document ${raceDoc.id}, recovering...`);
+        await supabase
+          .from('scraper_jobs')
+          .update({
+            status: 'completed',
+            result_count: items.length,
+            completed_at: new Date().toISOString(),
+            provider_metadata: { ...(providerMeta || {}), document_id: raceDoc.id },
+          })
+          .eq('id', job.id);
+        return { resultCount: items.length, documentId: raceDoc.id };
+      }
+    }
     console.error('[scraper/poll] ERROR inserting document:', docError);
     throw new Error(`Error al guardar documento: ${docError.message}`);
   }
