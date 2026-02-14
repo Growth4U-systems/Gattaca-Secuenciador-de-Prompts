@@ -917,8 +917,8 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
   youtube_transcripts: {
     type: 'youtube_transcripts',
     fields: {
-      startUrls: {
-        key: 'startUrls',
+      videoUrls: {
+        key: 'videoUrls',
         type: 'url-array',
         label: 'URLs de videos de YouTube',
         description: 'URLs de los videos de los que quieres extraer transcripciones',
@@ -932,14 +932,6 @@ export const SCRAPER_FIELD_SCHEMAS: Record<ScraperType, ScraperFieldsSchema> = {
         examples: [
           'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
         ],
-      },
-      timestamps: {
-        key: 'timestamps',
-        type: 'boolean',
-        label: 'Incluir timestamps',
-        description: 'Incluir marcas de tiempo en la transcripción',
-        helpText: 'Si está activo, cada línea incluirá el tiempo en que aparece',
-        defaultValue: true,
       },
     },
   },
