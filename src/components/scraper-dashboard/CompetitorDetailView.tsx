@@ -1507,6 +1507,20 @@ export default function CompetitorDetailView({
         const step = ANALYSIS_STEPS.find(s => s.id === stepId)
         if (!step) return
         const docsForStep: Record<string, string> = {}
+
+        // Seed from persisted base_doc_ids first (saved via StepEditor)
+        const savedBaseDocIds: string[] = (campaign.custom_variables?.[`${stepId}_config`] as { base_doc_ids?: string[] } | undefined)?.base_doc_ids || []
+        savedBaseDocIds.forEach(docId => {
+          const doc = competitorDocs.find(d => d.id === docId)
+          if (doc) {
+            const sourceType = doc.source_metadata?.source_type || ''
+            if (step.requiredSources.includes(sourceType) && !docsForStep[sourceType]) {
+              docsForStep[sourceType] = docId
+            }
+          }
+        })
+
+        // Fill remaining required sources via auto-match
         competitorDocs.forEach(doc => {
           const sourceType = doc.source_metadata?.source_type || ''
           if (step.requiredSources.includes(sourceType) && !docsForStep[sourceType]) {
@@ -1517,7 +1531,7 @@ export default function CompetitorDetailView({
       })
       return next
     })
-  }, [expandedSteps, documents, normalizedName])
+  }, [expandedSteps, documents, normalizedName, campaign.custom_variables])
 
   // Initialize editing state from custom_variables
   useEffect(() => {
@@ -2499,6 +2513,13 @@ export default function CompetitorDetailView({
                                     (s: { id: string; prompt?: string }) => s.id === flowStepId
                                   )
 
+                                  // Merge dropdown selections with any extra docs from saved config
+                                  // (docs added via StepEditor that don't map to any dropdown source)
+                                  const dropdownDocIds = Object.values(selectedDocs[step.id] || {}).filter(Boolean)
+                                  const savedDocIds = savedConfig?.base_doc_ids || playbookStep?.base_doc_ids || baseFlowStep.base_doc_ids || []
+                                  const extraSavedDocs = savedDocIds.filter(id => !dropdownDocIds.includes(id))
+                                  const mergedDocIds = [...new Set([...dropdownDocIds, ...extraSavedDocs])]
+
                                   // Priority: campaign edit > playbook customization > base template
                                   setEditingFlowStep({
                                     ...baseFlowStep,
@@ -2508,7 +2529,7 @@ export default function CompetitorDetailView({
                                     max_tokens: savedConfig?.max_tokens ?? playbookStep?.max_tokens ?? baseFlowStep.max_tokens,
                                     output_format: savedConfig?.output_format || playbookStep?.output_format || baseFlowStep.output_format,
                                     retrieval_mode: savedConfig?.retrieval_mode || playbookStep?.retrieval_mode || baseFlowStep.retrieval_mode,
-                                    base_doc_ids: savedConfig?.base_doc_ids || playbookStep?.base_doc_ids || baseFlowStep.base_doc_ids || [],
+                                    base_doc_ids: mergedDocIds,
                                   } as FlowStep)
                                 } else {
                                   toast.error('Error', 'No se encontró la configuración del paso')
