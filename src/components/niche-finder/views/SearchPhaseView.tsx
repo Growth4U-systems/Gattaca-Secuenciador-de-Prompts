@@ -266,9 +266,7 @@ export default function SearchPhaseView({ jobId, onComplete, onStepProgressUpdat
   useEffect(() => {
     if (phase !== 'scraping') return
 
-    const startScrape = async () => {
-      if (scrapeStartedRef.current) return
-      scrapeStartedRef.current = true
+    const runScrapeBatches = async () => {
       try {
         let hasMore = true
         while (hasMore) {
@@ -276,7 +274,7 @@ export default function SearchPhaseView({ jobId, onComplete, onStepProgressUpdat
           const data = await resp.json()
           if (!resp.ok) {
             if (data.error && !data.error.includes('already')) {
-              setError(data.error || 'Error en scraping')
+              console.warn('[SCRAPE] Batch error:', data.error)
             }
             break
           }
@@ -287,7 +285,10 @@ export default function SearchPhaseView({ jobId, onComplete, onStepProgressUpdat
       }
     }
 
-    startScrape()
+    scrapeStartedRef.current = true
+
+    let scrapeLoopRunning = true
+    runScrapeBatches().finally(() => { scrapeLoopRunning = false })
 
     const poll = setInterval(async () => {
       try {
@@ -311,11 +312,20 @@ export default function SearchPhaseView({ jobId, onComplete, onStepProgressUpdat
           clearInterval(poll)
           setPhase('done')
           onComplete()
+          return
         }
 
         if (jobStatus === 'failed') {
           clearInterval(poll)
           setError(raw.job.error_message || 'Job failed')
+          return
+        }
+
+        // Restart scraping if loop exited but URLs still pending
+        if (!scrapeLoopRunning && jobStatus === 'scraping' && urlCounts.pending > 0) {
+          console.log(`[SCRAPE] Restarting scrape loop (${urlCounts.pending} pending URLs)`)
+          scrapeLoopRunning = true
+          runScrapeBatches().finally(() => { scrapeLoopRunning = false })
         }
       } catch (err) {
         console.error('[SCRAPE] Poll error:', err)

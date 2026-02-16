@@ -79,18 +79,25 @@ export async function GET(request: NextRequest, { params }: Params) {
       job.status = 'scrape_done'
     }
 
-    // AUTO-FIX: Si el job está en "scraping" con muy pocas URLs pending y muchas procesadas,
-    // marcar las pending como failed y avanzar (evita stuck por 1-2 URLs problemáticas)
+    // AUTO-FIX: Si el job está en "scraping" con URLs pending que no avanzan,
+    // marcar las pending como failed y avanzar.
+    // Criteria: (pending <= 20 AND processed > 50%) OR job stuck >3min without progress
     const totalProcessed = counts.scraped + counts.failed
-    if (job.status === 'scraping' && counts.pending > 0 && counts.pending <= 5 && totalProcessed > 50) {
-      console.log(`[STATUS] Auto-fixing stuck job ${jobId}: marking ${counts.pending} stuck pending URLs as failed`)
+    const totalUrls = totalProcessed + counts.pending
+    const processedRatio = totalUrls > 0 ? totalProcessed / totalUrls : 0
+    const isStuckByCount = counts.pending > 0 && counts.pending <= 20 && processedRatio > 0.5
+    const isStuckByTime = counts.pending > 0 && job.updated_at &&
+      (Date.now() - new Date(job.updated_at).getTime()) > 3 * 60 * 1000
+
+    if (job.status === 'scraping' && (isStuckByCount || isStuckByTime)) {
+      console.log(`[STATUS] Auto-fixing stuck job ${jobId}: marking ${counts.pending} stuck pending URLs as failed (byCount=${isStuckByCount}, byTime=${isStuckByTime}, processed=${totalProcessed}/${totalUrls})`)
 
       // Mark remaining pending URLs as failed
       await supabase
         .from('niche_finder_urls')
         .update({
           status: 'failed',
-          error_message: 'Auto-marked as failed (stuck in pending state)',
+          error_message: `Auto-marked as failed (stuck: ${isStuckByTime ? 'timeout >3min' : 'remaining URLs not progressing'})`,
         })
         .eq('job_id', jobId)
         .eq('status', 'pending')
