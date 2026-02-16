@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createClient as createServerClient } from '@/lib/supabase-server'
 import { createHash } from 'crypto'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,8 @@ interface ScrapedUrl {
   title: string | null
   content_markdown: string | null
   source_type: string | null
+  life_context: string | null
+  product_word: string | null
   status: string
 }
 
@@ -35,9 +38,19 @@ export async function POST(request: NextRequest, { params }: Params) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
   const { id: jobId } = await params
 
+  // Get authenticated user for created_by/updated_by
+  let authUserId: string | null = null
+  try {
+    const serverClient = await createServerClient()
+    const { data: { session } } = await serverClient.auth.getSession()
+    authUserId = session?.user?.id ?? null
+  } catch {
+    // Auth is optional - docs will be saved without user attribution
+  }
+
   try {
     // Get request body for optional configuration
-    let body: { projectId?: string; clientId?: string; userId?: string; folderName?: string } = {}
+    let body: { projectId?: string; clientId?: string } = {}
     try {
       body = await request.json()
     } catch {
@@ -47,12 +60,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     // Get job details
     const { data: job, error: jobError } = await supabase
       .from('niche_finder_jobs')
-      .select('*, session:playbook_sessions(*)')
+      .select('*')
       .eq('id', jobId)
       .single()
 
     if (jobError || !job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 })
+      console.error('Error fetching job:', jobError)
+      return NextResponse.json({ error: jobError?.message || 'Job not found' }, { status: 404 })
     }
 
     // Get project details
@@ -68,12 +82,13 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const projectId = body.projectId || job.project_id
     const clientId = body.clientId || project.client_id
-    const userId = body.userId || 'system'
+    // Use authenticated user UUID for created_by/updated_by (nullable FK to auth.users)
+    const userId: string | null = authUserId
 
     // Get scraped URLs with content
     const { data: scrapedUrls, error: urlsError } = await supabase
       .from('niche_finder_urls')
-      .select('id, url, title, content_markdown, source_type, status')
+      .select('id, url, title, content_markdown, source_type, life_context, product_word, status')
       .eq('job_id', jobId)
       .eq('status', 'scraped')
       .not('content_markdown', 'is', null)
@@ -100,9 +115,6 @@ export async function POST(request: NextRequest, { params }: Params) {
       errors: 0,
       errorMessages: [] as string[],
     }
-
-    const dateStr = new Date().toISOString().split('T')[0]
-    const folderName = body.folderName || `niche-finder/${dateStr}/${jobId.slice(0, 8)}`
 
     for (const url of scrapedUrls as ScrapedUrl[]) {
       try {
@@ -145,37 +157,61 @@ export async function POST(request: NextRequest, { params }: Params) {
         const contentBytes = new TextEncoder().encode(url.content_markdown).length
         const tokenCountEstimate = Math.ceil(url.content_markdown.length / 4)
 
+        // Build tags with search context
+        const tags = [
+          `source:${url.source_type || 'web'}`,
+          `job:${jobId.slice(0, 8)}`,
+          'niche-finder',
+          'scraped',
+        ]
+        if (url.life_context) tags.push(`contexto:${url.life_context}`)
+        if (url.product_word) tags.push(`producto:${url.product_word}`)
+
+        // Build descriptive description
+        const sourceLabel = url.source_type === 'reddit' ? 'Reddit'
+          : url.source_type === 'thematic_forum' ? 'Foro temático'
+          : url.source_type === 'general_forum' ? 'Foro general'
+          : 'Web'
+        const contextParts = [
+          url.life_context && `contexto: ${url.life_context}`,
+          url.product_word && `producto: ${url.product_word}`,
+        ].filter(Boolean).join(' | ')
+        const description = `${sourceLabel}: ${url.title || url.url}${contextParts ? ` (${contextParts})` : ''}`
+
+        const insertData: Record<string, unknown> = {
+          project_id: projectId,
+          client_id: clientId,
+          filename: `${filename}.md`,
+          category: 'research',
+          extracted_content: url.content_markdown,
+          file_size_bytes: contentBytes,
+          mime_type: 'text/markdown',
+          source_type: 'scraper',
+          source_url: url.url,
+          description,
+          tags,
+          token_count: tokenCountEstimate,
+          source_metadata: {
+            origin_type: 'scraper',
+            job_id: jobId,
+            session_id: job.session_id,
+            url_id: url.id,
+            source_type: url.source_type,
+            life_context: url.life_context,
+            product_word: url.product_word,
+            scraped_at: new Date().toISOString(),
+          },
+        }
+
+        // Only set created_by/updated_by if we have a valid auth user UUID
+        if (userId) {
+          insertData.created_by = userId
+          insertData.updated_by = userId
+        }
+
         const { data: newDoc, error: docError } = await supabase
           .from('knowledge_base_docs')
-          .insert({
-            project_id: projectId,
-            client_id: clientId,
-            filename: `${filename}.md`,
-            category: 'research',
-            extracted_content: url.content_markdown,
-            file_size_bytes: contentBytes,
-            mime_type: 'text/markdown',
-            source_type: 'scraper',
-            source_url: url.url,
-            description: `Scraped from ${url.source_type || 'web'}: ${url.url}`,
-            tags: [
-              `source:${url.source_type || 'web'}`,
-              `job:${jobId.slice(0, 8)}`,
-              'niche-finder',
-              'scraped',
-            ],
-            token_count: tokenCountEstimate,
-            created_by: userId,
-            updated_by: userId,
-            source_metadata: {
-              origin_type: 'scraper',
-              job_id: jobId,
-              session_id: job.session_id,
-              url_id: url.id,
-              source_type: url.source_type,
-              scraped_at: new Date().toISOString(),
-            },
-          })
+          .insert(insertData)
           .select()
           .single()
 

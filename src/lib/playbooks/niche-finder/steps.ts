@@ -125,7 +125,6 @@ export const ALL_STEPS: PlaybookStep[] = [
   reviewStrategyStep,
   serpSearchStep,
   scrapeUrlsStep,
-  reviewUrlsStep,
   extractProblemsStep,
   cleanFilterStep,
   scoringStep,
@@ -137,17 +136,13 @@ export const STEP_PHASES: Record<string, string[]> = {
   'setup': ['generate-strategy'],
   'strategy-review': ['review-strategy'],
   'search': ['serp-search', 'scrape-urls'],
-  'url-review': ['review-urls'],
-  'analysis': ['extract-problems', 'clean-filter', 'scoring', 'consolidate'],
-  'results': ['view-results'],
 }
 
 export const STEP_DEPENDENCIES: Record<string, string[]> = {
   'review-strategy': ['generate-strategy'],
   'serp-search': ['review-strategy'],
   'scrape-urls': ['serp-search'],
-  'review-urls': ['scrape-urls'],
-  'extract-problems': ['review-urls'],
+  'extract-problems': ['scrape-urls'],
   'clean-filter': ['extract-problems'],
   'scoring': ['clean-filter'],
   'consolidate': ['clean-filter', 'scoring'],

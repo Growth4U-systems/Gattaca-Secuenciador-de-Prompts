@@ -66,7 +66,7 @@ const FORUM_PATTERNS = [
 ]
 
 // Domains that are known discussion platforms
-const KNOWN_FORUM_DOMAINS = [
+export const KNOWN_FORUM_DOMAINS = [
   'reddit.com',
   'forocoches.com',
   'mediavida.com',

@@ -1,4 +1,5 @@
 import { PlaybookConfig, StepGuidance, PlaybookPresentation } from '../types'
+import { NICHE_FINDER_FLOW_STEPS } from '@/lib/playbooks/niche-finder/flow-config'
 
 /**
  * Niche Finder Playbook Configuration
@@ -244,6 +245,9 @@ export const nicheFinderConfig: PlaybookConfig = {
   icon: '🔍',
   presentation: PRESENTATION,
 
+  // Flow configuration for campaign creation (analysis steps)
+  flow_config: { steps: NICHE_FINDER_FLOW_STEPS },
+
   phases: [
     // =========================================
     // FASE 1: CONFIGURACIÓN
@@ -411,44 +415,57 @@ export const nicheFinderConfig: PlaybookConfig = {
     },
   ],
 
-  // Variables needed for this playbook
+  // Variables used in analysis prompts (steps 1-4)
   variables: [
     {
-      key: 'context_type',
-      label: 'Tipo de Cliente',
-      type: 'select',
+      key: 'ecp_name',
+      label: 'Nombre de la campaña',
+      type: 'text',
       required: true,
-      defaultValue: 'both',
-      options: [
-        { value: 'personal', label: 'B2C (Personal)' },
-        { value: 'business', label: 'B2B (Empresas)' },
-        { value: 'both', label: 'Ambos' },
-      ],
+      placeholder: 'Ej: Análisis de nichos - Fitness',
     },
     {
-      key: 'max_combinations',
-      label: 'Máximo de combinaciones (queries)',
-      type: 'number',
-      required: false,
-      defaultValue: 50,
-      min: 10,
-      max: 100,
+      key: 'company_name',
+      label: 'Nombre de la empresa',
+      type: 'text',
+      required: true,
+      placeholder: 'Ej: FitTrack',
     },
     {
-      key: 'serp_pages',
-      label: 'Páginas SERP por query',
-      type: 'number',
-      required: false,
-      defaultValue: 3,
-      min: 1,
-      max: 5,
+      key: 'industry',
+      label: 'Industria',
+      type: 'text',
+      required: true,
+      placeholder: 'Ej: fitness, salud digital',
     },
     {
-      key: 'batch_size',
-      label: 'URLs en paralelo',
-      type: 'number',
+      key: 'category',
+      label: 'Categoría de producto',
+      type: 'text',
+      required: true,
+      placeholder: 'Ej: apps de entrenamiento personal',
+    },
+    {
+      key: 'product',
+      label: 'Descripción del producto',
+      type: 'textarea',
+      required: true,
+      placeholder: 'Ej: App móvil de rutinas de ejercicio personalizadas con IA',
+    },
+    {
+      key: 'target',
+      label: 'Audiencia objetivo',
+      type: 'text',
+      required: true,
+      placeholder: 'Ej: adultos 25-45 que buscan mejorar su salud',
+    },
+    {
+      key: 'country',
+      label: 'País / Mercado',
+      type: 'text',
       required: false,
-      defaultValue: 10,
+      defaultValue: 'España',
+      placeholder: 'Ej: España, México, LATAM',
     },
   ],
 }

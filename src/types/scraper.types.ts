@@ -20,7 +20,8 @@ export type ScraperProvider =
   | 'firecrawl'     // Firecrawl API
   | 'mangools'      // Mangools SEO API
   | 'phantombuster' // Phantombuster agents
-  | 'custom';       // Custom Edge Functions
+  | 'custom'        // Custom Edge Functions
+  | 'bing_news';    // Bing News scraper
 
 export type BatchStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
@@ -380,13 +381,22 @@ export interface ScrapedDocumentMetadata {
  * Estado del job de scraping del Niche Finder
  */
 export type NicheFinderJobStatus =
-  | 'pending'        // Creado, esperando inicio
-  | 'serp_running'   // Buscando URLs en SERP
-  | 'serp_done'      // URLs encontradas, listo para scrapear
-  | 'scraping'       // Scrapeando contenido con Firecrawl
-  | 'extracting'     // Extrayendo nichos con LLM
-  | 'completed'      // Completado exitosamente
-  | 'failed';        // Error
+  | 'pending'          // Creado, esperando inicio
+  | 'serp_running'     // Buscando URLs en SERP
+  | 'serp_done'        // URLs encontradas, listo para scrapear
+  | 'scraping'         // Scrapeando contenido con Firecrawl
+  | 'scrape_done'      // Scraping completado
+  | 'extracting'       // Extrayendo nichos con LLM
+  | 'extract_done'     // Extracción completada
+  | 'review_extract'   // Usuario revisando CSV de extracción
+  | 'analyzing_1'      // Step 1: Clean & Filter
+  | 'review_1'         // Usuario revisando output de filtrado
+  | 'analyzing_2'      // Step 2: Scoring (Deep Research)
+  | 'review_2'         // Usuario revisando output de scoring
+  | 'analyzing_3'      // Step 3: Consolidate Final Table
+  | 'review_3'         // Usuario revisando tabla final
+  | 'completed'        // Completado exitosamente
+  | 'failed';          // Error
 
 /**
  * Estado de una URL individual en el proceso
@@ -775,6 +785,7 @@ export interface AnalysisStepOutput {
   tokens_output?: number;
   cost_usd?: number;
   output_content?: string;
+  edited_content?: string;
   error_message?: string;
   started_at?: string;
   completed_at?: string;
