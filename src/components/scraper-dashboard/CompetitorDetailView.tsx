@@ -404,6 +404,9 @@ export default function CompetitorDetailView({
   const [isSavingStep, setIsSavingStep] = useState(false)
   // State for full StepEditor modal
   const [editingFlowStep, setEditingFlowStep] = useState<FlowStep | null>(null)
+  // Refs for dropdown → base_doc_ids sync
+  const debounceSaveTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const forceReinitStepsRef = useRef<Set<string>>(new Set())
   // State for applying config to all competitors
   const [applyingToAll, setApplyingToAll] = useState<string | null>(null)
   // Document viewer modal state
@@ -463,6 +466,13 @@ export default function CompetitorDetailView({
 
     return () => clearInterval(intervalId)
   }, [activeJobs.size])
+
+  // Cleanup debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(debounceSaveTimerRef.current).forEach(clearTimeout)
+    }
+  }, [])
 
   // Get running scrapers from active jobs
   const runningScrapers = useMemo(() => {
@@ -1502,8 +1512,10 @@ export default function CompetitorDetailView({
     setSelectedDocs(prev => {
       const next = { ...prev }
       expandedSteps.forEach(stepId => {
-        // Skip if already initialized for this step
-        if (next[stepId] && Object.keys(next[stepId]).length > 0) return
+        // Skip if already initialized, unless force re-init was requested (e.g. after StepEditor save)
+        const forceReinit = forceReinitStepsRef.current.has(stepId)
+        if (!forceReinit && next[stepId] && Object.keys(next[stepId]).length > 0) return
+        if (forceReinit) forceReinitStepsRef.current.delete(stepId)
         const step = ANALYSIS_STEPS.find(s => s.id === stepId)
         if (!step) return
         const docsForStep: Record<string, string> = {}
@@ -1769,6 +1781,11 @@ export default function CompetitorDetailView({
       toast.success('Guardado', 'Configuración del paso actualizada')
       setEditingFlowStep(null)
 
+      // Force dropdown re-init from new base_doc_ids
+      if (analysisStepId) {
+        forceReinitStepsRef.current.add(analysisStepId)
+      }
+
       // Force refresh to get updated data
       console.log('[handleSaveFlowStep] Calling onRefresh...')
       await onRefresh()
@@ -1778,6 +1795,55 @@ export default function CompetitorDetailView({
       toast.error('Error', error instanceof Error ? error.message : 'No se pudo guardar la configuración')
     }
   }, [campaign.id, toast, onRefresh])
+
+  // Sync dropdown selections → persisted base_doc_ids (debounced)
+  const syncDropdownToBaseDocIds = useCallback((stepId: string, newSelectedForStep: Record<string, string>) => {
+    if (debounceSaveTimerRef.current[stepId]) {
+      clearTimeout(debounceSaveTimerRef.current[stepId])
+    }
+
+    debounceSaveTimerRef.current[stepId] = setTimeout(async () => {
+      try {
+        const dropdownDocIds = Object.values(newSelectedForStep).filter(Boolean)
+
+        // Preserve docs in saved base_doc_ids that don't map to any dropdown slot
+        const savedConfig = campaign.custom_variables?.[`${stepId}_config`] as
+          | { base_doc_ids?: string[] }
+          | undefined
+        const savedDocIds = savedConfig?.base_doc_ids || []
+        const extraSavedDocs = savedDocIds.filter((id: string) => !dropdownDocIds.includes(id))
+        const mergedDocIds = [...new Set([...dropdownDocIds, ...extraSavedDocs])]
+
+        // Read existing config to preserve prompt/model/etc.
+        const existingConfig = (campaign.custom_variables?.[`${stepId}_config`] || {}) as Record<string, unknown>
+
+        const response = await fetch(`/api/campaign/${campaign.id}/update-variables`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            custom_variables: {
+              [`${stepId}_config`]: {
+                ...existingConfig,
+                base_doc_ids: mergedDocIds,
+              },
+            },
+          }),
+        })
+
+        if (!response.ok) {
+          console.error('[syncDropdownToBaseDocIds] Save failed')
+          toast.error('Error', 'No se pudo guardar la selección de documentos')
+          return
+        }
+
+        console.log(`[syncDropdownToBaseDocIds] Saved base_doc_ids for ${stepId}:`, mergedDocIds)
+        onRefresh()
+      } catch (error) {
+        console.error('[syncDropdownToBaseDocIds] Error:', error)
+        toast.error('Error', 'No se pudo guardar la selección de documentos')
+      }
+    }, 1500)
+  }, [campaign, toast, onRefresh])
 
   // Apply step config from this competitor to all other competitors
   const handleApplyConfigToAll = useCallback(async (analysisStepId: string) => {
@@ -2494,6 +2560,11 @@ export default function CompetitorDetailView({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
+                                  // Cancel any pending debounced save for this step
+                                  if (debounceSaveTimerRef.current[step.id]) {
+                                    clearTimeout(debounceSaveTimerRef.current[step.id])
+                                    delete debounceSaveTimerRef.current[step.id]
+                                  }
                                   const baseFlowStep = getFlowStepForAnalysis(step.id)
                                 if (baseFlowStep) {
                                   // Load saved config from custom_variables (campaign-specific edits)
@@ -2715,10 +2786,11 @@ export default function CompetitorDetailView({
                                       docs={competitorDocs}
                                       selectedDocId={selectedDocId}
                                       onSelect={(newDocId) => {
-                                        setSelectedDocs(prev => ({
-                                          ...prev,
-                                          [step.id]: { ...prev[step.id], [source]: newDocId }
-                                        }))
+                                        setSelectedDocs(prev => {
+                                          const updatedForStep = { ...prev[step.id], [source]: newDocId }
+                                          syncDropdownToBaseDocIds(step.id, updatedForStep)
+                                          return { ...prev, [step.id]: updatedForStep }
+                                        })
                                       }}
                                     />
 
