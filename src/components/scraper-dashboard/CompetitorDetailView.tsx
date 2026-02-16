@@ -2620,7 +2620,13 @@ export default function CompetitorDetailView({
                       <div className="p-4 border-b border-gray-100">
                         <div className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
                           <Database size={14} />
-                          Documentos Requeridos ({matchingDocs.length}/{step.requiredSources.length})
+                          Documentos Requeridos ({step.requiredSources.filter(src => {
+                            const isExplicitlyUnassigned = selectedDocs[step.id]?.[src] === ''
+                            if (isExplicitlyUnassigned) return false
+                            const hasExplicit = selectedDocs[step.id]?.[src] !== undefined
+                            if (hasExplicit) return true
+                            return matchingDocs.some(d => d.source_metadata?.source_type === src)
+                          }).length}/{step.requiredSources.length})
                         </div>
                         <div className="space-y-2">
                           {step.requiredSources.map(source => {
@@ -2697,7 +2703,7 @@ export default function CompetitorDetailView({
                                     <span className={`text-xs font-medium ${hasDoc ? 'text-green-700' : 'text-gray-500'}`}>
                                       {SOURCE_TYPE_LABELS[source] || source}
                                     </span>
-                                    {matchingDocsForSource.length > 1 && (
+                                    {!explicitlyUnassigned && matchingDocsForSource.length > 1 && (
                                       <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
                                         {matchingDocsForSource.length} docs
                                       </span>
