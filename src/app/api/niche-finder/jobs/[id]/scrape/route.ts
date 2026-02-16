@@ -5,6 +5,7 @@ import { getUserApiKey } from '@/lib/getUserApiKey'
 import { trackScrapeUsage } from '@/lib/polar-usage'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 // Firecrawl cost per page
 const FIRECRAWL_COST_PER_PAGE = 0.001
@@ -141,7 +142,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     // Update job status
     await supabase.from('niche_finder_jobs').update({ status: 'scraping' }).eq('id', jobId)
 
-    const batchSize = job.config?.batch_size || 10
+    const batchSize = Math.min(job.config?.batch_size || 5, 5)
 
     // Debug: Check URL status distribution
     const { data: urlStatusCheck } = await supabase
