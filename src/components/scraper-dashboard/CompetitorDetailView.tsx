@@ -2516,8 +2516,8 @@ export default function CompetitorDetailView({
                                   // Merge dropdown selections with any extra docs from saved config
                                   // (docs added via StepEditor that don't map to any dropdown source)
                                   const dropdownDocIds = Object.values(selectedDocs[step.id] || {}).filter(Boolean)
-                                  const savedDocIds = savedConfig?.base_doc_ids || playbookStep?.base_doc_ids || baseFlowStep.base_doc_ids || []
-                                  const extraSavedDocs = savedDocIds.filter(id => !dropdownDocIds.includes(id))
+                                  const savedDocIds: string[] = savedConfig?.base_doc_ids || (playbookStep as { base_doc_ids?: string[] })?.base_doc_ids || baseFlowStep.base_doc_ids || []
+                                  const extraSavedDocs = savedDocIds.filter((id: string) => !dropdownDocIds.includes(id))
                                   const mergedDocIds = [...new Set([...dropdownDocIds, ...extraSavedDocs])]
 
                                   // Priority: campaign edit > playbook customization > base template
