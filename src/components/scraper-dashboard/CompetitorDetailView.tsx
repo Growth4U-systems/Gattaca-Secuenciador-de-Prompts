@@ -2649,12 +2649,15 @@ export default function CompetitorDetailView({
                               d.source_metadata?.source_type === source || matchesPlatformByName(d)
                             )
 
-                            const hasDoc = matchingDocsForSource.length > 0
                             const hasExplicitSelection = selectedDocs[step.id]?.[source] !== undefined
+                            const explicitlyUnassigned = hasExplicitSelection && selectedDocs[step.id][source] === ''
                             const selectedDocId = hasExplicitSelection
                               ? selectedDocs[step.id][source]
                               : (matchingDocsForSource[0]?.id || '')
-                            const selectedDoc = competitorDocs.find(d => d.id === selectedDocId) || matchingDocsForSource[0]
+                            const selectedDoc = explicitlyUnassigned
+                              ? undefined
+                              : (competitorDocs.find(d => d.id === selectedDocId) || matchingDocsForSource[0])
+                            const hasDoc = !explicitlyUnassigned && matchingDocsForSource.length > 0
 
                             return (
                               <div
