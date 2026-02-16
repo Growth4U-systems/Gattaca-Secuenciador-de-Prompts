@@ -92,7 +92,7 @@ export default function UrlReviewView({ jobId, onApprove }: UrlReviewViewProps) 
 
   const sourceLabel: Record<string, string> = {
     reddit: 'Reddit',
-    thematic_forum: 'Foro Tem\u00e1tico',
+    thematic_forum: 'Foro Temático',
     general_forum: 'Foro General',
   }
 
@@ -108,9 +108,9 @@ export default function UrlReviewView({ jobId, onApprove }: UrlReviewViewProps) 
   return (
     <div className="p-6 space-y-4">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900">Selecci\u00f3n de URLs</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Selección de URLs</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Selecciona las URLs relevantes para el an\u00e1lisis. {urls.length} URLs encontradas.
+          Selecciona las URLs relevantes para el análisis. {urls.length} URLs encontradas.
         </p>
       </div>
 

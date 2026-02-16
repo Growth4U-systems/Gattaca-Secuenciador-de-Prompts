@@ -662,6 +662,7 @@ export default function CampaignRunner({ projectId, project: projectProp, playbo
           country,
           industry,
           custom_variables: customVarsObject,
+          playbook_type: selectedPlaybookType || playbookTypeProp || undefined,
         }),
       })
 

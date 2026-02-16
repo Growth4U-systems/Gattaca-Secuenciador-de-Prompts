@@ -96,46 +96,49 @@ export async function POST(request: NextRequest) {
         ? 'B2B (empresas/negocios)'
         : 'B2C y B2B'
 
-    const prompt = `Eres un experto en investigaci\u00f3n de mercado y descubrimiento de nichos.
+    const prompt = `Eres un experto en investigación de mercado y descubrimiento de nichos.
 
 EMPRESA: "${company_name}"
-PA\u00cdS: ${country}
+PAÍS: ${country}
 TIPO DE CLIENTE: ${contextTypeLabel}
-${product_docs_summary ? `\nINFORMACI\u00d3N DEL PRODUCTO:\n${product_docs_summary}\n` : ''}
+${product_docs_summary ? `\nINFORMACIÓN DEL PRODUCTO:\n${product_docs_summary}\n` : ''}
 
-Tu tarea es generar una estrategia de b\u00fasqueda de nichos para esta empresa. Necesito que:
+Tu tarea es generar una estrategia de búsqueda de nichos para esta empresa. Necesito que:
 
-1. INVESTIGUES la empresa y determines: industria, descripci\u00f3n del producto, audiencia objetivo
+1. INVESTIGUES la empresa y determines: industria, descripción del producto, audiencia objetivo
 2. GENERES "palabras de contexto" - situaciones de vida (B2C) o situaciones empresariales (B2B) que son semi-permanentes:
-   - B2C: hijo, pareja, jubilaci\u00f3n, mudanza, universidad, embarazo, divorcio, etc.
-   - B2B: PYME, aut\u00f3nomo, freelancer, startup, importadora, empresa familiar, etc.
+   - B2C: hijo, pareja, jubilación, mudanza, universidad, embarazo, divorcio, etc.
+   - B2B: PYME, autónomo, freelancer, startup, importadora, empresa familiar, etc.
    - Genera 10-15 palabras. UNA SOLA PALABRA cada una.
-3. GENERES "palabras de necesidad" - relacionadas con lo que el producto/servicio resuelve (NO el producto en s\u00ed, sino las necesidades):
-   - Ejemplo para un banco: ahorro, pago, inversi\u00f3n, factura, deuda, transferencia, impuestos
-   - Ejemplo para software de RRHH: contrataci\u00f3n, n\u00f3minas, vacaciones, evaluaci\u00f3n, onboarding
-   - Genera 8-12 palabras. UNA SOLA PALABRA cada una.
-4. SUGIERE fuentes de b\u00fasqueda:
-   - Subreddits relevantes en espa\u00f1ol (r/spain, r/es, r/SpainFinance, etc.)
-   - Foros tem\u00e1ticos (bodas.net, rankia.com, idealista.com/foro, etc.)
-   - Foros generales (forocoches.com, mediavida.com, burbuja.info)
+3. GENERES "palabras del dominio" - los SUSTANTIVOS CONCRETOS que describen las cosas que el producto gestiona, maneja o sobre las que opera. NO adjetivos ni cualidades abstractas.
+   IMPORTANTE: Estas palabras deben ser los TEMAS/OBJETOS del dominio del producto, NO cualidades como "eficiencia", "seguridad", "rapidez", "automatización".
+   - Ejemplo para un procesador de pagos: pagos, transferencias, comisiones, facturas, cobros, tarjetas, cuentas, TPV
+   - Ejemplo para un banco: ahorro, hipoteca, inversión, factura, deuda, transferencia, impuestos
+   - Ejemplo para software de RRHH: nóminas, vacaciones, contratos, fichajes, turnos, bajas
+   - Ejemplo para CRM: leads, oportunidades, clientes, presupuestos, pipeline, contactos
+   - NUNCA incluyas: eficiencia, rapidez, seguridad, automatización, integración, escalabilidad, optimización, flexibilidad (estos son adjetivos genéricos, no temas del dominio)
+   - Genera 8-12 palabras. UNA SOLA PALABRA cada una, todas SUSTANTIVOS.
+4. SUGIERE fuentes de búsqueda:
+   - Foros temáticos del sector (rankia.com, bodas.net, idealista.com/foro, etc.)
+   - Foros generales siempre incluir: forocoches.com, burbuja.info
 
 Responde SOLO con este JSON:
 {
   "company_info": {
     "industry": "industria detectada",
-    "product_description": "descripci\u00f3n corta del producto/servicio",
+    "product_description": "descripción corta del producto/servicio",
     "target_audience": "audiencia principal"
   },
   "life_contexts": [
-    {"value": "palabra", "category": "familia|trabajo|finanzas|vida|educacion|salud|empresa|mercado|equipo", "reason": "raz\u00f3n breve"}
+    {"value": "palabra", "category": "familia|trabajo|finanzas|vida|educacion|salud|empresa|mercado|equipo", "reason": "razón breve"}
   ],
   "benefit_words": [
-    {"value": "palabra", "category": "categor\u00eda del beneficio", "reason": "raz\u00f3n breve"}
+    {"value": "sustantivo del dominio", "category": "categoría temática", "reason": "razón breve"}
   ],
   "sources": {
-    "reddit": {"enabled": true, "subreddits": ["r/spain", "r/es"]},
-    "thematic_forums": [{"domain": "foro.com", "reason": "raz\u00f3n"}],
-    "general_forums": ["forocoches.com", "mediavida.com", "burbuja.info"]
+    "reddit": {"enabled": true, "subreddits": []},
+    "thematic_forums": [{"domain": "foro.com", "reason": "razón"}],
+    "general_forums": ["forocoches.com", "burbuja.info", "mediavida.com"]
   }
 }`
 
@@ -182,7 +185,7 @@ Responde SOLO con este JSON:
       sources: {
         reddit: strategy.sources?.reddit?.enabled ?? true,
         thematic_forums: (strategy.sources?.thematic_forums?.length || 0) > 0,
-        general_forums: strategy.sources?.general_forums || ['forocoches.com', 'mediavida.com'],
+        general_forums: strategy.sources?.general_forums || ['forocoches.com', 'burbuja.info'],
       },
       serp_pages: 5,
       batch_size: 10,

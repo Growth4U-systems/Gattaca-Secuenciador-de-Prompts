@@ -245,13 +245,12 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
 
     if (!scrapedUrls || scrapedUrls.length === 0) {
-      // No more URLs to extract, complete job
-      console.log(`[EXTRACT] Job ${jobId}: No more URLs to extract, marking as completed`)
+      // No more URLs to extract, mark extraction done (analysis steps follow)
+      console.log(`[EXTRACT] Job ${jobId}: No more URLs to extract, marking as extract_done`)
       await supabase
         .from('niche_finder_jobs')
         .update({
-          status: 'completed',
-          completed_at: new Date().toISOString(),
+          status: 'extract_done',
         })
         .eq('id', jobId)
 
@@ -260,6 +259,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         extracted: 0,
         filtered: 0,
         remaining: 0,
+        has_more: false,
         message: 'Extraction complete',
       })
     }
@@ -450,13 +450,12 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const hasMore = (remainingCount || 0) > 0
 
-    // Update job status if done
+    // Update job status if extraction done (analysis steps follow)
     if (!hasMore) {
       await supabase
         .from('niche_finder_jobs')
         .update({
-          status: 'completed',
-          completed_at: new Date().toISOString(),
+          status: 'extract_done',
         })
         .eq('id', jobId)
     }

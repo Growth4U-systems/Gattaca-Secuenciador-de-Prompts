@@ -266,6 +266,15 @@ export default function PlaybookPage({
       ]
     }
 
+    // Niche Finder: unified view + campaigns tab for analysis steps
+    if (playbookType === 'niche_finder') {
+      return [
+        { id: 'main' as TabType, label: playbookName, icon: Rocket, description: 'Configurar y ejecutar' },
+        { id: 'campaigns' as TabType, label: 'Campañas', icon: Rocket, description: 'Análisis de nichos' },
+        { id: 'documents' as TabType, label: 'Documentos', icon: FileText, description: 'Base de conocimiento' },
+      ]
+    }
+
     if (hasUnifiedView) {
       return [
         { id: 'main' as TabType, label: playbookName, icon: Rocket, description: 'Configurar y ejecutar' },
@@ -578,7 +587,10 @@ export default function PlaybookPage({
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
+                      onClick={() => {
+                        setActiveTab(tab.id)
+                        if (tab.id === 'documents') reloadDocs()
+                      }}
                       className={`
                         relative flex-shrink-0 flex items-center gap-2.5 px-6 py-4 text-sm font-medium transition-all
                         ${isActive

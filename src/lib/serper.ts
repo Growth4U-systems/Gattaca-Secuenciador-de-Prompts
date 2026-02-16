@@ -58,20 +58,34 @@ export async function serperSearch(
 
   const { query, countryCode = 'es', languageCode = 'es', numResults = 10, page = 1 } = options
 
-  const response = await fetch('https://google.serper.dev/search', {
-    method: 'POST',
-    headers: {
-      'X-API-KEY': key,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      q: query,
-      gl: countryCode,
-      hl: languageCode,
-      num: numResults,
-      page: page,
-    }),
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
+
+  let response: Response
+  try {
+    response = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': key,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        q: query,
+        gl: countryCode,
+        hl: languageCode,
+        num: numResults,
+        page: page,
+      }),
+      signal: controller.signal,
+    })
+  } catch (err) {
+    clearTimeout(timeoutId)
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Serper API timeout after 30s')
+    }
+    throw err
+  }
+  clearTimeout(timeoutId)
 
   if (!response.ok) {
     const errorText = await response.text()

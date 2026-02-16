@@ -13,7 +13,7 @@ interface SetupPhaseViewProps {
 export default function SetupPhaseView({ projectId, onStrategyGenerated }: SetupPhaseViewProps) {
   const [values, setValues] = useState<Record<string, string>>({
     company_name: '',
-    country: 'Espa\u00f1a',
+    country: 'España',
     context_type: 'both',
     product_docs_summary: '',
   })
@@ -104,9 +104,9 @@ export default function SetupPhaseView({ projectId, onStrategyGenerated }: Setup
   return (
     <div className="max-w-xl mx-auto p-6 space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900">Configuraci\u00f3n Inicial</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Configuración Inicial</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Introduce los datos b\u00e1sicos y generaremos autom\u00e1ticamente la estrategia de b\u00fasqueda.
+          Introduce los datos básicos y generaremos automáticamente la estrategia de búsqueda.
         </p>
       </div>
 
@@ -162,7 +162,7 @@ export default function SetupPhaseView({ projectId, onStrategyGenerated }: Setup
         ) : (
           <>
             <Sparkles className="w-4 h-4" />
-            Generar Estrategia de B\u00fasqueda
+            Generar Estrategia de Búsqueda
           </>
         )}
       </button>

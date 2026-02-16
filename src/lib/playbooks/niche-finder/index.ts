@@ -1,4 +1,4 @@
-import { ALL_STEPS, getTotalStepCount } from './steps'
+import { ALL_STEPS } from './steps'
 import { INPUT_VARIABLES } from './variables'
 
 export const nicheFinderPlaybook = {
@@ -25,11 +25,11 @@ export const PRESENTATION_CONFIG = {
   estimatedTime: '15-30 minutos',
   estimatedCost: '~$1-5 USD (SERP + scraping + LLM)',
   stepStats: {
-    total: getTotalStepCount(),
+    total: 4, // Shell steps: generate-strategy, review-strategy, serp-search, scrape-urls
     setup: 1,
-    checkpoints: 3,
+    checkpoints: 1,
     search: 2,
-    analysis: 4,
+    // Analysis steps are now handled in Campaigns tab via CampaignRunner
   },
 }
 

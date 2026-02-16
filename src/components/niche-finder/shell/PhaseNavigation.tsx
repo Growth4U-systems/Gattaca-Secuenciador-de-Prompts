@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Loader2, AlertCircle, Circle, Settings, Search, Globe, Filter, BarChart3, Trophy, ChevronDown, ChevronRight } from 'lucide-react'
+import { Check, Loader2, AlertCircle, Circle, Settings, Search, Globe, ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import type { NicheFinderPhase, PhaseId, StepProgress } from '@/lib/playbooks/niche-finder/types'
 import { STEP_PHASES } from '@/lib/playbooks/niche-finder/steps'
@@ -17,9 +17,6 @@ const PHASE_ICONS: Record<PhaseId, React.ComponentType<{ className?: string }>> 
   'setup': Settings,
   'strategy-review': Search,
   'search': Globe,
-  'url-review': Filter,
-  'analysis': BarChart3,
-  'results': Trophy,
 }
 
 function getStatusIcon(status: NicheFinderPhase['status'], size: 'sm' | 'md' = 'md') {
@@ -81,7 +78,7 @@ export default function PhaseNavigation({
     <div className="w-72 border-r border-gray-200 bg-gray-50/50 flex flex-col h-full overflow-y-auto">
       <div className="px-4 py-3 border-b border-gray-200">
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Fases del An\u00e1lisis
+          Fases del Análisis
         </h3>
       </div>
 
@@ -139,16 +136,17 @@ export default function PhaseNavigation({
                 </div>
               </button>
 
-              {/* Sub-steps (for search and analysis phases) */}
+              {/* Sub-steps (for search phase) */}
               {hasMultipleSteps && isExpanded && (
                 <div className="ml-8 py-1 space-y-0.5">
                   {stepIds.map(stepId => {
                     const step = ALL_STEPS.find(s => s.id === stepId)
                     const sp = stepProgress[stepId]
                     return (
-                      <div
+                      <button
                         key={stepId}
-                        className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600"
+                        onClick={() => onNavigate(phase.id)}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors text-left"
                       >
                         {getStepStatusIcon(sp)}
                         <span className="truncate">{step?.name || stepId}</span>
@@ -157,7 +155,7 @@ export default function PhaseNavigation({
                             {sp.progress.completed}/{sp.progress.total}
                           </span>
                         )}
-                      </div>
+                      </button>
                     )
                   })}
                 </div>
