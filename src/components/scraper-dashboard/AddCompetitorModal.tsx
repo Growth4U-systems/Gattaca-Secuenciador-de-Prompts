@@ -45,6 +45,8 @@ export default function AddCompetitorModal({
 
   const [name, setName] = useState('')
   const [website, setWebsite] = useState('')
+  const [companyName, setCompanyName] = useState('')
+  const [industry, setIndustry] = useState('')
   const [discoverSocials, setDiscoverSocials] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -96,12 +98,22 @@ export default function AddCompetitorModal({
       return
     }
 
+    if (!companyName.trim()) {
+      setError('El nombre de tu empresa es requerido')
+      return
+    }
+
+    if (!industry.trim()) {
+      setError('La industria es requerida')
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
       const formattedWebsite = formatUrl(website)
 
-      // Create campaign with competitor info
+      // Create campaign with competitor info (include all required variables)
       const response = await fetch('/api/campaign/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -112,6 +124,8 @@ export default function AddCompetitorModal({
           custom_variables: {
             competitor_name: name.trim(),
             competitor_website: formattedWebsite,
+            company_name: companyName.trim(),
+            industry: industry.trim(),
           },
         }),
       })
@@ -249,6 +263,46 @@ export default function AddCompetitorModal({
             </p>
           </div>
 
+          {/* Company name field */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Tu empresa *
+            </label>
+            <div className="relative">
+              <Building2 size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Ej: Mi Empresa"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900 placeholder:text-gray-400"
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-1.5">
+              Nombre de tu empresa (para el análisis comparativo)
+            </p>
+          </div>
+
+          {/* Industry field */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Industria *
+            </label>
+            <div className="relative">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+                placeholder="Ej: Fintech, SaaS, E-commerce"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900 placeholder:text-gray-400"
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-1.5">
+              Sector o industria del mercado
+            </p>
+          </div>
+
           {/* Discover socials option */}
           <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-xl">
             <input
@@ -289,7 +343,7 @@ export default function AddCompetitorModal({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !name.trim() || !website.trim()}
+              disabled={isSubmitting || !name.trim() || !website.trim() || !companyName.trim() || !industry.trim()}
               className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
