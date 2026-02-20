@@ -570,6 +570,11 @@ export default function CompetitorDetailView({
     return { completed, total }
   }, [scrapersByStep])
 
+  // Check if required campaign variables are incomplete
+  const hasIncompleteRequiredVars = COMPETITOR_VARIABLE_DEFINITIONS.some(
+    v => v.required && !campaign.custom_variables?.[v.name]
+  )
+
   // Analysis step status
   const analysisStepStatus = useMemo(() => {
     const status: Record<string, {
@@ -1333,6 +1338,19 @@ export default function CompetitorDetailView({
   // Handle run analysis step - calls actual API
   const handleRunAnalysisStep = useCallback(async (stepId: string) => {
     if (runningSteps.has(stepId)) return
+
+    // Guard: block execution if required variables are incomplete
+    const missingVars = COMPETITOR_VARIABLE_DEFINITIONS.filter(
+      v => v.required && !campaign.custom_variables?.[v.name]
+    )
+    if (missingVars.length > 0) {
+      toast.error(
+        'Variables incompletas',
+        `Faltan: ${missingVars.map(v => v.name).join(', ')}. Configúralas antes de ejecutar.`
+      )
+      setShowConfigModal(true)
+      return
+    }
 
     const stepInfo = ANALYSIS_STEPS.find(s => s.id === stepId)
     if (!stepInfo) return
@@ -2475,11 +2493,15 @@ export default function CompetitorDetailView({
                         ) : status?.isCompleted ? (
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => handleRunAnalysisStep(step.id)}
-                              className="inline-flex items-center gap-1.5 text-sm px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                              title="Re-ejecutar paso"
+                              onClick={() => hasIncompleteRequiredVars ? setShowConfigModal(true) : handleRunAnalysisStep(step.id)}
+                              className={`inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-colors ${
+                                hasIncompleteRequiredVars
+                                  ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                              title={hasIncompleteRequiredVars ? 'Completa las variables requeridas antes de ejecutar' : 'Re-ejecutar paso'}
                             >
-                              <RefreshCw size={14} />
+                              {hasIncompleteRequiredVars ? <AlertCircle size={14} /> : <RefreshCw size={14} />}
                             </button>
                             <button
                               onClick={() => {
@@ -2497,11 +2519,16 @@ export default function CompetitorDetailView({
                           </div>
                         ) : status?.canRun ? (
                           <button
-                            onClick={() => handleRunAnalysisStep(step.id)}
-                            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                            onClick={() => hasIncompleteRequiredVars ? setShowConfigModal(true) : handleRunAnalysisStep(step.id)}
+                            className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${
+                              hasIncompleteRequiredVars
+                                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                            }`}
+                            title={hasIncompleteRequiredVars ? 'Completa las variables requeridas antes de ejecutar' : undefined}
                           >
-                            <Play size={14} />
-                            Ejecutar
+                            {hasIncompleteRequiredVars ? <AlertCircle size={14} /> : <Play size={14} />}
+                            {hasIncompleteRequiredVars ? 'Completar Variables' : 'Ejecutar'}
                           </button>
                         ) : (
                           <Lock size={18} className="text-gray-400" />
