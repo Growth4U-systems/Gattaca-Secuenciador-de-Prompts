@@ -590,8 +590,12 @@ export default function CompetitorDetailView({
     // Extract variables actually used in this prompt
     const promptVars = extractPromptVariables(promptText)
 
-    // Return only vars that are in the prompt AND missing from campaign.custom_variables
-    return promptVars.filter(varName => !campaign.custom_variables?.[varName])
+    // Only flag variables that are BOTH in the prompt AND marked as required in definitions
+    // Optional vars (like competitor_description inside {{#if}}) should not block execution
+    const requiredVarNames = COMPETITOR_VARIABLE_DEFINITIONS.filter(v => v.required).map(v => v.name)
+    return promptVars.filter(varName =>
+      requiredVarNames.includes(varName) && !campaign.custom_variables?.[varName]
+    )
   }, [campaign.custom_variables, campaign.flow_config])
 
   // Analysis step status
@@ -2416,21 +2420,7 @@ export default function CompetitorDetailView({
           </div>
 
           <div className="p-4 space-y-3">
-            {/* Variable status warning */}
-            {COMPETITOR_VARIABLE_DEFINITIONS.some(v => v.required && !campaign.custom_variables?.[v.name]) && (
-              <button
-                onClick={() => setShowConfigModal(true)}
-                className="w-full p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 hover:bg-amber-100 transition-colors text-left"
-              >
-                <AlertCircle size={14} className="text-amber-600 flex-shrink-0" />
-                <span className="text-xs text-amber-800">
-                  <span className="font-medium">Variables incompletas</span> &mdash;{' '}
-                  {COMPETITOR_VARIABLE_DEFINITIONS.filter(v => v.required && campaign.custom_variables?.[v.name]).length}/
-                  {COMPETITOR_VARIABLE_DEFINITIONS.filter(v => v.required).length} requeridas.
-                  Click para editar.
-                </span>
-              </button>
-            )}
+            {/* Variable warnings are now shown per-step on each button */}
 
             {ANALYSIS_STEPS.map((step, index) => {
               const status = analysisStepStatus[step.id]
