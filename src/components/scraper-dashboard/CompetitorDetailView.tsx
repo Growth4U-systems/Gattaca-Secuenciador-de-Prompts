@@ -156,7 +156,7 @@ interface CompetitorDetailViewProps {
   clientId?: string
   clientName?: string
   onBack: () => void
-  onRefresh: () => void
+  onRefresh: () => void | Promise<void>
 }
 
 // ============================================
@@ -1527,8 +1527,9 @@ export default function CompetitorDetailView({
       })
       if (!response.ok) throw new Error('Error al guardar')
       toast.success('Variables guardadas', 'Las variables del prompt se actualizaron correctamente')
+      // Wait for refresh to complete before closing modal so UI has fresh data
+      await onRefresh()
       setShowVarsModal(null)
-      onRefresh()
     } catch (err) {
       toast.error('Error', err instanceof Error ? err.message : 'No se pudieron guardar las variables')
     } finally {
