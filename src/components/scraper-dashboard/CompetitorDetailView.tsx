@@ -390,6 +390,9 @@ export default function CompetitorDetailView({
   const router = useRouter()
 
   const [showConfigModal, setShowConfigModal] = useState(false)
+  const [showVarsModal, setShowVarsModal] = useState<{ stepId: string; missing: string[] } | null>(null)
+  const [varsEditing, setVarsEditing] = useState<Record<string, string>>({})
+  const [isSavingVars, setIsSavingVars] = useState(false)
   const [showScraperHistory, setShowScraperHistory] = useState(false)
   const [runningSteps, setRunningSteps] = useState<Set<string>>(new Set())
   // State to force re-render for elapsed time display
@@ -570,10 +573,26 @@ export default function CompetitorDetailView({
     return { completed, total }
   }, [scrapersByStep])
 
-  // Check if required campaign variables are incomplete
-  const hasIncompleteRequiredVars = COMPETITOR_VARIABLE_DEFINITIONS.some(
-    v => v.required && !campaign.custom_variables?.[v.name]
-  )
+  // Check if a specific step has missing prompt variables (per-step, not global)
+  const getStepMissingVars = useCallback((stepId: string): string[] => {
+    const step = ANALYSIS_STEPS.find(s => s.id === stepId)
+    if (!step) return []
+
+    // Get the actual prompt for this step (campaign edit > playbook custom > base template)
+    const configKey = `${stepId}_config`
+    const savedStepConfig = campaign.custom_variables?.[configKey] as { prompt?: string } | undefined
+    const flowStepId = STEP_ID_MAPPING[stepId]
+    const flowStep = campaign.flow_config?.steps?.find((s: { id: string }) => s.id === flowStepId)
+    const promptText = savedStepConfig?.prompt
+      || flowStep?.prompt
+      || ALL_PROMPTS[step.promptKey]
+
+    // Extract variables actually used in this prompt
+    const promptVars = extractPromptVariables(promptText)
+
+    // Return only vars that are in the prompt AND missing from campaign.custom_variables
+    return promptVars.filter(varName => !campaign.custom_variables?.[varName])
+  }, [campaign.custom_variables, campaign.flow_config])
 
   // Analysis step status
   const analysisStepStatus = useMemo(() => {
@@ -1339,16 +1358,14 @@ export default function CompetitorDetailView({
   const handleRunAnalysisStep = useCallback(async (stepId: string) => {
     if (runningSteps.has(stepId)) return
 
-    // Guard: block execution if required variables are incomplete
-    const missingVars = COMPETITOR_VARIABLE_DEFINITIONS.filter(
-      v => v.required && !campaign.custom_variables?.[v.name]
-    )
+    // Guard: block execution if prompt variables for THIS step are missing
+    const missingVars = getStepMissingVars(stepId)
     if (missingVars.length > 0) {
       toast.error(
         'Variables incompletas',
-        `Faltan: ${missingVars.map(v => v.name).join(', ')}. Configúralas antes de ejecutar.`
+        `Faltan: ${missingVars.join(', ')}. Configúralas antes de ejecutar.`
       )
-      setShowConfigModal(true)
+      openVarsModalForStep(stepId)
       return
     }
 
@@ -1470,6 +1487,50 @@ export default function CompetitorDetailView({
     // Refresh data to reflect saved values
     onRefresh()
   }, [onRefresh, toast])
+
+  // Open the prompt variables modal for a specific step
+  const openVarsModalForStep = useCallback((stepId: string) => {
+    const missing = getStepMissingVars(stepId)
+    // Pre-fill with current values
+    const current: Record<string, string> = {}
+    // Show ALL prompt variables for this step (not just missing), so user can review
+    const step = ANALYSIS_STEPS.find(s => s.id === stepId)
+    if (step) {
+      const configKey = `${stepId}_config`
+      const savedStepConfig = campaign.custom_variables?.[configKey] as { prompt?: string } | undefined
+      const flowStepId = STEP_ID_MAPPING[stepId]
+      const flowStep = campaign.flow_config?.steps?.find((s: { id: string }) => s.id === flowStepId)
+      const promptText = savedStepConfig?.prompt || flowStep?.prompt || ALL_PROMPTS[step.promptKey]
+      const allVars = extractPromptVariables(promptText)
+      allVars.forEach(v => {
+        current[v] = (campaign.custom_variables?.[v] as string) || ''
+      })
+    }
+    setVarsEditing(current)
+    setShowVarsModal({ stepId, missing })
+  }, [getStepMissingVars, campaign.custom_variables, campaign.flow_config])
+
+  // Save prompt variables
+  const handleSaveVars = useCallback(async () => {
+    if (!showVarsModal) return
+    setIsSavingVars(true)
+    try {
+      const updatedVars = { ...(campaign.custom_variables || {}), ...varsEditing }
+      const response = await fetch(`/api/campaign/${campaign.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ custom_variables: updatedVars }),
+      })
+      if (!response.ok) throw new Error('Error al guardar')
+      toast.success('Variables guardadas', 'Las variables del prompt se actualizaron correctamente')
+      setShowVarsModal(null)
+      onRefresh()
+    } catch (err) {
+      toast.error('Error', err instanceof Error ? err.message : 'No se pudieron guardar las variables')
+    } finally {
+      setIsSavingVars(false)
+    }
+  }, [showVarsModal, varsEditing, campaign.custom_variables, campaign.id, onRefresh, toast])
 
   // ============================================
   // PROFILE MANAGEMENT
@@ -2488,51 +2549,61 @@ export default function CompetitorDetailView({
                       </div>
 
                       <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
-                        {status?.isRunning ? (
-                          <Loader2 size={20} className="text-indigo-500 animate-spin" />
-                        ) : status?.isCompleted ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => hasIncompleteRequiredVars ? setShowConfigModal(true) : handleRunAnalysisStep(step.id)}
-                              className={`inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-colors ${
-                                hasIncompleteRequiredVars
-                                  ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
-                              title={hasIncompleteRequiredVars ? 'Completa las variables requeridas antes de ejecutar' : 'Re-ejecutar paso'}
-                            >
-                              {hasIncompleteRequiredVars ? <AlertCircle size={14} /> : <RefreshCw size={14} />}
-                            </button>
-                            <button
-                              onClick={() => {
-                                setViewingStepOutput({
-                                  stepId: STEP_ID_MAPPING[step.id] || step.id,
-                                  stepName: step.name,
-                                  stepOrder: index + 1,
-                                })
-                              }}
-                              className="inline-flex items-center gap-1.5 text-sm px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium shadow-sm"
-                            >
-                              <Eye size={14} />
-                              Ver Resultado
-                            </button>
-                          </div>
-                        ) : status?.canRun ? (
-                          <button
-                            onClick={() => hasIncompleteRequiredVars ? setShowConfigModal(true) : handleRunAnalysisStep(step.id)}
-                            className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${
-                              hasIncompleteRequiredVars
-                                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                                : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                            }`}
-                            title={hasIncompleteRequiredVars ? 'Completa las variables requeridas antes de ejecutar' : undefined}
-                          >
-                            {hasIncompleteRequiredVars ? <AlertCircle size={14} /> : <Play size={14} />}
-                            {hasIncompleteRequiredVars ? 'Completar Variables' : 'Ejecutar'}
-                          </button>
-                        ) : (
-                          <Lock size={18} className="text-gray-400" />
-                        )}
+                        {(() => {
+                          const stepMissing = getStepMissingVars(step.id)
+                          const hasMissing = stepMissing.length > 0
+
+                          if (status?.isRunning) {
+                            return <Loader2 size={20} className="text-indigo-500 animate-spin" />
+                          }
+                          if (status?.isCompleted) {
+                            return (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => hasMissing ? openVarsModalForStep(step.id) : handleRunAnalysisStep(step.id)}
+                                  className={`inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-colors ${
+                                    hasMissing
+                                      ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                  }`}
+                                  title={hasMissing ? `Faltan: ${stepMissing.join(', ')}` : 'Re-ejecutar paso'}
+                                >
+                                  {hasMissing ? <AlertCircle size={14} /> : <RefreshCw size={14} />}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setViewingStepOutput({
+                                      stepId: STEP_ID_MAPPING[step.id] || step.id,
+                                      stepName: step.name,
+                                      stepOrder: index + 1,
+                                    })
+                                  }}
+                                  className="inline-flex items-center gap-1.5 text-sm px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium shadow-sm"
+                                >
+                                  <Eye size={14} />
+                                  Ver Resultado
+                                </button>
+                              </div>
+                            )
+                          }
+                          if (status?.canRun) {
+                            return (
+                              <button
+                                onClick={() => hasMissing ? openVarsModalForStep(step.id) : handleRunAnalysisStep(step.id)}
+                                className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${
+                                  hasMissing
+                                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                }`}
+                                title={hasMissing ? `Faltan: ${stepMissing.join(', ')}` : undefined}
+                              >
+                                {hasMissing ? <AlertCircle size={14} /> : <Play size={14} />}
+                                {hasMissing ? 'Completar Variables' : 'Ejecutar'}
+                              </button>
+                            )
+                          }
+                          return <Lock size={18} className="text-gray-400" />
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -3141,6 +3212,75 @@ export default function CompetitorDetailView({
           onClose={() => setShowConfigModal(false)}
           onSaved={handleConfigSaved}
         />
+      )}
+
+      {/* Prompt Variables Modal */}
+      {showVarsModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900">Variables del Prompt</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Paso: {ANALYSIS_STEPS.find(s => s.id === showVarsModal.stepId)?.name}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowVarsModal(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {Object.entries(varsEditing).map(([varName, value]) => {
+                const isMissing = showVarsModal.missing.includes(varName)
+                const definition = COMPETITOR_VARIABLE_DEFINITIONS.find(v => v.name === varName)
+                return (
+                  <div key={varName}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {varName.replace(/_/g, ' ')}
+                      {isMissing && <span className="text-red-500 ml-1">*</span>}
+                    </label>
+                    {definition?.description && (
+                      <p className="text-xs text-gray-500 mb-1">{definition.description}</p>
+                    )}
+                    <input
+                      type="text"
+                      value={value}
+                      onChange={(e) => setVarsEditing(prev => ({ ...prev, [varName]: e.target.value }))}
+                      placeholder={definition?.placeholder || ''}
+                      className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                        isMissing && !value ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                      }`}
+                    />
+                  </div>
+                )
+              })}
+              {Object.keys(varsEditing).length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  Este paso no requiere variables adicionales.
+                </p>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+              <button
+                onClick={() => setShowVarsModal(null)}
+                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveVars}
+                disabled={isSavingVars || showVarsModal.missing.some(v => !varsEditing[v]?.trim())}
+                className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isSavingVars ? <Loader2 size={14} className="animate-spin" /> : null}
+                Guardar Variables
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Document Viewer Modal */}
